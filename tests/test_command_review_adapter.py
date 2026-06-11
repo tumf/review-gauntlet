@@ -208,13 +208,48 @@ def test_command_adapter_timeout_failure(tmp_path: Path) -> None:
         {
             "type": "command",
             "command": sys.executable,
-            "args": ["-c", "import time; time.sleep(2)"],
+            "args": ["-c", "import time; print('before', flush=True); time.sleep(2)"],
             "timeout_seconds": 0.1,
         }
     )
 
     with pytest.raises(ReviewAdapterError, match="timed out"):
         _adapter(tmp_path, config).review(_cell(tmp_path))
+
+    cell_dir = tmp_path / ".review-gauntlet" / "runs" / "1" / "cells" / "RGC-test"
+    failure = json.loads((cell_dir / "failure.json").read_text(encoding="utf-8"))
+    assert failure["timeout_seconds"] == 0.1
+    assert (cell_dir / "stdout.txt").read_text(encoding="utf-8") == "before\n"
+    assert (cell_dir / "stderr.txt").is_file()
+
+
+def test_command_adapter_cancel_writes_failure_and_terminates_child(tmp_path: Path) -> None:
+    config = CommandAdapterConfig.model_validate(
+        {
+            "type": "command",
+            "command": sys.executable,
+            "args": ["-c", "import time; print('started', flush=True); time.sleep(10)"],
+            "timeout_seconds": 30,
+        }
+    )
+    adapter = _adapter(tmp_path, config)
+    cell = _cell(tmp_path)
+
+    import concurrent.futures
+    import time
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(adapter.review, cell)
+        time.sleep(0.2)
+        adapter.cancel()
+        with pytest.raises(ReviewAdapterError, match="cancelled"):
+            future.result(timeout=2)
+
+    cell_dir = tmp_path / ".review-gauntlet" / "runs" / "1" / "cells" / "RGC-test"
+    failure = json.loads((cell_dir / "failure.json").read_text(encoding="utf-8"))
+    assert failure["cancelled"] is True
+    assert (cell_dir / "stdout.txt").read_text(encoding="utf-8") == "started\n"
+    assert (cell_dir / "stderr.txt").is_file()
 
 
 def test_command_adapter_rejects_invalid_cwd(tmp_path: Path) -> None:
