@@ -307,7 +307,10 @@ def test_concurrent_review_failure_preserves_ordered_failure_contract(
         "import json, re, sys; "
         "match = re.search(r'cell_id: (\\S+)', sys.argv[1]); "
         "cell_id = match.group(1) if match else 'missing'; "
-        f"\nif cell_id == {failing_cell!r}:\n    print('not-json')\nelse:\n    print(json.dumps({{'comments':[]}}))\n"
+        f"\nif cell_id == {failing_cell!r}:\n"
+        "    print('not-json')\n"
+        "else:\n"
+        "    print(json.dumps({'comments':[]}))\n"
     )
     _command_config(tmp_path, script)
 
