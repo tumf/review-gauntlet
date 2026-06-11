@@ -1,0 +1,47 @@
+[project]
+name = "review-gauntlet"
+version = "0.1.0"
+description = "Coverage-driven review gauntlet for agentic code reviews"
+readme = "README.md"
+authors = [
+    { name = "tumf", email = "tumf@users.noreply.github.com" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.13.4",
+    "pydantic-settings>=2.14.1",
+]
+
+[project.scripts]
+review-gauntlet = "review_gauntlet.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.10.8,<0.11.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "hatch>=1.17.0",
+    "prek>=0.4.4",
+    "pyright>=1.1.410",
+    "pytest>=9.0.3",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.15.16",
+]
+
+[tool.hatch.version]
+path = "src/review_gauntlet/__about__.py"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.pyright]
+include = ["src", "tests"]
+pythonVersion = "3.11"
+typeCheckingMode = "strict"
