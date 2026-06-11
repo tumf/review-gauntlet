@@ -11,8 +11,12 @@ from typing import Any, NoReturn, cast
 
 from review_gauntlet.config import ConfigError, load_config
 from review_gauntlet.findings import FindingState, normalize_ocr_comment
-from review_gauntlet.inventory import build_inventory, build_inventory_for_paths
-from review_gauntlet.models import ReviewPlan
+from review_gauntlet.inventory import (
+    build_inventory,
+    build_inventory_for_paths,
+    should_include_review_relative_path,
+)
+from review_gauntlet.models import Inventory, ReviewPlan
 from review_gauntlet.ocr_rules import load_ruleset
 from review_gauntlet.planner import build_matrix, build_plan
 from review_gauntlet.report import render_markdown_report
@@ -187,7 +191,16 @@ def _build_target_plan(root: Path, target: TargetSpec) -> ReviewPlan:
         if changed_paths is None
         else build_inventory_for_paths(root, changed_paths)
     )
-    return build_plan(inventory)
+    return build_plan(_review_inventory(inventory))
+
+
+def _review_inventory(inventory: Inventory) -> Inventory:
+    return Inventory(
+        root=inventory.root,
+        files=tuple(
+            file for file in inventory.files if should_include_review_relative_path(file.path)
+        ),
+    )
 
 
 def _cmd_review(args: argparse.Namespace, root: Path, store: SessionStore) -> None:

@@ -1,7 +1,7 @@
 import subprocess
 from pathlib import Path
 
-from review_gauntlet.inventory import build_inventory
+from review_gauntlet.inventory import build_inventory, should_include_review_relative_path
 from review_gauntlet.models import FileCategory
 
 
@@ -63,18 +63,76 @@ def test_build_inventory_excludes_generated_artifacts(tmp_path: Path) -> None:
     assert not (set(excluded_files) & inventory_paths)
 
 
+def test_build_inventory_excludes_ocr_inspired_artifact_directories(tmp_path: Path) -> None:
+    included_files = ["src/pkg/core.py", "frontend/app.ts"]
+    excluded_files = [
+        "vendor/lib.go",
+        "node_modules/pkg/index.js",
+        "target/debug/app",
+        ".happypack/cache.json",
+        ".cachefile/state.json",
+        "_packages/pkg.tgz",
+        "rpm/build.spec",
+        "pkgs/archive.tar",
+        "oh_modules/generated.ets",
+    ]
+    for relative in [*included_files, *excluded_files]:
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("content\n", encoding="utf-8")
+
+    inventory_paths = {file.path for file in build_inventory(tmp_path).files}
+
+    assert set(included_files) <= inventory_paths
+    assert not (set(excluded_files) & inventory_paths)
+
+
+def test_review_path_filter_excludes_default_review_noise() -> None:
+    eligible = ["src/app.py", "frontend/app.ts", "lib/foo.rb"]
+    excluded = [
+        "openspec/specs/review-sessions/spec.md",
+        "tests/test_core.py",
+        "docs/usage.md",
+        "foo_test.go",
+        "FooTest.java",
+        "FooTests.kt",
+        "app.spec.ts",
+        "app.test.tsx",
+        "test_core.py",
+        "spec/foo_spec.rb",
+        "frontend/__tests__/app.ts",
+        "oh_modules/generated.ets",
+        "component.spec.ets",
+    ]
+
+    assert all(should_include_review_relative_path(path) for path in eligible)
+    assert not any(should_include_review_relative_path(path) for path in excluded)
+
+
 def test_git_inventory_excludes_review_gauntlet_state(tmp_path: Path) -> None:
     subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True, text=True)
     (tmp_path / ".gitignore").write_text("ignored.log\n", encoding="utf-8")
     (tmp_path / "src").mkdir()
     (tmp_path / "src" / "app.py").write_text("print('ok')\n", encoding="utf-8")
+    for relative in ("vendor/lib.go", "node_modules/pkg/index.js", "target/debug/app"):
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("generated\n", encoding="utf-8")
     (tmp_path / ".review-gauntlet" / "runs").mkdir(parents=True)
     (tmp_path / ".review-gauntlet" / "runs" / "prompt.md").write_text(
         "generated\n", encoding="utf-8"
     )
     (tmp_path / "ignored.log").write_text("ignored\n", encoding="utf-8")
     subprocess.run(
-        ["git", "add", ".gitignore", "src/app.py"],
+        [
+            "git",
+            "add",
+            ".gitignore",
+            "src/app.py",
+            "vendor/lib.go",
+            "node_modules/pkg/index.js",
+            "target/debug/app",
+        ],
         cwd=tmp_path,
         check=True,
         capture_output=True,
@@ -86,6 +144,9 @@ def test_git_inventory_excludes_review_gauntlet_state(tmp_path: Path) -> None:
 
     assert "src/app.py" in inventory_paths
     assert ".gitignore" in inventory_paths
+    assert "vendor/lib.go" not in inventory_paths
+    assert "node_modules/pkg/index.js" not in inventory_paths
+    assert "target/debug/app" not in inventory_paths
     assert ".review-gauntlet/runs/prompt.md" not in inventory_paths
     assert "ignored.log" not in inventory_paths
 

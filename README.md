@@ -69,6 +69,28 @@ how many of those selected adapter invocations run at the same time. It does not
 automatically pass a concurrency flag through to the nested external adapter
 command.
 
+## Default file filtering
+
+Inventory discovery keeps Git behavior intact: Git-backed repositories still use
+`git ls-files --cached --others --exclude-standard` with the existing bounded
+subprocess timeout, so `.gitignore` and other exclude-standard rules apply before
+review-gauntlet's built-in filters.
+
+The built-in artifact filter removes generated or dependency paths from both full
+inventory and target-scoped inventory. This includes Python/editor/cache outputs
+such as `.review-gauntlet/`, `__pycache__/`, `.ruff_cache/`, `build/`, `dist/`,
+`wheels/`, `htmlcov/`, and OCR-inspired dependency/build staging paths such as
+`vendor/`, `node_modules/`, `target/`, `.happypack/`, `.cachefile/`, `_packages/`,
+`rpm/`, `pkgs/`, and `oh_modules/`.
+
+Review sessions apply an additional default review-path filter when creating cells
+and digests. Files can remain classifiable in general inventory, but `init` omits
+`openspec/`, `tests/`, and `docs/` by default, as well as common OCR-style test or
+generated paths such as `__tests__/`, `*_test.go`, `*Test.java`, `*Test.kt`,
+`*.spec.ts`, `*.test.tsx`, `test_*.py`, `*_spec.rb`, `*.spec.ets`, and
+`*.test.ets`. Normal source files outside those directories and patterns remain
+eligible for review cells.
+
 `review` discovers configuration in this order: explicit `--config`,
 `.review-gauntlet/config.jsonc`, `.review-gauntlet/config.json`,
 `review-gauntlet.jsonc`, then `review-gauntlet.json`. The command adapter uses
