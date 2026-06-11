@@ -102,7 +102,9 @@ def _insert_finding(store: SessionStore, finding_id: str, state: FindingState) -
     with store.connect() as conn:
         conn.execute(
             """
-            insert into findings(session_id, finding_id, fingerprint, state, path, rule_id, content, metadata)
+            insert into findings(
+                session_id, finding_id, fingerprint, state, path, rule_id, content, metadata
+            )
             values ('RGS-test', ?, ?, ?, 'README.md', 'docs', 'content', '{}')
             """,
             (finding_id, f"fingerprint-{finding_id}", state),

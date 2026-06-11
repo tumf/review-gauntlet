@@ -69,7 +69,9 @@ def _create_session_with_findings(tmp_path: Path, capsys: pytest.CaptureFixture[
     with sqlite3.connect(tmp_path / ".review-gauntlet" / "ledger.sqlite") as conn:
         conn.executemany(
             """
-            insert into findings(session_id, finding_id, fingerprint, state, path, rule_id, content, metadata)
+            insert into findings(
+                session_id, finding_id, fingerprint, state, path, rule_id, content, metadata
+            )
             values (?, ?, ?, ?, 'README.md', 'docs', 'content', '{}')
             """,
             [
