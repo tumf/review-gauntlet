@@ -10,7 +10,7 @@
 
 - [x] Update repository sample configuration to use the new default file-json workflow. Completion condition: `review-gauntlet.jsonc` omits explicit `output.mode: stdout-json` or explicitly documents file-json as the recommended behavior, while passing config validation. verification: integration - `uv run review-gauntlet review --config review-gauntlet.jsonc --format json --budget 1` can exercise the configured command adapter in a real session.
 
-- [x] Run the repository quality gate. Completion condition: format, lint, typecheck, and tests pass. verification: integration - `make check`
+- [x] Run the repository quality gate. Completion condition: format, lint, typecheck, and tests pass. (verification: integration - `make check`)
 
 ## Future Work
 
@@ -20,3 +20,7 @@
 
 Archive validation itself is the authoritative final OpenSpec validation gate.
 Expected archive gate: `cflx openspec validate default-command-file-json --archive-gate`
+
+## Acceptance Notes
+
+- Acceptance #1 archive commitability blocker was addressed by changing the repository quality gate task's verification note to the required `(verification: ...)` syntax.
