@@ -6,7 +6,26 @@ from pathlib import Path
 
 from review_gauntlet.models import FileCategory, FileRecord, Inventory, display_root
 
-IGNORED_DIRS = {".git", ".hg", ".svn", ".venv", "__pycache__", ".pytest_cache", "htmlcov"}
+EXCLUDED_DIR_NAMES = {
+    ".git",
+    ".hg",
+    ".svn",
+    ".venv",
+    "__pycache__",
+    ".pytest_cache",
+    ".review-gauntlet",
+    ".ruff_cache",
+    ".pyright",
+    ".mypy_cache",
+    "build",
+    "dist",
+    "wheels",
+    "htmlcov",
+    ".idea",
+    ".vscode",
+}
+EXCLUDED_FILE_NAMES = {".coverage", ".DS_Store"}
+EXCLUDED_DIR_SUFFIXES = {".egg-info"}
 CONFIG_NAMES = {
     ".editorconfig",
     ".gitignore",
@@ -27,7 +46,7 @@ def build_inventory(root: Path) -> Inventory:
 def list_project_files(root: Path) -> list[Path]:
     tracked = git_file_list(root)
     if tracked is not None:
-        return sorted(root / path for path in tracked)
+        return sorted(root / path for path in tracked if should_include_relative_path(path))
     return sorted(path for path in root.rglob("*") if should_include_path(path, root))
 
 
@@ -46,11 +65,20 @@ def git_file_list(root: Path) -> list[str] | None:
     return [line for line in result.stdout.splitlines() if line]
 
 
+def should_include_relative_path(relative: str | Path) -> bool:
+    path = Path(relative)
+    return not any(
+        part in EXCLUDED_DIR_NAMES
+        or part in EXCLUDED_FILE_NAMES
+        or any(part.endswith(suffix) for suffix in EXCLUDED_DIR_SUFFIXES)
+        for part in path.parts
+    )
+
+
 def should_include_path(path: Path, root: Path) -> bool:
     if not path.is_file():
         return False
-    relative = path.relative_to(root)
-    return not any(part in IGNORED_DIRS for part in relative.parts)
+    return should_include_relative_path(path.relative_to(root))
 
 
 def classify_file(path: Path, root: Path) -> FileRecord:
