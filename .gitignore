@@ -22,3 +22,4 @@ review-artifacts/
 .DS_Store
 .idea/
 .vscode/
+review-gauntlet.jsonc
