@@ -34,30 +34,37 @@ def _adapter(tmp_path: Path, config: CommandAdapterConfig) -> CommandReviewAdapt
 def test_command_adapter_stdout_json_success_and_artifacts(tmp_path: Path) -> None:
     script = (
         "import json, sys; "
-        "prompt=sys.stdin.read(); "
+        "prompt=sys.argv[1]; "
+        "assert sys.stdin.read() == ''; "
         "assert 'README.md' in prompt; "
         "print(json.dumps({'comments':[{'path':'README.md','content':'Issue','start_line':1,'end_line':1}]}))"
     )
     config = CommandAdapterConfig.model_validate(
-        {"type": "command", "command": sys.executable, "args": ["-c", script]}
+        {"type": "command", "command": sys.executable, "args": ["-c", script, "{prompt}"]}
     )
 
     result = _adapter(tmp_path, config).review(_cell(tmp_path))
 
     cell_dir = tmp_path / ".review-gauntlet" / "runs" / "1" / "cells" / "RGC-test"
     assert result.comments[0].content == "Issue"
-    assert (cell_dir / "prompt.md").is_file()
-    assert (cell_dir / "command.json").is_file()
+    assert "README.md" in (cell_dir / "prompt.md").read_text(encoding="utf-8")
     assert (cell_dir / "stdout.txt").read_text(encoding="utf-8")
     assert (cell_dir / "stderr.txt").is_file()
     command = json.loads((cell_dir / "command.json").read_text(encoding="utf-8"))
     assert command["argv"][0] == sys.executable
+    assert "README.md" in command["argv"][3]
+    assert command["cwd"] is None
+    assert command["cwd_mode"] == "inherited"
+    assert command["env_overrides"] == []
+    assert command["output_mode"] == "stdout-json"
+    assert command["timeout_seconds"] == 600
+    assert "input_mode" not in command
 
 
-def test_command_adapter_prompt_file_and_file_json_success(tmp_path: Path) -> None:
+def test_command_adapter_prompt_argv_and_file_json_success(tmp_path: Path) -> None:
     script = (
         "import json, pathlib, sys; "
-        "prompt=pathlib.Path(sys.argv[1]).read_text(); "
+        "prompt=sys.argv[1]; "
         "assert 'README.md' in prompt; "
         "pathlib.Path(sys.argv[2]).write_text(json.dumps({'comments':[]}))"
     )
@@ -65,10 +72,8 @@ def test_command_adapter_prompt_file_and_file_json_success(tmp_path: Path) -> No
         {
             "type": "command",
             "command": sys.executable,
-            "args": ["-c", script, "{prompt_file}", "{output_file}"],
-            "input": {"mode": "prompt-file"},
+            "args": ["-c", script, "{prompt}", "{output_file}"],
             "output": {"mode": "file-json", "path": "{output_file}"},
-            "cwd": "{repo_root}",
         }
     )
 
@@ -139,6 +144,101 @@ def test_command_adapter_timeout_failure(tmp_path: Path) -> None:
 
     with pytest.raises(ReviewAdapterError, match="timed out"):
         _adapter(tmp_path, config).review(_cell(tmp_path))
+
+
+def test_command_adapter_inherits_and_configures_cwd(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    caller_cwd = tmp_path / "caller"
+    caller_cwd.mkdir()
+    configured_cwd = tmp_path / "configured"
+    configured_cwd.mkdir()
+    monkeypatch.chdir(caller_cwd)
+    script = (
+        "import json, pathlib, sys; "
+        "pathlib.Path(sys.argv[1]).write_text(json.dumps({'comments': []})); "
+        "print(json.dumps({'cwd': pathlib.Path.cwd().name}))"
+    )
+
+    inherited = CommandAdapterConfig.model_validate(
+        {
+            "type": "command",
+            "command": sys.executable,
+            "args": ["-c", script, "{output_file}"],
+            "output": {"mode": "file-json", "path": "{output_file}"},
+        }
+    )
+    _adapter(tmp_path, inherited).review(_cell(tmp_path))
+    inherited_cell_dir = tmp_path / ".review-gauntlet" / "runs" / "1" / "cells" / "RGC-test"
+    inherited_stdout = json.loads((inherited_cell_dir / "stdout.txt").read_text())
+    inherited_command = json.loads((inherited_cell_dir / "command.json").read_text())
+    assert inherited_stdout["cwd"] == "caller"
+    assert inherited_command["cwd"] is None
+    assert inherited_command["cwd_mode"] == "inherited"
+
+    configured = CommandAdapterConfig.model_validate(
+        {
+            "type": "command",
+            "command": sys.executable,
+            "args": ["-c", script, "{output_file}"],
+            "output": {"mode": "file-json", "path": "{output_file}"},
+            "cwd": "configured",
+        }
+    )
+    _adapter(tmp_path, configured).review(_cell(tmp_path))
+    configured_cell_dir = tmp_path / ".review-gauntlet" / "runs" / "1" / "cells" / "RGC-test"
+    configured_stdout = json.loads((configured_cell_dir / "stdout.txt").read_text())
+    configured_command = json.loads((configured_cell_dir / "command.json").read_text())
+    assert configured_stdout["cwd"] == "configured"
+    assert configured_command["cwd"] == str(configured_cwd)
+    assert configured_command["cwd_mode"] == "explicit"
+
+
+def test_command_adapter_env_inheritance_and_overrides(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("PARENT_ONLY", "visible")
+    monkeypatch.delenv("REVIEW_GAUNTLET", raising=False)
+    script = (
+        "import json, os, pathlib, sys; "
+        "payload={'parent': os.environ.get('PARENT_ONLY'), "
+        "'marker': os.environ.get('REVIEW_GAUNTLET'), 'custom': os.environ.get('CUSTOM_PROMPT')}; "
+        "pathlib.Path(sys.argv[1]).write_text(json.dumps({'comments': []})); "
+        "print(json.dumps(payload))"
+    )
+
+    inherited = CommandAdapterConfig.model_validate(
+        {
+            "type": "command",
+            "command": sys.executable,
+            "args": ["-c", script, "{output_file}"],
+            "output": {"mode": "file-json", "path": "{output_file}"},
+        }
+    )
+    _adapter(tmp_path, inherited).review(_cell(tmp_path))
+    cell_dir = tmp_path / ".review-gauntlet" / "runs" / "1" / "cells" / "RGC-test"
+    stdout = json.loads((cell_dir / "stdout.txt").read_text())
+    command = json.loads((cell_dir / "command.json").read_text())
+    assert stdout["parent"] == "visible"
+    assert stdout["marker"] is None
+    assert stdout["custom"] is None
+    assert command["env_overrides"] == []
+
+    overridden = CommandAdapterConfig.model_validate(
+        {
+            "type": "command",
+            "command": sys.executable,
+            "args": ["-c", script, "{output_file}"],
+            "output": {"mode": "file-json", "path": "{output_file}"},
+            "env": {"CUSTOM_PROMPT": "{prompt}", "PARENT_ONLY": "overridden"},
+        }
+    )
+    _adapter(tmp_path, overridden).review(_cell(tmp_path))
+    overridden_stdout = json.loads((cell_dir / "stdout.txt").read_text())
+    overridden_command = json.loads((cell_dir / "command.json").read_text())
+    assert overridden_stdout["parent"] == "overridden"
+    assert "README.md" in overridden_stdout["custom"]
+    assert overridden_command["env_overrides"] == ["CUSTOM_PROMPT", "PARENT_ONLY"]
 
 
 def test_file_json_output_path_rejects_traversal_and_absolute(tmp_path: Path) -> None:

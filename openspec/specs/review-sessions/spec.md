@@ -253,7 +253,7 @@ The new session workflow SHALL preserve the existing `inventory`, `plan`, and `r
 
 ### Requirement: Review execution SHALL support JSON and JSONC command adapter configuration
 
-`review-gauntlet` SHALL support external review execution through a JSON or JSONC command adapter configuration. The configuration SHALL identify the command, argv arguments, timeout, input mode, output mode, and optional cwd/env settings without requiring in-process LLM SDK dependencies.
+`review-gauntlet` SHALL support external review execution through a JSON or JSONC command adapter configuration. The configuration SHALL identify the command, argv arguments, output mode, and optional timeout/cwd/env settings without requiring in-process LLM SDK dependencies. The generated OCR-derived prompt SHALL be available as the `{prompt}` template variable for argv/env expansion. Command adapter configuration SHALL NOT include an `input` section or prompt-file transport mode.
 
 #### Scenario: Review loads explicit adapter config
 
@@ -287,9 +287,32 @@ The new session workflow SHALL preserve the existing `inventory`, `plan`, and `r
 **Then**: the command fails with an actionable configuration error
 **And**: it does not implicitly execute `opencode`, `claude`, `codex`, or any other default external tool
 
+#### Scenario: Prompt template is accepted in argv
+
+**Given**: a valid command adapter configuration whose `args` include `{prompt}`
+**When**: the review command loads the config
+**Then**: `{prompt}` is accepted as a supported template variable
+**And**: `{prompt_file}` is rejected as an unsupported template variable
+**And**: no `input` or `input.mode` field is accepted in the config
+
+#### Scenario: Timeout defaults to 600 seconds
+
+**Given**: a valid command adapter configuration without `timeout_seconds`
+**When**: the review command loads the config
+**Then**: the command adapter timeout defaults to 600 seconds
+**And**: explicitly configured non-positive timeout values remain invalid
+
+#### Scenario: Process context controls are optional
+
+**Given**: a valid command adapter configuration without `cwd` or `env`
+**When**: the review command invokes the command adapter
+**Then**: the external process inherits the parent process cwd
+**And**: the external process inherits the parent process environment without automatic fixed env injection
+**And**: explicit `cwd` and `env` values remain supported when configured
+
 ### Requirement: Command adapter SHALL invoke external tools safely and preserve artifacts
 
-The command adapter SHALL invoke configured tools without a shell, SHALL pass generated prompts through configured stdin or prompt-file input modes, SHALL collect verdicts from stdout JSON or file JSON, and SHALL preserve per-cell artifacts for auditability.
+The command adapter SHALL invoke configured tools without a shell, SHALL expose generated prompts through `{prompt}` argv/env template expansion, SHALL collect verdicts from stdout JSON or file JSON, and SHALL preserve per-cell artifacts for auditability.
 
 #### Scenario: Command adapter executes without shell
 
@@ -297,24 +320,28 @@ The command adapter SHALL invoke configured tools without a shell, SHALL pass ge
 **When**: `review-gauntlet review` invokes the command adapter
 **Then**: the process is executed without `shell=True`
 **And**: configured arguments are passed as an argv array
-**And**: shell metacharacters in paths or arguments are not interpreted by a shell
+**And**: shell metacharacters in paths, arguments, or generated prompt text are not interpreted by a shell
 
-#### Scenario: Command adapter supports prompt-file input and file-json output
+#### Scenario: Command adapter expands generated prompt as argv element
 
-**Given**: a command adapter configuration using input mode `prompt-file`
-**And**: output mode `file-json`
+**Given**: a command adapter configuration whose args include `{prompt}`
 **When**: a review cell is evaluated
-**Then**: `review-gauntlet` writes the generated prompt to a prompt artifact file
-**And**: expands `{prompt_file}` and `{output_file}` in configured arguments or output paths
-**And**: validates the JSON verdict written to the output file
+**Then**: `review-gauntlet` expands `{prompt}` to the generated OCR-derived prompt as one argv element
+**And**: the command adapter does not send the prompt through stdin as a transport side effect
+**And**: the command adapter does not pass a prompt file as a transport side effect
 
-#### Scenario: Command adapter supports stdin input and stdout-json output
+#### Scenario: Command adapter supports stdout-json output
 
-**Given**: a command adapter configuration using input mode `stdin`
-**And**: output mode `stdout-json`
+**Given**: a command adapter configuration using output mode `stdout-json`
 **When**: a review cell is evaluated
-**Then**: `review-gauntlet` sends the generated prompt to the command stdin
-**And**: validates the JSON verdict emitted to stdout
+**Then**: `review-gauntlet` validates the JSON verdict emitted to stdout
+
+#### Scenario: Command adapter supports file-json output
+
+**Given**: a command adapter configuration using output mode `file-json`
+**And**: the configured output path includes `{output_file}` or another safe artifact-local path
+**When**: a review cell is evaluated
+**Then**: `review-gauntlet` validates the JSON verdict written to the output file
 
 #### Scenario: Review artifacts are persisted per evaluated cell
 

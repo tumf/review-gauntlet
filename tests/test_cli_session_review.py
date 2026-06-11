@@ -71,22 +71,20 @@ def _coverage_for_cell(tmp_path: Path, cell_id: str) -> str:
         )
 
 
-def _command_config(tmp_path: Path, script: str, *, name: str = "review-gauntlet.jsonc") -> Path:
+def _command_config(
+    tmp_path: Path, script: str, *, name: str = "review-gauntlet.jsonc", legacy_input: bool = False
+) -> Path:
     config = tmp_path / name
     config.parent.mkdir(parents=True, exist_ok=True)
-    config.write_text(
-        json.dumps(
-            {
-                "adapter": {
-                    "type": "command",
-                    "command": sys.executable,
-                    "args": ["-c", script],
-                    "timeout_seconds": 5,
-                }
-            }
-        ),
-        encoding="utf-8",
-    )
+    adapter: dict[str, object] = {
+        "type": "command",
+        "command": sys.executable,
+        "args": ["-c", script, "{prompt}"],
+        "timeout_seconds": 5,
+    }
+    if legacy_input:
+        adapter["input"] = {"mode": "stdin"}
+    config.write_text(json.dumps({"adapter": adapter}), encoding="utf-8")
     return config
 
 
@@ -176,7 +174,8 @@ def test_command_adapter_review_with_explicit_config_creates_finding(
 ) -> None:
     _init_session(tmp_path, capsys)
     script = (
-        "import json; "
+        "import json, sys; "
+        "assert 'README.md' in sys.argv[1]; "
         "print(json.dumps({'comments':[{'path':'README.md','content':'Command issue',"
         "'existing_code':'# docs','start_line':1,'end_line':1}]}))"
     )
@@ -202,6 +201,23 @@ def test_command_adapter_review_with_discovered_config(
     data = json.loads(capsys.readouterr().out)
     assert data["reviewed_cells"] == 1
     assert data["run_count"] == 1
+
+
+def test_legacy_command_adapter_config_fails_clearly(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_session(tmp_path, capsys)
+    before_runs = _run_count(tmp_path)
+    _command_config(tmp_path, "print('unused')", legacy_input=True)
+
+    with pytest.raises(SystemExit) as excinfo:
+        main(["review", str(tmp_path), "--budget", "1", "--format", "json"])
+
+    err = capsys.readouterr().err
+    assert excinfo.value.code == 64
+    assert "invalid review config" in err
+    assert "input" in err
+    assert _run_count(tmp_path) <= before_runs + 1
 
 
 def test_review_without_fixture_or_config_fails(

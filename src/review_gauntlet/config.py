@@ -24,7 +24,7 @@ SUPPORTED_TEMPLATE_VARIABLES = frozenset(
         "run_dir",
         "cell_id",
         "cell_dir",
-        "prompt_file",
+        "prompt",
         "output_file",
         "file_path",
         "rule_id",
@@ -36,20 +36,9 @@ class ConfigError(ValueError):
     pass
 
 
-class InputMode(StrEnum):
-    STDIN = "stdin"
-    PROMPT_FILE = "prompt-file"
-
-
 class OutputMode(StrEnum):
     STDOUT_JSON = "stdout-json"
     FILE_JSON = "file-json"
-
-
-class CommandInputConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    mode: InputMode = InputMode.STDIN
 
 
 class CommandOutputConfig(BaseModel):
@@ -73,9 +62,8 @@ class CommandAdapterConfig(BaseModel):
     type: Literal["command"]
     command: str
     args: tuple[str, ...] = ()
-    input: CommandInputConfig = Field(default_factory=CommandInputConfig)
     output: CommandOutputConfig = Field(default_factory=CommandOutputConfig)
-    timeout_seconds: float = 300.0
+    timeout_seconds: float = 600.0
     cwd: str | None = None
     env: dict[str, str] = Field(default_factory=dict)
 
