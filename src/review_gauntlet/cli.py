@@ -102,7 +102,7 @@ def build_parser() -> argparse.ArgumentParser:
         subparser.add_argument("--format", choices=("json", "text"), default="text")
     report = subparsers.add_parser("report")
     report.add_argument("root", nargs="?", default=".")
-    report.add_argument("--format", choices=("markdown", "json"), default="markdown")
+    report.add_argument("--format", choices=("text", "json"), default="text")
 
     init = subparsers.add_parser("init")
     init.add_argument("root", nargs="?", default=".")
@@ -111,8 +111,7 @@ def build_parser() -> argparse.ArgumentParser:
     init.add_argument("--worktree", action="store_true")
     init.add_argument("--commit")
     init.add_argument("--all", dest="all_files", action="store_true")
-    init.add_argument("--format", choices=("human", "json"), default="human")
-    init.add_argument("--audience", choices=("human", "agent"), default="human")
+    init.add_argument("--format", choices=("text", "json"), default="text")
 
     review = subparsers.add_parser("review")
     review.add_argument("root", nargs="?", default=".")
@@ -120,11 +119,12 @@ def build_parser() -> argparse.ArgumentParser:
     review.add_argument("--concurrency", type=int, default=8)
     review.add_argument("--fixture", type=Path)
     review.add_argument("--config", type=Path)
-    _session_output_args(review)
+    _output_format_arg(review)
+    review.add_argument("--audience", choices=("human", "agent"), default="human")
 
     status = subparsers.add_parser("status")
     status.add_argument("root", nargs="?", default=".")
-    _session_output_args(status)
+    _output_format_arg(status)
 
     findings = subparsers.add_parser("findings")
     findings.add_argument("root", nargs="?", default=".")
@@ -140,17 +140,16 @@ def build_parser() -> argparse.ArgumentParser:
     mark.add_argument("--reason", default="")
     mark.add_argument("--owner", default="")
     mark.add_argument("--until", default="")
-    _session_output_args(mark)
+    _output_format_arg(mark)
 
     finalize = subparsers.add_parser("finalize")
     finalize.add_argument("root", nargs="?", default=".")
-    _session_output_args(finalize)
+    _output_format_arg(finalize)
     return parser
 
 
-def _session_output_args(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--format", choices=("human", "json"), default="human")
-    parser.add_argument("--audience", choices=("human", "agent"), default="human")
+def _output_format_arg(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--format", choices=("text", "json"), default="text")
 
 
 def main(argv: list[str] | None = None) -> None:
