@@ -14,25 +14,8 @@ uv sync
 make check
 ```
 
-Generate an inventory for the current repository:
-
-```bash
-uv run review-gauntlet inventory
-```
-
-Generate a review plan with slices and required checks:
-
-```bash
-uv run review-gauntlet plan
-```
-
-Generate a markdown report:
-
-```bash
-uv run review-gauntlet report
-```
-
-Run one review step with a configured external CLI adapter:
+Start normal use by initializing a review session, then run exactly one review step
+with a configured external CLI adapter:
 
 ```bash
 uv run review-gauntlet init
@@ -63,11 +46,45 @@ uv run review-gauntlet review --config review-gauntlet.jsonc
 uv run review-gauntlet review --budget 20 --concurrency 4
 ```
 
+After a review step, inspect session state and findings, optionally record human
+finding decisions, and finalize only when both coverage and findings are closed:
+
+```bash
+uv run review-gauntlet status
+uv run review-gauntlet findings
+uv run review-gauntlet mark <finding-id> fixed --reason "fixed in follow-up"
+uv run review-gauntlet finalize
+```
+
 `review --concurrency` defaults to `8` and must be a positive integer. `--budget`
 still caps the total cells selected for one review run; `--concurrency` only limits
 how many of those selected adapter invocations run at the same time. It does not
 automatically pass a concurrency flag through to the nested external adapter
 command.
+
+### Diagnostic and legacy planning commands
+
+The `inventory`, `plan`, and `report` commands remain available for compatibility
+and inspection. Use them to inspect file discovery, review slicing, and report
+rendering; they are not the normal day-to-day review lifecycle.
+
+Inspect the current repository inventory and classification:
+
+```bash
+uv run review-gauntlet inventory
+```
+
+Inspect the legacy review plan with slices and required checks:
+
+```bash
+uv run review-gauntlet plan
+```
+
+Render the legacy markdown matrix report:
+
+```bash
+uv run review-gauntlet report
+```
 
 ## Default file filtering
 
