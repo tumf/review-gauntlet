@@ -3,7 +3,13 @@ from pathlib import Path
 
 import pytest
 
-from review_gauntlet.targets import HeadMode, TargetKind, resolve_target
+from review_gauntlet.targets import (
+    HeadMode,
+    TargetKind,
+    file_digests,
+    resolve_target,
+    target_digest,
+)
 
 
 def _git(root: Path, *args: str) -> None:
@@ -98,3 +104,32 @@ def test_rejects_mixed_target_modes(
 def test_rejects_partial_branch_options(tmp_path: Path) -> None:
     with pytest.raises(ValueError):
         resolve_target(root=tmp_path, base_ref="main", head_ref=None, worktree=False, commit=None)
+
+
+def test_target_digest_and_file_digests_ignore_default_review_exclusions(tmp_path: Path) -> None:
+    (tmp_path / "src").mkdir()
+    source = tmp_path / "src" / "app.py"
+    source.write_text("print('v1')\n", encoding="utf-8")
+    (tmp_path / "tests").mkdir()
+    excluded_test = tmp_path / "tests" / "test_app.py"
+    excluded_test.write_text("def test_app(): pass\n", encoding="utf-8")
+    excluded_rust_test = tmp_path / "foo_test.rs"
+    excluded_rust_test.write_text("#[test]\nfn it_works() {}\n", encoding="utf-8")
+    (tmp_path / "target" / "debug").mkdir(parents=True)
+    excluded_artifact = tmp_path / "target" / "debug" / "app"
+    excluded_artifact.write_text("binary-v1\n", encoding="utf-8")
+
+    original_digest = target_digest(tmp_path)
+    original_file_digests = file_digests(tmp_path)
+    excluded_test.write_text("def test_app(): assert True\n", encoding="utf-8")
+    excluded_rust_test.write_text("#[test]\nfn it_changed() {}\n", encoding="utf-8")
+    excluded_artifact.write_text("binary-v2\n", encoding="utf-8")
+
+    assert target_digest(tmp_path) == original_digest
+    assert file_digests(tmp_path) == original_file_digests
+    assert set(original_file_digests) == {"src/app.py"}
+
+    source.write_text("print('v2')\n", encoding="utf-8")
+
+    assert target_digest(tmp_path) != original_digest
+    assert file_digests(tmp_path)["src/app.py"] != original_file_digests["src/app.py"]

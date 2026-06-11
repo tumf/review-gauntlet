@@ -7,6 +7,8 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
 
+from review_gauntlet.inventory import should_include_review_relative_path
+
 
 class TargetKind(StrEnum):
     BRANCH = "branch"
@@ -91,11 +93,20 @@ def _split_git_paths(output: str) -> tuple[str, ...]:
     return tuple(sorted({line for line in output.splitlines() if line}))
 
 
+def review_universe_files(root: Path) -> tuple[Path, ...]:
+    return tuple(
+        sorted(
+            path
+            for path in root.rglob("*")
+            if path.is_file()
+            and should_include_review_relative_path(path.relative_to(root).as_posix())
+        )
+    )
+
+
 def target_digest(root: Path) -> str:
     digest = hashlib.sha256()
-    for path in sorted(
-        p for p in root.rglob("*") if p.is_file() and ".review-gauntlet" not in p.parts
-    ):
+    for path in review_universe_files(root):
         rel = path.relative_to(root).as_posix()
         digest.update(rel.encode())
         digest.update(b"\0")
@@ -106,9 +117,7 @@ def target_digest(root: Path) -> str:
 
 def file_digests(root: Path) -> dict[str, str]:
     result: dict[str, str] = {}
-    for path in sorted(
-        p for p in root.rglob("*") if p.is_file() and ".review-gauntlet" not in p.parts
-    ):
+    for path in review_universe_files(root):
         result[path.relative_to(root).as_posix()] = hashlib.sha256(path.read_bytes()).hexdigest()
     return result
 

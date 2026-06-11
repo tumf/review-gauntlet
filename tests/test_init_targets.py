@@ -55,6 +55,12 @@ def test_explicit_worktree_matches_default_workspace_diff(
 ) -> None:
     _init_repo(tmp_path)
     (tmp_path / "changed.py").write_text("print('changed')\n", encoding="utf-8")
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "test_changed.py").write_text(
+        "def test_changed(): pass\n", encoding="utf-8"
+    )
+    (tmp_path / "app.spec.ts").write_text("test('changed', () => {})\n", encoding="utf-8")
+    (tmp_path / "foo_test.rs").write_text("#[test]\nfn it_works() {}\n", encoding="utf-8")
 
     main(["init", str(tmp_path), "--worktree", "--format", "json"])
 
@@ -101,6 +107,12 @@ def test_all_init_uses_full_inventory_and_exclusions(
 ) -> None:
     _init_repo(tmp_path)
     (tmp_path / "changed.py").write_text("print('changed')\n", encoding="utf-8")
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "usage.md").write_text("# usage\n", encoding="utf-8")
+    (tmp_path / "openspec" / "specs").mkdir(parents=True)
+    (tmp_path / "openspec" / "specs" / "spec.md").write_text("# spec\n", encoding="utf-8")
+    (tmp_path / "foo_test.go").write_text("package main\n", encoding="utf-8")
+    (tmp_path / "foo_test.rs").write_text("#[test]\nfn it_works() {}\n", encoding="utf-8")
     state_dir = tmp_path / ".review-gauntlet"
     state_dir.mkdir()
     (state_dir / "ignored.py").write_text("print('ignored')\n", encoding="utf-8")
@@ -110,6 +122,10 @@ def test_all_init_uses_full_inventory_and_exclusions(
     assert json.loads(capsys.readouterr().out)["cell_count"] > 0
     paths = _cell_paths(tmp_path)
     assert {"changed.py", "unchanged.py"}.issubset(paths)
+    assert "docs/usage.md" not in paths
+    assert "openspec/specs/spec.md" not in paths
+    assert "foo_test.go" not in paths
+    assert "foo_test.rs" not in paths
     assert ".review-gauntlet/ignored.py" not in paths
 
 

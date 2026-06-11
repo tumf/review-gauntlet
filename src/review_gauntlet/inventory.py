@@ -6,7 +6,7 @@ from pathlib import Path
 
 from review_gauntlet.models import FileCategory, FileRecord, Inventory, display_root
 
-EXCLUDED_DIR_NAMES = {
+ARTIFACT_EXCLUDED_DIR_NAMES = {
     ".git",
     ".hg",
     ".svn",
@@ -23,9 +23,42 @@ EXCLUDED_DIR_NAMES = {
     "htmlcov",
     ".idea",
     ".vscode",
+    "vendor",
+    "node_modules",
+    "target",
+    ".happypack",
+    ".cachefile",
+    "_packages",
+    "rpm",
+    "pkgs",
+    "oh_modules",
 }
-EXCLUDED_FILE_NAMES = {".coverage", ".DS_Store"}
-EXCLUDED_DIR_SUFFIXES = {".egg-info"}
+ARTIFACT_EXCLUDED_FILE_NAMES = {".coverage", ".DS_Store"}
+ARTIFACT_EXCLUDED_DIR_SUFFIXES = {".egg-info"}
+REVIEW_EXCLUDED_TOP_LEVEL_DIRS = {"openspec", "tests", "docs"}
+REVIEW_EXCLUDED_PATH_PARTS = {"__tests__", "oh_modules"}
+REVIEW_EXCLUDED_SUFFIXES = {
+    "_test.go",
+    "_test.rs",
+    "Test.java",
+    "Tests.java",
+    "Test.kt",
+    "Tests.kt",
+    ".spec.ts",
+    ".spec.tsx",
+    ".test.ts",
+    ".test.tsx",
+    ".spec.js",
+    ".test.js",
+    "_test.py",
+    "_spec.rb",
+    ".spec.ets",
+    ".test.ets",
+}
+REVIEW_EXCLUDED_PREFIXES = {"test_"}
+EXCLUDED_DIR_NAMES = ARTIFACT_EXCLUDED_DIR_NAMES
+EXCLUDED_FILE_NAMES = ARTIFACT_EXCLUDED_FILE_NAMES
+EXCLUDED_DIR_SUFFIXES = ARTIFACT_EXCLUDED_DIR_SUFFIXES
 CONFIG_NAMES = {
     ".editorconfig",
     ".gitignore",
@@ -48,7 +81,7 @@ def build_inventory_for_paths(root: Path, relative_paths: tuple[str, ...]) -> In
     files = tuple(
         classify_file(repo_root / relative, repo_root)
         for relative in sorted(relative_paths)
-        if should_include_relative_path(relative) and (repo_root / relative).is_file()
+        if should_include_artifact_relative_path(relative) and (repo_root / relative).is_file()
     )
     return Inventory(root=display_root(repo_root), files=files)
 
@@ -56,7 +89,9 @@ def build_inventory_for_paths(root: Path, relative_paths: tuple[str, ...]) -> In
 def list_project_files(root: Path) -> list[Path]:
     tracked = git_file_list(root)
     if tracked is not None:
-        return sorted(root / path for path in tracked if should_include_relative_path(path))
+        return sorted(
+            root / path for path in tracked if should_include_artifact_relative_path(path)
+        )
     return sorted(path for path in root.rglob("*") if should_include_path(path, root))
 
 
@@ -75,20 +110,39 @@ def git_file_list(root: Path) -> list[str] | None:
     return [line for line in result.stdout.splitlines() if line]
 
 
-def should_include_relative_path(relative: str | Path) -> bool:
+def should_include_artifact_relative_path(relative: str | Path) -> bool:
     path = Path(relative)
     return not any(
-        part in EXCLUDED_DIR_NAMES
-        or part in EXCLUDED_FILE_NAMES
-        or any(part.endswith(suffix) for suffix in EXCLUDED_DIR_SUFFIXES)
+        part in ARTIFACT_EXCLUDED_DIR_NAMES
+        or part in ARTIFACT_EXCLUDED_FILE_NAMES
+        or any(part.endswith(suffix) for suffix in ARTIFACT_EXCLUDED_DIR_SUFFIXES)
         for part in path.parts
     )
+
+
+def should_include_relative_path(relative: str | Path) -> bool:
+    return should_include_artifact_relative_path(relative)
+
+
+def should_include_review_relative_path(relative: str | Path) -> bool:
+    path = Path(relative)
+    parts = path.parts
+    if not should_include_artifact_relative_path(path):
+        return False
+    if parts and parts[0] in REVIEW_EXCLUDED_TOP_LEVEL_DIRS:
+        return False
+    if any(part in REVIEW_EXCLUDED_PATH_PARTS for part in parts):
+        return False
+    name = path.name
+    if name.startswith(tuple(REVIEW_EXCLUDED_PREFIXES)):
+        return False
+    return not name.endswith(tuple(REVIEW_EXCLUDED_SUFFIXES))
 
 
 def should_include_path(path: Path, root: Path) -> bool:
     if not path.is_file():
         return False
-    return should_include_relative_path(path.relative_to(root))
+    return should_include_artifact_relative_path(path.relative_to(root))
 
 
 def classify_file(path: Path, root: Path) -> FileRecord:
