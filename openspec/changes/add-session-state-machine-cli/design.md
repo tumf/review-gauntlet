@@ -116,6 +116,17 @@ SQLite is preferred for the ledger because review sessions need append-only even
 
 This boundary keeps the tool safe for humans, CI, bots, and separate LLM orchestrators that want to decide when to notify, wait, triage, fix, or retry.
 
+## Output Modes
+
+Session commands should align with OCR's agent-oriented CLI conventions:
+
+- Use `--format json` for structured output instead of adding new `--json` flags.
+- Support `--format human` as the human-readable default where a command emits a report.
+- Support `--audience human|agent`, defaulting to `human`.
+- `--audience agent` must suppress progress UI, spinners, and decorative output, and must emit only the final command result plus machine-actionable warnings on stderr.
+
+For commands that emit structured summaries (`review`, `status`, `findings`, and `finalize`), `--audience agent --format json` is the preferred automation contract. Existing planning commands keep their current compatibility flags, including `inventory <root> --json` and `plan <root> --json`, unless they are changed by a separate compatibility proposal.
+
 ## Finding Identity
 
 Findings are session-level records. Each new adapter result is matched against existing findings by fingerprint before a new finding is created.

@@ -44,6 +44,7 @@ The review logic, prompts, and default rule corpus must be derived from Alibaba'
 - A review session records its base/head policy, target mode, active session metadata, ruleset digest, review universe, and ledger state under `.review-gauntlet/`.
 - The bundled review rules and prompts are traceable to the pinned `alibaba/open-code-review` snapshot and are included in the ruleset digest.
 - `review-gauntlet review` performs exactly one review-run advancement and exits with a structured summary of coverage, findings, finalization readiness, and `next_required_action`.
+- Session commands support `--format json` for structured output and `--audience agent` for agent-friendly, non-progress output aligned with OCR review conventions.
 - Repeated review runs in the same session deduplicate logically identical findings using stable session-level finding IDs rather than emitting duplicate new findings.
 - `review-gauntlet mark` records human or external-LLM triage decisions without running review work.
 - Marking a finding as fixed transitions it to `fixed_pending_verification`, not a terminal state.
