@@ -22,7 +22,7 @@ Interrupt handling is also poor. `KeyboardInterrupt` occurs while waiting on `Fu
 
 ## Proposed Solution
 
-Make `review-gauntlet review` observable while preserving the constitution requirement that one review command advances exactly one run. The CLI should emit human-readable run and cell progress to stderr for human audience output, while keeping final stdout output parseable for JSON callers and suppressing decorative progress for `--audience agent`.
+Make `review-gauntlet review` observable while preserving the constitution requirement that one review command advances exactly one run. Because the CLI already defaults to `--audience human`, the default review experience should emit human-readable run and cell progress to stderr. When `--audience agent` is explicitly selected, progress display is unnecessary and must be suppressed so automation receives only the final structured stdout contract.
 
 Make external command adapter execution cancellable. Replace the uncancellable `subprocess.run()` path with process-handle-based execution so interrupt handling can terminate in-flight adapter subprocesses and return control promptly. Cancellation must not mark unfinished cells as reviewed, and already committed successful cells must remain explicitly recorded.
 
