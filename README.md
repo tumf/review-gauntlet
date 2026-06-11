@@ -14,29 +14,29 @@ uv sync
 make check
 ```
 
-Generate an inventory for a repository:
+Generate an inventory for the current repository:
 
 ```bash
-uv run review-gauntlet inventory /path/to/repo --json
+uv run review-gauntlet inventory
 ```
 
 Generate a review plan with slices and required checks:
 
 ```bash
-uv run review-gauntlet plan /path/to/repo --json
+uv run review-gauntlet plan
 ```
 
 Generate a markdown report:
 
 ```bash
-uv run review-gauntlet report /path/to/repo
+uv run review-gauntlet report
 ```
 
 Run one review step with a configured external CLI adapter:
 
 ```bash
-uv run review-gauntlet init /path/to/repo
-uv run review-gauntlet review /path/to/repo --config /path/to/review-gauntlet.jsonc --format json
+uv run review-gauntlet init
+uv run review-gauntlet review --config review-gauntlet.jsonc
 ```
 
 Target selection happens on `init`; `review` only advances the active session once.
@@ -44,23 +44,23 @@ OCR-compatible target mappings are:
 
 ```bash
 # OCR workspace diff review: staged, unstaged, and untracked non-ignored files.
-uv run review-gauntlet init /path/to/repo
-uv run review-gauntlet init /path/to/repo --worktree  # explicit alias
+uv run review-gauntlet init
+uv run review-gauntlet init --worktree  # explicit alias
 
 # OCR branch/range review: files changed between two refs.
-uv run review-gauntlet init /path/to/repo --from main --to HEAD
+uv run review-gauntlet init --from main --to HEAD
 
 # OCR single-commit review: files changed by one commit.
-uv run review-gauntlet init /path/to/repo --commit <commit-oid>
+uv run review-gauntlet init --commit <commit-oid>
 
 # review-gauntlet-only full repository review: every eligible inventory file.
-uv run review-gauntlet init /path/to/repo --all
+uv run review-gauntlet init --all
 
 # Execute exactly one review step for the initialized session.
-uv run review-gauntlet review /path/to/repo --config /path/to/review-gauntlet.jsonc --format json
+uv run review-gauntlet review --config review-gauntlet.jsonc
 
 # Select at most 20 cells for this run and execute up to 4 adapter calls at once.
-uv run review-gauntlet review /path/to/repo --budget 20 --concurrency 4 --format json
+uv run review-gauntlet review --budget 20 --concurrency 4
 ```
 
 `review --concurrency` defaults to `8` and must be a positive integer. `--budget`
