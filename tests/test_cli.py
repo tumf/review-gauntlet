@@ -9,10 +9,57 @@ from review_gauntlet.cli import main
 def test_cli_inventory_outputs_json(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     (tmp_path / "README.md").write_text("# docs\n", encoding="utf-8")
 
-    main(["inventory", str(tmp_path), "--json"])
+    main(["inventory", str(tmp_path), "--format", "json"])
 
     data = json.loads(capsys.readouterr().out)
     assert data["files"][0]["path"] == "README.md"
+
+
+def test_cli_plan_outputs_json(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    (tmp_path / "README.md").write_text("# docs\n", encoding="utf-8")
+
+    main(["plan", str(tmp_path), "--format", "json"])
+
+    data = json.loads(capsys.readouterr().out)
+    assert data["slices"][0]["id"] == "docs"
+    assert data["slices"][0]["checks"][0]["id"] == "docs-accuracy"
+
+
+def test_cli_inventory_defaults_to_text(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    (tmp_path / "README.md").write_text("# docs\n", encoding="utf-8")
+
+    main(["inventory", str(tmp_path)])
+
+    output = capsys.readouterr().out
+    assert "Inventory\n" in output
+    assert "Files: 1\n" in output
+    assert "- README.md [docs] risks=-\n" in output
+    with pytest.raises(json.JSONDecodeError):
+        json.loads(output)
+
+
+def test_cli_plan_defaults_to_text(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    (tmp_path / "README.md").write_text("# docs\n", encoding="utf-8")
+
+    main(["plan", str(tmp_path)])
+
+    output = capsys.readouterr().out
+    assert "Review Plan\n" in output
+    assert "Slices: 1\n" in output
+    assert "- docs: Documentation files=1 checks=docs-accuracy\n" in output
+    assert "  - README.md\n" in output
+    with pytest.raises(json.JSONDecodeError):
+        json.loads(output)
+
+
+@pytest.mark.parametrize("command", ["inventory", "plan"])
+def test_cli_rejects_legacy_json_flag(command: str, tmp_path: Path) -> None:
+    (tmp_path / "README.md").write_text("# docs\n", encoding="utf-8")
+
+    with pytest.raises(SystemExit) as exc:
+        main([command, str(tmp_path), "--json"])
+
+    assert exc.value.code == 2
 
 
 def test_cli_report_outputs_markdown(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
