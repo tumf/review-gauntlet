@@ -135,6 +135,19 @@ class SessionStore:
                 (state, session_id, cell_id),
             )
 
+    def mark_cell_reviewed(self, session_id: str, cell: ReviewCell) -> None:
+        with self.connect() as conn:
+            cur = conn.execute(
+                """
+                update review_cells
+                set state = ?, content_digest = ?
+                where session_id = ? and cell_id = ?
+                """,
+                (CellState.REVIEWED, cell.content_digest, session_id, cell.id),
+            )
+        if cur.rowcount != 1:
+            raise LookupError(f"unknown review cell: session_id={session_id} cell_id={cell.id}")
+
     def fixed_pending_paths(self, session_id: str) -> set[str]:
         with self.connect() as conn:
             rows = conn.execute(
