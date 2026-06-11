@@ -35,7 +35,28 @@ uv run review-gauntlet report /path/to/repo
 Run one review step with a configured external CLI adapter:
 
 ```bash
-uv run review-gauntlet init /path/to/repo --worktree
+uv run review-gauntlet init /path/to/repo
+uv run review-gauntlet review /path/to/repo --config /path/to/review-gauntlet.jsonc --format json
+```
+
+Target selection happens on `init`; `review` only advances the active session once.
+OCR-compatible target mappings are:
+
+```bash
+# OCR workspace diff review: staged, unstaged, and untracked non-ignored files.
+uv run review-gauntlet init /path/to/repo
+uv run review-gauntlet init /path/to/repo --worktree  # explicit alias
+
+# OCR branch/range review: files changed between two refs.
+uv run review-gauntlet init /path/to/repo --from main --to HEAD
+
+# OCR single-commit review: files changed by one commit.
+uv run review-gauntlet init /path/to/repo --commit <commit-oid>
+
+# review-gauntlet-only full repository review: every eligible inventory file.
+uv run review-gauntlet init /path/to/repo --all
+
+# Execute exactly one review step for the initialized session.
 uv run review-gauntlet review /path/to/repo --config /path/to/review-gauntlet.jsonc --format json
 ```
 

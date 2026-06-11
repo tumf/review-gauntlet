@@ -43,6 +43,16 @@ def build_inventory(root: Path) -> Inventory:
     return Inventory(root=display_root(repo_root), files=files)
 
 
+def build_inventory_for_paths(root: Path, relative_paths: tuple[str, ...]) -> Inventory:
+    repo_root = root.resolve()
+    files = tuple(
+        classify_file(repo_root / relative, repo_root)
+        for relative in sorted(relative_paths)
+        if should_include_relative_path(relative) and (repo_root / relative).is_file()
+    )
+    return Inventory(root=display_root(repo_root), files=files)
+
+
 def list_project_files(root: Path) -> list[Path]:
     tracked = git_file_list(root)
     if tracked is not None:
