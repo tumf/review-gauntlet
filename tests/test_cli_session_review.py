@@ -1,5 +1,6 @@
 import json
 import sqlite3
+import sys
 from pathlib import Path
 
 import pytest
@@ -61,12 +62,41 @@ def _finding_id(tmp_path: Path) -> str:
         return str(conn.execute("select finding_id from findings").fetchone()[0])
 
 
+def _coverage_for_cell(tmp_path: Path, cell_id: str) -> str:
+    with sqlite3.connect(tmp_path / ".review-gauntlet" / "ledger.sqlite") as conn:
+        return str(
+            conn.execute("select state from review_cells where cell_id = ?", (cell_id,)).fetchone()[
+                0
+            ]
+        )
+
+
+def _command_config(tmp_path: Path, script: str, *, name: str = "review-gauntlet.jsonc") -> Path:
+    config = tmp_path / name
+    config.parent.mkdir(parents=True, exist_ok=True)
+    config.write_text(
+        json.dumps(
+            {
+                "adapter": {
+                    "type": "command",
+                    "command": sys.executable,
+                    "args": ["-c", script],
+                    "timeout_seconds": 5,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    return config
+
+
 def test_review_advances_once_with_limited_budget(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _init_session(tmp_path, capsys)
 
-    main(["review", str(tmp_path), "--budget", "1", "--format", "json"])
+    fixture = _fixture(tmp_path, _cell_for_path(tmp_path, "README.md"))
+    main(["review", str(tmp_path), "--fixture", str(fixture), "--budget", "1", "--format", "json"])
 
     data = json.loads(capsys.readouterr().out)
     assert data["run_count"] == 1
@@ -117,7 +147,9 @@ def test_fixed_finding_is_verified_only_when_relevant_path_is_reviewed(
     capsys.readouterr()
     assert _finding_state(tmp_path) == "fixed_pending_verification"
 
-    main(["review", str(tmp_path), "--format", "json"])
+    empty_fixture = tmp_path / "empty-fixture.json"
+    empty_fixture.write_text("{}", encoding="utf-8")
+    main(["review", str(tmp_path), "--fixture", str(empty_fixture), "--format", "json"])
     capsys.readouterr()
     assert _finding_state(tmp_path) == "fixed_verified"
 
@@ -137,6 +169,92 @@ def test_fixed_finding_reopens_when_fingerprint_is_seen_again(
     capsys.readouterr()
 
     assert _finding_state(tmp_path) == "reopened"
+
+
+def test_command_adapter_review_with_explicit_config_creates_finding(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_session(tmp_path, capsys)
+    script = (
+        "import json; "
+        "print(json.dumps({'comments':[{'path':'README.md','content':'Command issue',"
+        "'existing_code':'# docs','start_line':1,'end_line':1}]}))"
+    )
+    config = _command_config(tmp_path, script, name="custom.json")
+
+    main(["review", str(tmp_path), "--config", str(config), "--budget", "1", "--format", "json"])
+
+    data = json.loads(capsys.readouterr().out)
+    assert data["reviewed_cells"] == 1
+    assert data["finding_ids"] == ["RGF-0001"]
+    assert data["run_count"] == 1
+    assert _finding_state(tmp_path) == "untriaged"
+
+
+def test_command_adapter_review_with_discovered_config(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_session(tmp_path, capsys)
+    _command_config(tmp_path, "import json; print(json.dumps({'comments':[]}))")
+
+    main(["review", str(tmp_path), "--budget", "1", "--format", "json"])
+
+    data = json.loads(capsys.readouterr().out)
+    assert data["reviewed_cells"] == 1
+    assert data["run_count"] == 1
+
+
+def test_review_without_fixture_or_config_fails(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_session(tmp_path, capsys)
+
+    with pytest.raises(SystemExit) as excinfo:
+        main(["review", str(tmp_path), "--format", "json"])
+
+    assert excinfo.value.code == 64
+    assert "requires --fixture or a command adapter config" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "script, expected",
+    [
+        ("import sys; sys.exit(9)", "status 9"),
+        ("print('not-json')", "invalid verdict JSON"),
+    ],
+)
+def test_command_adapter_failure_keeps_cell_pending_and_exits_nonzero(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], script: str, expected: str
+) -> None:
+    _init_session(tmp_path, capsys)
+    cell_id = _cell_for_path(tmp_path, "README.md")
+    _command_config(tmp_path, script)
+
+    with pytest.raises(SystemExit) as excinfo:
+        main(["review", str(tmp_path), "--budget", "1", "--format", "json"])
+
+    assert excinfo.value.code == 1
+    data = json.loads(capsys.readouterr().out)
+    assert expected in data["error"]
+    assert data["run_count"] == 1
+    assert data["reviewed_cells"] == 0
+    assert _coverage_for_cell(tmp_path, cell_id) == "pending"
+
+
+def test_command_adapter_success_and_failure_create_one_run(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_session(tmp_path, capsys)
+    _command_config(tmp_path, "import json; print(json.dumps({'comments':[]}))")
+    main(["review", str(tmp_path), "--budget", "1", "--format", "json"])
+    capsys.readouterr()
+    assert _run_count(tmp_path) == 1
+
+    _command_config(tmp_path, "print('not-json')")
+    with pytest.raises(SystemExit):
+        main(["review", str(tmp_path), "--budget", "1", "--format", "json"])
+    capsys.readouterr()
+    assert _run_count(tmp_path) == 2
 
 
 def test_finding_fingerprint_deduplicates_shifted_line_numbers() -> None:
