@@ -265,13 +265,41 @@ Session commands that emit summaries SHALL use `--format json` for structured ou
 
 ### Requirement: Existing planning commands SHALL remain compatible
 
-The new session workflow SHALL preserve the existing `inventory`, `plan`, and `report` command contracts while reusing their concepts for review-universe generation. Inventory generation SHALL exclude review-gauntlet-generated session state, common cache/build/editor artifacts, and files ignored by Git when Git-backed discovery is available, so coverage reflects the project review target rather than generated tool state.
+The session workflow SHALL preserve the existing `inventory`, `plan`, and `report` command concepts while making legacy planning command output selection explicit. `inventory` and `plan` SHALL accept `--format json|text`, default to `text`, and SHALL no longer accept the legacy `--json` flag. JSON output for `inventory --format json` and `plan --format json` SHALL remain parseable using the existing Pydantic JSON contracts. Inventory generation SHALL exclude review-gauntlet-generated session state, common cache/build/editor artifacts, and files ignored by Git when Git-backed discovery is available, so coverage reflects the project review target rather than generated tool state.
+
+<!-- Expected canonical result after archive: the planning command compatibility requirement documents `--format json|text` for inventory/plan, default text output, and removal of the legacy `--json` flag while retaining existing report behavior. -->
 
 #### Scenario: Existing inventory JSON remains parseable
 
 **Given**: a repository with files to classify
-**When**: the developer runs `review-gauntlet inventory <root> --json`
+**When**: the developer runs `review-gauntlet inventory <root> --format json`
 **Then**: stdout is valid JSON emitted with the existing Pydantic JSON contract
+
+#### Scenario: Existing plan JSON remains parseable
+
+**Given**: a repository with files to classify into review slices
+**When**: the developer runs `review-gauntlet plan <root> --format json`
+**Then**: stdout is valid JSON emitted with the existing Pydantic JSON contract
+
+#### Scenario: Inventory defaults to text output
+
+**Given**: a repository with files to classify
+**When**: the developer runs `review-gauntlet inventory <root>`
+**Then**: stdout is deterministic human-readable text
+**And**: stdout is not required to be parseable as JSON
+
+#### Scenario: Plan defaults to text output
+
+**Given**: a repository with files to classify into review slices
+**When**: the developer runs `review-gauntlet plan <root>`
+**Then**: stdout is deterministic human-readable text
+**And**: stdout is not required to be parseable as JSON
+
+#### Scenario: Legacy JSON flag is rejected for planning commands
+
+**Given**: a repository with files to classify
+**When**: the developer runs `review-gauntlet inventory <root> --json` or `review-gauntlet plan <root> --json`
+**Then**: argument parsing fails with a usage error
 
 #### Scenario: Existing report remains available
 
@@ -283,25 +311,9 @@ The new session workflow SHALL preserve the existing `inventory`, `plan`, and `r
 #### Scenario: Generated review state is excluded from inventory
 
 **Given**: a repository containing `.review-gauntlet/` session state and run artifacts
-**When**: the developer runs `review-gauntlet inventory <root> --json`
+**When**: the developer runs `review-gauntlet inventory <root> --format json`
 **Then**: no path under `.review-gauntlet/` appears in the inventory output
 **And**: generated review state does not create review cells for subsequent session reconciliation
-
-#### Scenario: Common generated artifacts are excluded from fallback inventory
-
-**Given**: a project tree with normal source files and generated artifacts under cache, build, coverage, virtualenv, or editor metadata paths
-**And**: Git-backed discovery is unavailable
-**When**: review-gauntlet builds inventory by recursively walking the filesystem
-**Then**: normal source files remain included
-**And**: generated artifact paths such as `.ruff_cache/`, `.pyright/`, `.mypy_cache/`, `build/`, `dist/`, `wheels/`, `*.egg-info/`, `.coverage`, `htmlcov/`, `.DS_Store`, `.idea/`, and `.vscode/` are excluded
-
-#### Scenario: Git-backed inventory applies built-in exclusions
-
-**Given**: Git-backed discovery returns untracked files that are not ignored by Git
-**And**: some of those paths are under review-gauntlet built-in excluded directories
-**When**: review-gauntlet builds inventory from Git output
-**Then**: built-in excluded paths are filtered out before classification
-**And**: legitimate tracked or untracked project files outside built-in exclusions remain eligible for classification
 
 ### Requirement: Review execution SHALL support JSON and JSONC command adapter configuration
 

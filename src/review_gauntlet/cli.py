@@ -51,7 +51,7 @@ def build_parser() -> argparse.ArgumentParser:
     for command in ("inventory", "plan"):
         subparser = subparsers.add_parser(command)
         subparser.add_argument("root", nargs="?", default=".")
-        subparser.add_argument("--json", action="store_true", help="emit JSON output")
+        subparser.add_argument("--format", choices=("json", "text"), default="text")
     report = subparsers.add_parser("report")
     report.add_argument("root", nargs="?", default=".")
     report.add_argument("--format", choices=("markdown", "json"), default="markdown")
@@ -127,17 +127,46 @@ def main(argv: list[str] | None = None) -> None:
 def _run_legacy_command(args: argparse.Namespace, root: Path) -> None:
     inventory = build_inventory(root)
     if args.command == "inventory":
-        print(inventory.model_dump_json(indent=2))
+        if args.format == "json":
+            print(inventory.model_dump_json(indent=2))
+            return
+        print(_render_inventory_text(inventory))
         return
     plan = build_plan(inventory)
     if args.command == "plan":
-        print(plan.model_dump_json(indent=2))
+        if args.format == "json":
+            print(plan.model_dump_json(indent=2))
+            return
+        print(_render_plan_text(plan))
         return
     matrix = build_matrix(plan)
     if args.format == "json":
         print(matrix.model_dump_json(indent=2))
         return
     print(render_markdown_report(plan, matrix))
+
+
+def _render_inventory_text(inventory: Inventory) -> str:
+    lines = ["Inventory", f"Root: {inventory.root}", f"Files: {len(inventory.files)}"]
+    for file in inventory.files:
+        risk_tags = ",".join(file.risk_tags) if file.risk_tags else "-"
+        lines.append(f"- {file.path} [{file.category.value}] risks={risk_tags}")
+    return "\n".join(lines)
+
+
+def _render_plan_text(plan: ReviewPlan) -> str:
+    lines = ["Review Plan", f"Root: {plan.root}", f"Slices: {len(plan.slices)}"]
+    for review_slice in plan.slices:
+        check_ids = (
+            ",".join(check.id for check in review_slice.checks) if review_slice.checks else "-"
+        )
+        lines.append(
+            f"- {review_slice.id}: {review_slice.title} "
+            f"files={len(review_slice.files)} checks={check_ids}"
+        )
+        for file_path in review_slice.files:
+            lines.append(f"  - {file_path}")
+    return "\n".join(lines)
 
 
 def _run_session_command(args: argparse.Namespace, root: Path) -> None:
