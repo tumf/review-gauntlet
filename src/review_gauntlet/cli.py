@@ -275,7 +275,7 @@ def _cmd_review(args: argparse.Namespace, root: Path, store: SessionStore) -> No
             )
             seen_fingerprints.add(finding.fingerprint)
             finding_ids.append(store.upsert_finding(session_id, run_id, selected.id, finding))
-        store.update_cell_state(selected.id, CellState.REVIEWED)
+        store.update_cell_state(session_id, selected.id, CellState.REVIEWED)
         reviewed += 1
     store.verify_fixed_findings(session_id, seen_fingerprints, evaluated_paths)
     status = _status(store, root)
@@ -343,9 +343,9 @@ def _reconcile_cells(store: SessionStore, root: Path, target: TargetSpec) -> Non
     for cell_id, row in existing.items():
         current_cell = current.get(cell_id)
         if current_cell is None:
-            store.update_cell_state(cell_id, CellState.SUPERSEDED)
+            store.update_cell_state(session_id, cell_id, CellState.SUPERSEDED)
         elif row["content_digest"] != current_cell.content_digest:
-            store.update_cell_state(cell_id, CellState.STALE)
+            store.update_cell_state(session_id, cell_id, CellState.STALE)
 
 
 def _cmd_mark(args: argparse.Namespace, store: SessionStore) -> None:
