@@ -12,7 +12,9 @@ def _init_and_review(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None
     (tmp_path / "README.md").write_text("# docs\n", encoding="utf-8")
     main(["init", str(tmp_path), "--worktree", "--format", "json"])
     capsys.readouterr()
-    main(["review", str(tmp_path), "--format", "json"])
+    fixture = tmp_path / "fixture.json"
+    fixture.write_text("{}", encoding="utf-8")
+    main(["review", str(tmp_path), "--fixture", str(fixture), "--format", "json"])
     capsys.readouterr()
 
 
@@ -37,7 +39,8 @@ def test_finalize_uses_last_reviewed_digest_not_initial_digest(
 ) -> None:
     _init_and_review(tmp_path, capsys)
     (tmp_path / "README.md").write_text("# changed docs\n", encoding="utf-8")
-    main(["review", str(tmp_path), "--format", "json"])
+    fixture = tmp_path / "fixture.json"
+    main(["review", str(tmp_path), "--fixture", str(fixture), "--format", "json"])
     capsys.readouterr()
 
     main(["finalize", str(tmp_path), "--format", "json"])

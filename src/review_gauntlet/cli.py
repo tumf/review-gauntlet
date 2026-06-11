@@ -8,12 +8,17 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any, NoReturn, cast
 
+from review_gauntlet.config import ConfigError, load_config
 from review_gauntlet.findings import FindingState, normalize_ocr_comment
 from review_gauntlet.inventory import build_inventory
 from review_gauntlet.ocr_rules import load_ruleset
 from review_gauntlet.planner import build_matrix, build_plan
 from review_gauntlet.report import render_markdown_report
-from review_gauntlet.review_adapter import FakeReviewAdapter
+from review_gauntlet.review_adapter import (
+    CommandReviewAdapter,
+    FakeReviewAdapter,
+    ReviewAdapterError,
+)
 from review_gauntlet.review_cells import CellState, cells_from_plan
 from review_gauntlet.session_store import SessionStore
 from review_gauntlet.targets import file_digests, resolve_target, target_digest
@@ -50,6 +55,7 @@ def build_parser() -> argparse.ArgumentParser:
     review.add_argument("root", nargs="?", default=".")
     review.add_argument("--budget", type=int, default=50)
     review.add_argument("--fixture", type=Path)
+    review.add_argument("--config", type=Path)
     _session_output_args(review)
 
     status = subparsers.add_parser("status")
@@ -94,6 +100,8 @@ def main(argv: list[str] | None = None) -> None:
         return
     try:
         _run_session_command(args, root)
+    except ConfigError as exc:
+        fail(str(exc))
     except ValueError as exc:
         fail(str(exc))
     except LookupError as exc:
@@ -167,7 +175,27 @@ def _cmd_review(args: argparse.Namespace, root: Path, store: SessionStore) -> No
     digest = target_digest(root)
     _reconcile_cells(store, root)
     run_id = store.create_run(session_id, digest)
-    adapter = FakeReviewAdapter(args.fixture)
+    if args.budget <= 0:
+        status = _status(store, root)
+        _emit(
+            {"run_id": run_id, "reviewed_cells": 0, "finding_ids": [], **status},
+            args.format,
+        )
+        return
+    adapter_config = load_config(root, args.config) if args.fixture is None else None
+    if args.fixture is not None:
+        adapter = FakeReviewAdapter(args.fixture)
+    elif adapter_config is not None:
+        _config_path, config = adapter_config
+        adapter = CommandReviewAdapter(
+            config=config.adapter,
+            root=root,
+            state_dir=store.state_dir,
+            run_id=run_id,
+            ruleset=ruleset,
+        )
+    else:
+        raise ValueError("review requires --fixture or a command adapter config")
     reviewed = 0
     finding_ids: list[str] = []
     seen_fingerprints: set[str] = set()
@@ -186,7 +214,22 @@ def _cmd_review(args: argparse.Namespace, root: Path, store: SessionStore) -> No
         selected = cell_map.get(str(row["cell_id"]))
         if selected is None:
             continue
-        result = adapter.review(selected)
+        try:
+            result = adapter.review(selected)
+        except ReviewAdapterError as exc:
+            status = _status(store, root)
+            _emit(
+                {
+                    "run_id": run_id,
+                    "reviewed_cells": reviewed,
+                    "failed_cell_id": selected.id,
+                    "error": str(exc),
+                    "failure": exc.failure,
+                    **status,
+                },
+                args.format,
+            )
+            raise SystemExit(1) from exc
         evaluated_paths.add(selected.file_path)
         for comment in result.comments:
             finding = normalize_ocr_comment(
