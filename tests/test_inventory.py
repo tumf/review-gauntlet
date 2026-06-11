@@ -94,6 +94,7 @@ def test_review_path_filter_excludes_default_review_noise() -> None:
         "tests/test_core.py",
         "docs/usage.md",
         "foo_test.go",
+        "foo_test.rs",
         "FooTest.java",
         "FooTests.kt",
         "app.spec.ts",

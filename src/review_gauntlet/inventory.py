@@ -39,6 +39,7 @@ REVIEW_EXCLUDED_TOP_LEVEL_DIRS = {"openspec", "tests", "docs"}
 REVIEW_EXCLUDED_PATH_PARTS = {"__tests__", "oh_modules"}
 REVIEW_EXCLUDED_SUFFIXES = {
     "_test.go",
+    "_test.rs",
     "Test.java",
     "Tests.java",
     "Test.kt",

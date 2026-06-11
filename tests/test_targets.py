@@ -113,6 +113,8 @@ def test_target_digest_and_file_digests_ignore_default_review_exclusions(tmp_pat
     (tmp_path / "tests").mkdir()
     excluded_test = tmp_path / "tests" / "test_app.py"
     excluded_test.write_text("def test_app(): pass\n", encoding="utf-8")
+    excluded_rust_test = tmp_path / "foo_test.rs"
+    excluded_rust_test.write_text("#[test]\nfn it_works() {}\n", encoding="utf-8")
     (tmp_path / "target" / "debug").mkdir(parents=True)
     excluded_artifact = tmp_path / "target" / "debug" / "app"
     excluded_artifact.write_text("binary-v1\n", encoding="utf-8")
@@ -120,6 +122,7 @@ def test_target_digest_and_file_digests_ignore_default_review_exclusions(tmp_pat
     original_digest = target_digest(tmp_path)
     original_file_digests = file_digests(tmp_path)
     excluded_test.write_text("def test_app(): assert True\n", encoding="utf-8")
+    excluded_rust_test.write_text("#[test]\nfn it_changed() {}\n", encoding="utf-8")
     excluded_artifact.write_text("binary-v2\n", encoding="utf-8")
 
     assert target_digest(tmp_path) == original_digest

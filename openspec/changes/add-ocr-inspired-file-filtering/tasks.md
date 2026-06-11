@@ -23,3 +23,8 @@
 
 Archive validation itself is the authoritative final OpenSpec validation gate.
 Expected archive gate: `cflx openspec validate add-ocr-inspired-file-filtering --archive-gate`
+
+## Acceptance Notes
+
+- Acceptance #1 identified missing Rust `_test.rs` default review-path exclusion coverage. This apply added `_test.rs` to the shared review exclusion suffixes and added focused unit/integration/digest regression coverage.
+- Focused verification passed with `agent-exec run -- uv run pytest tests/test_inventory.py tests/test_init_targets.py tests/test_targets.py` (job `ca4c3a79994d23af66460859c46a4500`, exit code 0).

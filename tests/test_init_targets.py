@@ -60,6 +60,7 @@ def test_explicit_worktree_matches_default_workspace_diff(
         "def test_changed(): pass\n", encoding="utf-8"
     )
     (tmp_path / "app.spec.ts").write_text("test('changed', () => {})\n", encoding="utf-8")
+    (tmp_path / "foo_test.rs").write_text("#[test]\nfn it_works() {}\n", encoding="utf-8")
 
     main(["init", str(tmp_path), "--worktree", "--format", "json"])
 
@@ -111,6 +112,7 @@ def test_all_init_uses_full_inventory_and_exclusions(
     (tmp_path / "openspec" / "specs").mkdir(parents=True)
     (tmp_path / "openspec" / "specs" / "spec.md").write_text("# spec\n", encoding="utf-8")
     (tmp_path / "foo_test.go").write_text("package main\n", encoding="utf-8")
+    (tmp_path / "foo_test.rs").write_text("#[test]\nfn it_works() {}\n", encoding="utf-8")
     state_dir = tmp_path / ".review-gauntlet"
     state_dir.mkdir()
     (state_dir / "ignored.py").write_text("print('ignored')\n", encoding="utf-8")
@@ -123,6 +125,7 @@ def test_all_init_uses_full_inventory_and_exclusions(
     assert "docs/usage.md" not in paths
     assert "openspec/specs/spec.md" not in paths
     assert "foo_test.go" not in paths
+    assert "foo_test.rs" not in paths
     assert ".review-gauntlet/ignored.py" not in paths
 
 
