@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from review_gauntlet.cli import main
+from review_gauntlet.cli import build_parser, main
 from review_gauntlet.findings import normalize_ocr_comment
 from review_gauntlet.ocr_rules import OCRComment
 from review_gauntlet.session_store import SessionStore
@@ -71,6 +71,16 @@ def _coverage_for_cell(tmp_path: Path, cell_id: str) -> str:
         )
 
 
+def _cell_states(tmp_path: Path) -> dict[str, str]:
+    with sqlite3.connect(tmp_path / ".review-gauntlet" / "ledger.sqlite") as conn:
+        rows = conn.execute("select cell_id, state from review_cells order by cell_id").fetchall()
+    return {str(cell_id): str(state) for cell_id, state in rows}
+
+
+def _reviewed_cell_ids(tmp_path: Path) -> list[str]:
+    return [cell_id for cell_id, state in _cell_states(tmp_path).items() if state == "reviewed"]
+
+
 def _command_config(
     tmp_path: Path, script: str, *, name: str = "review-gauntlet.jsonc", legacy_input: bool = False
 ) -> Path:
@@ -89,18 +99,65 @@ def _command_config(
     return config
 
 
+def test_review_default_concurrency_is_eight() -> None:
+    args = build_parser().parse_args(["review", "."])
+
+    assert args.concurrency == 8
+
+
+def test_review_rejects_invalid_concurrency_before_adapter_work(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_session(tmp_path, capsys)
+    fixture = _fixture(tmp_path, _cell_for_path(tmp_path, "README.md"))
+
+    with pytest.raises(SystemExit) as excinfo:
+        main(
+            [
+                "review",
+                str(tmp_path),
+                "--fixture",
+                str(fixture),
+                "--concurrency",
+                "0",
+                "--format",
+                "json",
+            ]
+        )
+
+    captured = capsys.readouterr()
+    assert excinfo.value.code == 64
+    assert "concurrency" in captured.err
+    assert _run_count(tmp_path) == 0
+    assert _coverage_for_cell(tmp_path, _cell_for_path(tmp_path, "README.md")) == "pending"
+
+
 def test_review_advances_once_with_limited_budget(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _init_session(tmp_path, capsys)
 
     fixture = _fixture(tmp_path, _cell_for_path(tmp_path, "README.md"))
-    main(["review", str(tmp_path), "--fixture", str(fixture), "--budget", "1", "--format", "json"])
+    main(
+        [
+            "review",
+            str(tmp_path),
+            "--fixture",
+            str(fixture),
+            "--budget",
+            "1",
+            "--concurrency",
+            "8",
+            "--format",
+            "json",
+        ]
+    )
 
     data = json.loads(capsys.readouterr().out)
     assert data["run_count"] == 1
     assert data["reviewed_cells"] == 1
     assert data["coverage"]["pending"] > 0
+    assert len(_reviewed_cell_ids(tmp_path)) == 1
 
 
 def test_mark_updates_finding_without_creating_review_run(
@@ -202,6 +259,72 @@ def test_command_adapter_review_with_discovered_config(
     data = json.loads(capsys.readouterr().out)
     assert data["reviewed_cells"] == 1
     assert data["run_count"] == 1
+
+
+def test_command_adapter_reviews_selected_cells_concurrently_with_isolated_artifacts(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_session(tmp_path, capsys)
+    starts_dir = tmp_path / "starts"
+    script = (
+        "import json, pathlib, re, sys, time; "
+        f"starts = pathlib.Path({str(starts_dir)!r}); starts.mkdir(exist_ok=True); "
+        "match = re.search(r'cell_id: (\\S+)', sys.argv[1]); "
+        "cell_id = match.group(1) if match else 'missing'; "
+        "(starts / cell_id).write_text('started', encoding='utf-8'); "
+        "deadline = time.time() + 2; "
+        "\nwhile len(list(starts.iterdir())) < 2 and time.time() < deadline:\n"
+        "    time.sleep(0.01)\n"
+        "\nif len(list(starts.iterdir())) < 2:\n    sys.exit(7)\n"
+        "print(json.dumps({'comments':[]}))"
+    )
+    _command_config(tmp_path, script)
+
+    main(["review", str(tmp_path), "--budget", "2", "--concurrency", "2", "--format", "json"])
+
+    data = json.loads(capsys.readouterr().out)
+    reviewed_cell_ids = _reviewed_cell_ids(tmp_path)
+    assert data["reviewed_cells"] == 2
+    assert len(reviewed_cell_ids) == 2
+    assert sorted(path.name for path in starts_dir.iterdir()) == reviewed_cell_ids
+    for cell_id in reviewed_cell_ids:
+        cell_dir = tmp_path / ".review-gauntlet" / "runs" / str(data["run_id"]) / "cells" / cell_id
+        assert (cell_dir / "prompt.md").is_file()
+        assert (cell_dir / "stdout.txt").is_file()
+        assert (cell_dir / "stderr.txt").is_file()
+        assert (cell_dir / "command.json").is_file()
+        assert (cell_dir / "verdict.json").is_file()
+
+
+def test_concurrent_review_failure_preserves_ordered_failure_contract(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "app.py").write_text("print('hello')\n", encoding="utf-8")
+    _init_session(tmp_path, capsys)
+    ordered_cells = [str(row["cell_id"]) for row in SessionStore(tmp_path).list_cells()]
+    failing_cell = ordered_cells[1]
+    script = (
+        "import json, re, sys; "
+        "match = re.search(r'cell_id: (\\S+)', sys.argv[1]); "
+        "cell_id = match.group(1) if match else 'missing'; "
+        f"\nif cell_id == {failing_cell!r}:\n"
+        "    print('not-json')\n"
+        "else:\n"
+        "    print(json.dumps({'comments':[]}))\n"
+    )
+    _command_config(tmp_path, script)
+
+    with pytest.raises(SystemExit) as excinfo:
+        main(["review", str(tmp_path), "--budget", "3", "--concurrency", "2", "--format", "json"])
+
+    data = json.loads(capsys.readouterr().out)
+    assert excinfo.value.code == 1
+    assert data["reviewed_cells"] == 1
+    assert data["failed_cell_id"] == failing_cell
+    assert "invalid verdict JSON" in data["error"]
+    assert _coverage_for_cell(tmp_path, ordered_cells[0]) == "reviewed"
+    assert _coverage_for_cell(tmp_path, failing_cell) == "pending"
+    assert _coverage_for_cell(tmp_path, ordered_cells[2]) == "pending"
 
 
 def test_legacy_command_adapter_config_fails_clearly(
