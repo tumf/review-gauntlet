@@ -84,7 +84,9 @@ def test_command_adapter_prompt_argv_and_file_json_success(tmp_path: Path) -> No
 
     result = _adapter(tmp_path, config).review(_cell(tmp_path))
 
+    cell_dir = tmp_path / ".review-gauntlet" / "runs" / "1" / "cells" / "RGC-test"
     assert result.comments == ()
+    assert json.loads((cell_dir / "verdict.json").read_text(encoding="utf-8")) == {"comments": []}
 
 
 def test_command_adapter_defaults_to_file_json_output_file_with_stdout_audit(
@@ -127,6 +129,60 @@ def test_stdout_json_rejects_output_path() -> None:
                 "output": {"mode": "stdout-json", "path": "verdict.json"},
             }
         )
+
+
+def test_invalid_file_json_failure_includes_actionable_diagnostics(tmp_path: Path) -> None:
+    script = (
+        "import pathlib, sys; "
+        "pathlib.Path(sys.argv[1]).write_text("
+        "\"{'comments':[{'path':'README.md','content':'Issue','existing_code':'# docs'}]}\", "
+        "encoding='utf-8')"
+    )
+    config = CommandAdapterConfig.model_validate(
+        {
+            "type": "command",
+            "command": sys.executable,
+            "args": ["-c", script, "{output_file}"],
+            "output": {"mode": "file-json", "path": "{output_file}"},
+        }
+    )
+
+    with pytest.raises(ReviewAdapterError, match="invalid verdict JSON") as excinfo:
+        _adapter(tmp_path, config).review(_cell(tmp_path))
+
+    cell_dir = tmp_path / ".review-gauntlet" / "runs" / "1" / "cells" / "RGC-test"
+    failure = json.loads((cell_dir / "failure.json").read_text(encoding="utf-8"))
+    assert excinfo.value.failure == failure
+    assert failure["output_mode"] == "file-json"
+    assert failure["verdict_path"] == str(cell_dir / "verdict.json")
+    assert failure["raw_verdict_path"] == str(cell_dir / "verdict.raw.json")
+    assert "'comments'" in failure["raw_snippet"]
+    assert len(failure["raw_snippet"]) <= 501
+    assert "strict JSON" in failure["hint"]
+    assert not (cell_dir / "verdict.json").read_text(encoding="utf-8").startswith('{"comments"')
+
+
+def test_invalid_stdout_json_failure_includes_actionable_diagnostics(tmp_path: Path) -> None:
+    config = CommandAdapterConfig.model_validate(
+        {
+            "type": "command",
+            "command": sys.executable,
+            "args": ["-c", "print(\"{'comments': []}\")"],
+            "output": {"mode": "stdout-json"},
+        }
+    )
+
+    with pytest.raises(ReviewAdapterError, match="invalid verdict JSON") as excinfo:
+        _adapter(tmp_path, config).review(_cell(tmp_path))
+
+    cell_dir = tmp_path / ".review-gauntlet" / "runs" / "1" / "cells" / "RGC-test"
+    failure = json.loads((cell_dir / "failure.json").read_text(encoding="utf-8"))
+    assert excinfo.value.failure == failure
+    assert failure["output_mode"] == "stdout-json"
+    assert failure["verdict_path"] == str(cell_dir / "verdict.json")
+    assert failure["raw_verdict_path"] == str(cell_dir / "verdict.raw.json")
+    assert "'comments'" in failure["raw_snippet"]
+    assert "strict JSON" in failure["hint"]
 
 
 def test_command_adapter_default_file_json_fails_when_output_file_missing(
