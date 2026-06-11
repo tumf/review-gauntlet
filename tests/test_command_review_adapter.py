@@ -146,6 +146,41 @@ def test_command_adapter_timeout_failure(tmp_path: Path) -> None:
         _adapter(tmp_path, config).review(_cell(tmp_path))
 
 
+def test_command_adapter_rejects_invalid_cwd(tmp_path: Path) -> None:
+    non_existent = tmp_path / "does_not_exist"
+    config = CommandAdapterConfig.model_validate(
+        {
+            "type": "command",
+            "command": sys.executable,
+            "args": ["-c", "print('ok')"],
+            "cwd": str(non_existent),
+        }
+    )
+
+    with pytest.raises(ReviewAdapterError, match="not a directory"):
+        _adapter(tmp_path, config).review(_cell(tmp_path))
+
+
+def test_command_adapter_rejects_cell_paths_outside_repo(tmp_path: Path) -> None:
+    config = CommandAdapterConfig.model_validate(
+        {
+            "type": "command",
+            "command": sys.executable,
+            "args": ["-c", "print('ok')"],
+        }
+    )
+    cell = ReviewCell(
+        id="RGC-test",
+        file_path="../outside.md",
+        rule_id="docs",
+        slice_id="docs",
+        content_digest="digest",
+    )
+
+    with pytest.raises(ReviewAdapterError, match="outside repository"):
+        _adapter(tmp_path, config).review(cell)
+
+
 def test_command_adapter_inherits_and_configures_cwd(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

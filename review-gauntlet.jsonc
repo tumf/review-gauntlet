@@ -10,8 +10,7 @@
       "{prompt}"
     ],
     "output": {
-      "mode": "file-json",
-      "path": "{output_file}"
+      "mode": "stdout-json"
     }
   }
 }

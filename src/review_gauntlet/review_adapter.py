@@ -156,7 +156,7 @@ class CommandReviewAdapter:
                 cell=cell,
                 rule=self._ruleset.select_rule_doc(cell.file_path),
                 ruleset_digest=self._ruleset.digest,
-                file_content=(self._root / cell.file_path).read_text(encoding="utf-8"),
+                file_content=self._read_cell_file(cell),
             )
         )
         prompt_file.write_text(prompt, encoding="utf-8")
@@ -230,6 +230,18 @@ class CommandReviewAdapter:
         output_file.write_text(payload.model_dump_json(indent=2), encoding="utf-8")
         return ReviewAdapterResult(cell_id=cell.id, comments=payload.comments)
 
+    def _read_cell_file(self, cell: ReviewCell) -> str:
+        file_path = (self._root / cell.file_path).resolve()
+        try:
+            file_path.relative_to(self._root)
+        except ValueError as exc:
+            raise ReviewAdapterError(
+                f"unsafe review cell path outside repository: {cell.file_path}"
+            ) from exc
+        if not file_path.is_file():
+            raise ReviewAdapterError(f"review cell path is not a file: {cell.file_path}")
+        return file_path.read_text(encoding="utf-8")
+
     def _variables(
         self, cell: ReviewCell, cell_dir: Path, output_file: Path, prompt: str
     ) -> dict[str, str]:
@@ -263,7 +275,10 @@ class CommandReviewAdapter:
         if self._config.cwd is None:
             return None
         cwd = Path(self._expand(self._config.cwd, variables))
-        return (self._root / cwd).resolve() if not cwd.is_absolute() else cwd.resolve()
+        resolved = (self._root / cwd).resolve() if not cwd.is_absolute() else cwd.resolve()
+        if not resolved.is_dir():
+            raise ReviewAdapterError(f"adapter.cwd is not a directory: {resolved}")
+        return resolved
 
     def _resolve_output_path(self, variables: dict[str, str], cell_dir: Path) -> Path:
         if self._config.output.mode == OutputMode.STDOUT_JSON:
