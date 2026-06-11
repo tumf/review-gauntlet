@@ -100,9 +100,59 @@ class SessionStore:
                 raise RuntimeError("failed to create review run")
             return cur.lastrowid
 
+    def add_cells(self, session_id: str, cells: tuple[ReviewCell, ...]) -> None:
+        if not cells:
+            return
+        with self.connect() as conn:
+            conn.executemany(
+                """
+                insert into review_cells(
+                  session_id, cell_id, file_path, rule_id, slice_id, state, content_digest
+                ) values (?, ?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    (
+                        session_id,
+                        cell.id,
+                        cell.file_path,
+                        cell.rule_id,
+                        cell.slice_id,
+                        cell.state,
+                        cell.content_digest,
+                    )
+                    for cell in cells
+                ],
+            )
+
     def update_cell_state(self, cell_id: str, state: CellState) -> None:
         with self.connect() as conn:
             conn.execute("update review_cells set state = ? where cell_id = ?", (state, cell_id))
+
+    def fixed_pending_paths(self, session_id: str) -> set[str]:
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                select distinct path from findings
+                where session_id = ? and state = ?
+                """,
+                (session_id, FindingState.FIXED_PENDING_VERIFICATION),
+            ).fetchall()
+        return {str(row["path"]) for row in rows}
+
+    def last_run_target_digest(self, session_id: str) -> str | None:
+        with self.connect() as conn:
+            row = conn.execute(
+                """
+                select target_digest from runs
+                where session_id = ?
+                order by run_id desc
+                limit 1
+                """,
+                (session_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return str(row["target_digest"])
 
     def upsert_finding(
         self, session_id: str, run_id: int, cell_id: str, finding: NormalizedFinding
@@ -164,13 +214,23 @@ class SessionStore:
         with self.connect() as conn:
             self._transition(conn, finding_id, state, reason, metadata)
 
-    def verify_fixed_findings(self, session_id: str, seen_fingerprints: set[str]) -> None:
+    def verify_fixed_findings(
+        self, session_id: str, seen_fingerprints: set[str], evaluated_paths: set[str]
+    ) -> None:
+        if not evaluated_paths:
+            return
         with self.connect() as conn:
             rows = conn.execute(
-                "select finding_id, fingerprint from findings where session_id = ? and state = ?",
+                """
+                select finding_id, fingerprint, path
+                from findings
+                where session_id = ? and state = ?
+                """,
                 (session_id, FindingState.FIXED_PENDING_VERIFICATION),
             ).fetchall()
             for row in rows:
+                if str(row["path"]) not in evaluated_paths:
+                    continue
                 state = (
                     FindingState.REOPENED
                     if row["fingerprint"] in seen_fingerprints

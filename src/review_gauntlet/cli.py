@@ -4,8 +4,9 @@ import argparse
 import json
 import sys
 import uuid
+from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import NoReturn
+from typing import Any, NoReturn, cast
 
 from review_gauntlet.findings import FindingState, normalize_ocr_comment
 from review_gauntlet.inventory import build_inventory
@@ -170,10 +171,15 @@ def _cmd_review(args: argparse.Namespace, root: Path, store: SessionStore) -> No
     reviewed = 0
     finding_ids: list[str] = []
     seen_fingerprints: set[str] = set()
+    evaluated_paths: set[str] = set()
+    fixed_pending_paths = store.fixed_pending_paths(session_id)
     for row in store.list_cells(session_id):
         if reviewed >= args.budget:
             break
-        if row["state"] not in {CellState.PENDING, CellState.STALE}:
+        if (
+            row["state"] not in {CellState.PENDING, CellState.STALE}
+            and row["file_path"] not in fixed_pending_paths
+        ):
             continue
         cell = cells_from_plan(build_plan(build_inventory(root)), file_digests(root))
         cell_map = {item.id: item for item in cell}
@@ -181,6 +187,7 @@ def _cmd_review(args: argparse.Namespace, root: Path, store: SessionStore) -> No
         if selected is None:
             continue
         result = adapter.review(selected)
+        evaluated_paths.add(selected.file_path)
         for comment in result.comments:
             finding = normalize_ocr_comment(
                 comment,
@@ -193,7 +200,7 @@ def _cmd_review(args: argparse.Namespace, root: Path, store: SessionStore) -> No
             finding_ids.append(store.upsert_finding(session_id, run_id, selected.id, finding))
         store.update_cell_state(selected.id, CellState.REVIEWED)
         reviewed += 1
-    store.verify_fixed_findings(session_id, seen_fingerprints)
+    store.verify_fixed_findings(session_id, seen_fingerprints, evaluated_paths)
     status = _status(store, root)
     _emit(
         {"run_id": run_id, "reviewed_cells": reviewed, "finding_ids": finding_ids, **status},
@@ -202,19 +209,19 @@ def _cmd_review(args: argparse.Namespace, root: Path, store: SessionStore) -> No
 
 
 def _reconcile_cells(store: SessionStore, root: Path) -> None:
+    session_id = store.active_session_id()
     current = {
         cell.id: cell
         for cell in cells_from_plan(build_plan(build_inventory(root)), file_digests(root))
     }
-    existing = {str(row["cell_id"]): row for row in store.list_cells()}
+    existing = {str(row["cell_id"]): row for row in store.list_cells(session_id)}
+    new_cells = tuple(cell for cell_id, cell in current.items() if cell_id not in existing)
+    store.add_cells(session_id, new_cells)
     for cell_id, row in existing.items():
         current_cell = current.get(cell_id)
         if current_cell is None:
             store.update_cell_state(cell_id, CellState.SUPERSEDED)
-        elif (
-            row["content_digest"] != current_cell.content_digest
-            and row["state"] == CellState.REVIEWED
-        ):
+        elif row["content_digest"] != current_cell.content_digest:
             store.update_cell_state(cell_id, CellState.STALE)
 
 
@@ -254,9 +261,7 @@ def _status(store: SessionStore, root: Path) -> dict[str, object]:
         run_count = conn.execute(
             "select count(*) as count from runs where session_id = ?", (session_id,)
         ).fetchone()["count"]
-    reasons = _finalize_reasons(
-        cell_counts, finding_counts, store.session_metadata(session_id), root
-    )
+    reasons = _finalize_reasons(cell_counts, finding_counts, store, session_id, root)
     return {
         "session_id": session_id,
         "session_state": "active",
@@ -293,7 +298,8 @@ def _finalize(store: SessionStore, root: Path) -> dict[str, object]:
 def _finalize_reasons(
     cell_counts: dict[str, int],
     finding_counts: dict[str, int],
-    metadata: dict[str, object],
+    store: SessionStore,
+    session_id: str,
     root: Path,
 ) -> list[str]:
     reasons: list[str] = []
@@ -306,9 +312,52 @@ def _finalize_reasons(
             reasons.append(f"findings remain {state}")
     if finding_counts.get("fixed_pending_verification", 0):
         reasons.append("fixed findings require verification")
-    if metadata.get("target_digest") != target_digest(root):
-        reasons.append("target digest has changed since session initialization")
+    if _expired_terminal_decision_count(store, session_id):
+        reasons.append("waived or accepted-risk findings have expired")
+    last_reviewed_digest = store.last_run_target_digest(session_id)
+    if last_reviewed_digest is None:
+        reasons.append("no review run has been completed")
+    elif last_reviewed_digest != target_digest(root):
+        reasons.append("target digest has changed since the last review run")
     return reasons
+
+
+def _expired_terminal_decision_count(store: SessionStore, session_id: str) -> int:
+    today = datetime.now(UTC).date()
+    with store.connect() as conn:
+        rows = conn.execute(
+            """
+            select finding_id, state
+            from findings
+            where session_id = ? and state in ('waived', 'accepted_risk')
+            """,
+            (session_id,),
+        ).fetchall()
+        expired = 0
+        for row in rows:
+            event = conn.execute(
+                """
+                select metadata from finding_events
+                where finding_id = ? and to_state = ?
+                order by event_id desc
+                limit 1
+                """,
+                (row["finding_id"], row["state"]),
+            ).fetchone()
+            if event is not None and _is_expired(str(event["metadata"]), today):
+                expired += 1
+    return expired
+
+
+def _is_expired(metadata_json: str, today: date) -> bool:
+    raw_metadata = json.loads(metadata_json)
+    if not isinstance(raw_metadata, dict):
+        raise ValueError("finding event metadata must be a JSON object")
+    metadata = cast(dict[str, Any], raw_metadata)
+    until = metadata.get("until")
+    if not until:
+        return False
+    return date.fromisoformat(str(until)) < today
 
 
 def _next_action(
