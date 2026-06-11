@@ -364,7 +364,7 @@ def _cmd_review(args: argparse.Namespace, root: Path, store: SessionStore) -> No
             )
             seen_fingerprints.add(finding.fingerprint)
             finding_ids.append(store.upsert_finding(session_id, run_id, selected.id, finding))
-        store.update_cell_state(session_id, selected.id, CellState.REVIEWED)
+        store.mark_cell_reviewed(session_id, selected)
         reviewed += 1
     store.verify_fixed_findings(session_id, seen_fingerprints, evaluated_paths)
     status = _status(store, root)

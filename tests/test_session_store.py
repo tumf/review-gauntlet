@@ -46,3 +46,32 @@ def test_session_store_updates_cell_state_for_one_session(tmp_path: Path) -> Non
 
     assert store.list_cells("RGS-one")[0]["state"] == "reviewed"
     assert store.list_cells("RGS-two")[0]["state"] == "pending"
+
+
+def test_session_store_marks_reviewed_and_refreshes_digest_for_one_session(
+    tmp_path: Path,
+) -> None:
+    store = SessionStore(tmp_path)
+    old_cell = ReviewCell(
+        id="RGC-1",
+        file_path="README.md",
+        rule_id="docs",
+        slice_id="docs",
+        content_digest="old-digest",
+    )
+    refreshed_cell = old_cell.model_copy(update={"content_digest": "current-digest"})
+    store.create_session(
+        {"session_id": "RGS-one", "target_digest": "abc", "target": {}}, (old_cell,)
+    )
+    store.create_session(
+        {"session_id": "RGS-two", "target_digest": "def", "target": {}}, (old_cell,)
+    )
+
+    store.mark_cell_reviewed("RGS-one", refreshed_cell)
+
+    first = store.list_cells("RGS-one")[0]
+    second = store.list_cells("RGS-two")[0]
+    assert first["state"] == "reviewed"
+    assert first["content_digest"] == "current-digest"
+    assert second["state"] == "pending"
+    assert second["content_digest"] == "old-digest"
