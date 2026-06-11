@@ -4,6 +4,7 @@ import argparse
 import json
 import sys
 import uuid
+from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any, NoReturn, cast
@@ -18,9 +19,11 @@ from review_gauntlet.report import render_markdown_report
 from review_gauntlet.review_adapter import (
     CommandReviewAdapter,
     FakeReviewAdapter,
+    ReviewAdapter,
     ReviewAdapterError,
+    ReviewAdapterResult,
 )
-from review_gauntlet.review_cells import CellState, cells_from_plan
+from review_gauntlet.review_cells import CellState, ReviewCell, cells_from_plan
 from review_gauntlet.session_store import SessionStore
 from review_gauntlet.targets import (
     TargetSpec,
@@ -62,6 +65,7 @@ def build_parser() -> argparse.ArgumentParser:
     review = subparsers.add_parser("review")
     review.add_argument("root", nargs="?", default=".")
     review.add_argument("--budget", type=int, default=50)
+    review.add_argument("--concurrency", type=int, default=8)
     review.add_argument("--fixture", type=Path)
     review.add_argument("--config", type=Path)
     _session_output_args(review)
@@ -187,6 +191,8 @@ def _build_target_plan(root: Path, target: TargetSpec) -> ReviewPlan:
 
 
 def _cmd_review(args: argparse.Namespace, root: Path, store: SessionStore) -> None:
+    if args.concurrency < 1:
+        fail("review --concurrency must be a positive integer")
     session_id = store.active_session_id()
     metadata = store.session_metadata(session_id)
     ruleset = load_ruleset()
@@ -203,7 +209,7 @@ def _cmd_review(args: argparse.Namespace, root: Path, store: SessionStore) -> No
         return
     adapter_config = load_config(root, args.config) if args.fixture is None else None
     if args.fixture is not None:
-        adapter = FakeReviewAdapter(args.fixture)
+        adapter: ReviewAdapter = FakeReviewAdapter(args.fixture)
     elif adapter_config is not None:
         _config_path, config = adapter_config
         adapter = CommandReviewAdapter(
@@ -215,42 +221,38 @@ def _cmd_review(args: argparse.Namespace, root: Path, store: SessionStore) -> No
         )
     else:
         raise ValueError("review requires --fixture or a command adapter config")
+
+    current_cells = cells_from_plan(_build_target_plan(root, target), file_digests(root))
+    selected_cells = _select_review_cells(
+        store=store,
+        session_id=session_id,
+        current_cells=current_cells,
+        budget=args.budget,
+    )
+    results = _review_cells_concurrently(adapter, selected_cells, concurrency=args.concurrency)
+
     reviewed = 0
     finding_ids: list[str] = []
     seen_fingerprints: set[str] = set()
     evaluated_paths: set[str] = set()
-    fixed_pending_paths = store.fixed_pending_paths(session_id)
-    for row in store.list_cells(session_id):
-        if reviewed >= args.budget:
-            break
-        if (
-            row["state"] not in {CellState.PENDING, CellState.STALE}
-            and row["file_path"] not in fixed_pending_paths
-        ):
-            continue
-        cell = cells_from_plan(_build_target_plan(root, target), file_digests(root))
-        cell_map = {item.id: item for item in cell}
-        selected = cell_map.get(str(row["cell_id"]))
-        if selected is None:
-            continue
-        try:
-            result = adapter.review(selected)
-        except ReviewAdapterError as exc:
+    for selected in selected_cells:
+        outcome = results[selected.id]
+        if isinstance(outcome, ReviewAdapterError):
             status = _status(store, root)
             _emit(
                 {
                     "run_id": run_id,
                     "reviewed_cells": reviewed,
                     "failed_cell_id": selected.id,
-                    "error": str(exc),
-                    "failure": exc.failure,
+                    "error": str(outcome),
+                    "failure": outcome.failure,
                     **status,
                 },
                 args.format,
             )
-            raise SystemExit(1) from exc
+            raise SystemExit(1) from outcome
         evaluated_paths.add(selected.file_path)
-        for comment in result.comments:
+        for comment in outcome.comments:
             finding = normalize_ocr_comment(
                 comment,
                 repository_id=str(root.resolve()),
@@ -268,6 +270,52 @@ def _cmd_review(args: argparse.Namespace, root: Path, store: SessionStore) -> No
         {"run_id": run_id, "reviewed_cells": reviewed, "finding_ids": finding_ids, **status},
         args.format,
     )
+
+
+def _select_review_cells(
+    *,
+    store: SessionStore,
+    session_id: str,
+    current_cells: tuple[ReviewCell, ...],
+    budget: int,
+) -> list[ReviewCell]:
+    cell_map = {cell.id: cell for cell in current_cells}
+    fixed_pending_paths = store.fixed_pending_paths(session_id)
+    selected: list[ReviewCell] = []
+    for row in store.list_cells(session_id):
+        if len(selected) >= budget:
+            break
+        if (
+            row["state"] not in {CellState.PENDING, CellState.STALE}
+            and row["file_path"] not in fixed_pending_paths
+        ):
+            continue
+        cell = cell_map.get(str(row["cell_id"]))
+        if cell is not None:
+            selected.append(cell)
+    return selected
+
+
+def _review_cells_concurrently(
+    adapter: ReviewAdapter,
+    cells: list[ReviewCell],
+    *,
+    concurrency: int,
+) -> dict[str, ReviewAdapterResult | ReviewAdapterError]:
+    if not cells:
+        return {}
+    results: dict[str, ReviewAdapterResult | ReviewAdapterError] = {}
+    max_workers = min(concurrency, len(cells))
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures: dict[str, Future[ReviewAdapterResult]] = {
+            cell.id: executor.submit(adapter.review, cell) for cell in cells
+        }
+        for cell in cells:
+            try:
+                results[cell.id] = futures[cell.id].result()
+            except ReviewAdapterError as exc:
+                results[cell.id] = exc
+    return results
 
 
 def _reconcile_cells(store: SessionStore, root: Path, target: TargetSpec) -> None:

@@ -58,7 +58,16 @@ uv run review-gauntlet init /path/to/repo --all
 
 # Execute exactly one review step for the initialized session.
 uv run review-gauntlet review /path/to/repo --config /path/to/review-gauntlet.jsonc --format json
+
+# Select at most 20 cells for this run and execute up to 4 adapter calls at once.
+uv run review-gauntlet review /path/to/repo --budget 20 --concurrency 4 --format json
 ```
+
+`review --concurrency` defaults to `8` and must be a positive integer. `--budget`
+still caps the total cells selected for one review run; `--concurrency` only limits
+how many of those selected adapter invocations run at the same time. It does not
+automatically pass a concurrency flag through to the nested external adapter
+command.
 
 `review` discovers configuration in this order: explicit `--config`,
 `.review-gauntlet/config.jsonc`, `.review-gauntlet/config.json`,
