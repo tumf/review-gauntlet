@@ -9,7 +9,7 @@ from typing import NoReturn, Protocol, cast
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
-from review_gauntlet.config import CommandAdapterConfig, InputMode, OutputMode
+from review_gauntlet.config import CommandAdapterConfig, OutputMode
 from review_gauntlet.ocr_rules import OCRComment, RuleDocument, Ruleset
 from review_gauntlet.review_cells import ReviewCell
 
@@ -160,7 +160,7 @@ class CommandReviewAdapter:
             )
         )
         prompt_file.write_text(prompt, encoding="utf-8")
-        variables = self._variables(cell, cell_dir, prompt_file, output_file)
+        variables = self._variables(cell, cell_dir, output_file, prompt)
         output_path = self._resolve_output_path(variables, cell_dir)
         argv = [
             self._expand(self._config.command, variables),
@@ -171,21 +171,22 @@ class CommandReviewAdapter:
         env.update({key: self._expand(value, variables) for key, value in self._config.env.items()})
         command_metadata = {
             "argv": argv,
-            "cwd": str(cwd),
-            "input_mode": self._config.input.mode,
+            "cwd": None if cwd is None else str(cwd),
+            "cwd_mode": "inherited" if cwd is None else "explicit",
+            "env_overrides": sorted(self._config.env),
             "output_mode": self._config.output.mode,
+            "prompt_artifact": str(prompt_file),
             "timeout_seconds": self._config.timeout_seconds,
         }
         (cell_dir / "command.json").write_text(
             json.dumps(command_metadata, indent=2, sort_keys=True), encoding="utf-8"
         )
-        stdin = prompt if self._config.input.mode == InputMode.STDIN else None
         try:
             completed = subprocess.run(
                 argv,
                 cwd=cwd,
                 env=env,
-                input=stdin,
+                input=None,
                 text=True,
                 capture_output=True,
                 timeout=self._config.timeout_seconds,
@@ -230,7 +231,7 @@ class CommandReviewAdapter:
         return ReviewAdapterResult(cell_id=cell.id, comments=payload.comments)
 
     def _variables(
-        self, cell: ReviewCell, cell_dir: Path, prompt_file: Path, output_file: Path
+        self, cell: ReviewCell, cell_dir: Path, output_file: Path, prompt: str
     ) -> dict[str, str]:
         return {
             "repo_root": str(self._root),
@@ -239,7 +240,7 @@ class CommandReviewAdapter:
             "run_dir": str(self._run_dir),
             "cell_id": cell.id,
             "cell_dir": str(cell_dir),
-            "prompt_file": str(prompt_file),
+            "prompt": prompt,
             "output_file": str(output_file),
             "file_path": cell.file_path,
             "rule_id": cell.rule_id,
@@ -258,9 +259,9 @@ class CommandReviewAdapter:
 
         return TEMPLATE_PATTERN.sub(replace, value)
 
-    def _resolve_cwd(self, variables: dict[str, str]) -> Path:
+    def _resolve_cwd(self, variables: dict[str, str]) -> Path | None:
         if self._config.cwd is None:
-            return self._root
+            return None
         cwd = Path(self._expand(self._config.cwd, variables))
         return (self._root / cwd).resolve() if not cwd.is_absolute() else cwd.resolve()
 

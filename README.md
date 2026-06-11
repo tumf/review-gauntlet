@@ -45,38 +45,26 @@ uv run review-gauntlet review /path/to/repo --config /path/to/review-gauntlet.js
 argv arrays and never shell strings; provider login, model choice, and secrets stay
 inside the external CLI configuration.
 
-Example JSONC configuration for stdin JSON verdicts:
+Minimal JSONC configuration for opencode file-json verdicts:
 
 ```jsonc
 {
   "adapter": {
     "type": "command",
     "command": "opencode",
-    "args": ["run", "--json"],
-    "input": {"mode": "stdin"},
-    "output": {"mode": "stdout-json"},
-    "timeout_seconds": 300,
-    "cwd": "{repo_root}",
-    "env": {"REVIEW_GAUNTLET": "1"}
+    "args": ["run", "--dangerously-skip-permissions", "{prompt}"],
+    "output": {"mode": "file-json", "path": "{output_file}"}
   }
 }
 ```
 
-Example prompt-file/file-json style for claude/codex-like CLIs:
-
-```jsonc
-{
-  "adapter": {
-    "type": "command",
-    "command": "claude",
-    "args": ["-p", "{prompt_file}", "--output", "{output_file}"],
-    "input": {"mode": "prompt-file"},
-    "output": {"mode": "file-json", "path": "{output_file}"},
-    "timeout_seconds": 300,
-    "cwd": "{repo_root}"
-  }
-}
-```
+The generated OCR prompt is expanded into `{prompt}` as one argv element. Prompt
+artifacts are still written for audit evidence, but prompt-file transport is not
+part of the command adapter contract. `cwd`, `env`, and `timeout_seconds` are
+optional escape hatches: omitted `cwd` inherits the caller's current working
+directory, omitted `env` inherits the parent environment without fixed automatic
+variables, explicit `env` values override that inherited environment, and omitted
+`timeout_seconds` defaults to 600 seconds.
 
 The verdict must be JSON with OCR-style comments:
 
@@ -85,7 +73,7 @@ The verdict must be JSON with OCR-style comments:
 ```
 
 Supported template variables include `{repo_root}`, `{state_dir}`, `{run_id}`,
-`{run_dir}`, `{cell_id}`, `{cell_dir}`, `{prompt_file}`, `{output_file}`,
+`{run_dir}`, `{cell_id}`, `{cell_dir}`, `{prompt}`, `{output_file}`,
 `{file_path}`, and `{rule_id}`.
 
 ## Developer Workflow

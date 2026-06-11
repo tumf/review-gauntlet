@@ -2,7 +2,12 @@ from pathlib import Path
 
 import pytest
 
-from review_gauntlet.config import ConfigError, discover_config_path, load_config
+from review_gauntlet.config import (
+    CommandAdapterConfig,
+    ConfigError,
+    discover_config_path,
+    load_config,
+)
 
 
 def test_config_discovery_precedence(tmp_path: Path) -> None:
@@ -75,6 +80,7 @@ def test_jsonc_comments_trailing_commas_and_string_content(tmp_path: Path) -> No
             "greater than zero",
         ),
         ('{"adapter":{"type":"command","command":"tool","args":["{unknown}"]}}', "unsupported"),
+        ('{"adapter":{"type":"command","command":"tool","args":["{prompt_file}"]}}', "unsupported"),
     ],
 )
 def test_invalid_config_is_rejected(tmp_path: Path, payload: str, message: str) -> None:
@@ -83,3 +89,25 @@ def test_invalid_config_is_rejected(tmp_path: Path, payload: str, message: str) 
 
     with pytest.raises(ConfigError, match=message):
         load_config(tmp_path)
+
+
+def test_command_adapter_config_accepts_prompt_and_defaults_timeout() -> None:
+    config = CommandAdapterConfig.model_validate(
+        {
+            "type": "command",
+            "command": "tool",
+            "args": ["run", "{prompt}"],
+            "env": {"MESSAGE": "{prompt}"},
+        }
+    )
+
+    assert config.args == ("run", "{prompt}")
+    assert config.env == {"MESSAGE": "{prompt}"}
+    assert config.timeout_seconds == 600
+
+
+def test_command_adapter_config_rejects_non_positive_timeout() -> None:
+    with pytest.raises(ValueError, match="greater than zero"):
+        CommandAdapterConfig.model_validate(
+            {"type": "command", "command": "tool", "timeout_seconds": 0}
+        )
