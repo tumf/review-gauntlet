@@ -1,29 +1,26 @@
 ### Requirement: Review sessions SHALL persist durable state
 
-`review-gauntlet` SHALL support durable review sessions stored under `.review-gauntlet/` at the reviewed repository root. A session SHALL preserve the target policy, active session metadata, ruleset identity, review universe state, immutable run history, review cells, findings, finding occurrences, and finding events. Target policy selection SHALL occur during `init`, not during `review`. The default `init` target SHALL be OCR-compatible workspace diff review; full-repository review SHALL require explicit `--all`. Review universe construction SHALL apply deterministic built-in artifact exclusions and default review-path exclusions, including `openspec/`, `tests/`, and `docs/`, before creating review cells. Review cell ledger identity SHALL be scoped to the owning session, so multiple sessions MAY contain the same deterministic review cell ID without corrupting or blocking each other.
+`review-gauntlet` SHALL support durable review sessions stored under `.review-gauntlet/` at the reviewed repository root. A session SHALL preserve the target policy, active session metadata, ruleset identity, review universe state, immutable run history, review cells, findings, finding occurrences, and finding events. Target policy selection SHALL occur during `init`, not during `review`. The default `init` target SHALL be OCR-compatible workspace diff review; full-repository review SHALL require explicit `--all`. Review universe construction SHALL apply deterministic built-in artifact exclusions and default review-path exclusions, including `openspec/`, `tests/`, and `docs/`, before creating review cells. Review cell ledger identity SHALL be scoped to the owning session, so multiple sessions MAY contain the same deterministic review cell ID without corrupting or blocking each other. `init` SHALL support `--format text|json`, defaulting to `text`, and SHALL NOT expose `--audience` because it only emits a final initialization result.
+
+<!-- Expected canonical result after archive: init documents `--format text|json`, default `text`, and rejection of non-progress audience options. -->
 
 #### Scenario: Initialize a second session with overlapping review cells
 
 **Given**: a repository with an existing `.review-gauntlet/` ledger from a prior `review-gauntlet init`
 **And**: the next requested target includes one or more files that produce the same deterministic review cell IDs as the prior session
-**When**: the developer runs `review-gauntlet init --all`
+**When**: the developer runs `review-gauntlet init --all --format json`
 **Then**: the CLI creates a new durable session
 **And**: records review cells for the new session without failing on duplicate deterministic `cell_id` values from the prior session
 **And**: keeps coverage and cell state scoped to each session
+**And**: stdout contains parseable JSON for the final initialization result
 
-#### Scenario: Cell state update does not cross session boundary
+#### Scenario: Init rejects obsolete output controls
 
-**Given**: two review sessions contain the same deterministic review cell ID
-**When**: review-gauntlet marks that cell reviewed, stale, or superseded for one session
-**Then**: only the row for the intended session is updated
-**And**: the other session's cell state remains unchanged
-
-#### Scenario: Existing old-schema ledgers are not migrated
-
-**Given**: a repository contains an old `.review-gauntlet/ledger.sqlite` schema where `review_cells.cell_id` is table-wide unique
-**When**: this change is implemented
-**Then**: review-gauntlet is not required to migrate or repair that old ledger automatically
-**And**: users may recreate local review-gauntlet state if an old ledger blocks new sessions
+**Given**: a repository root
+**When**: the developer runs `review-gauntlet init --format human`
+**Then**: the command fails with a usage error
+**When**: the developer runs `review-gauntlet init --audience agent`
+**Then**: the command fails with a usage error
 
 ### Requirement: Review command SHALL advance exactly one run
 
@@ -31,61 +28,9 @@
 
 The review command SHALL support a positive integer `--concurrency` option, defaulting to `8`, that limits how many selected review cells may execute adapter review work simultaneously within that one run. The concurrency option SHALL NOT change the review budget, selected-cell eligibility, target policy, or the requirement that coverage is recorded only for successfully executed cells.
 
-For default human-audience runs, the review command SHALL expose review-run and per-cell progress on stderr while adapter work is in progress. Progress output SHALL NOT pollute stdout final output. When `--audience agent` is explicitly selected, the review command SHALL suppress decorative progress because agent callers do not need progress display. If the user interrupts the command, the review command SHALL cancel pending work, terminate in-flight command adapter subprocesses when possible, and leave unfinished cells in a non-reviewed state.
+The review command SHALL support `--format text|json`, defaulting to `text`. For default human-audience runs, the review command SHALL expose review-run and per-cell progress on stderr while adapter work is in progress. Progress output SHALL NOT pollute stdout final output. When `--audience agent` is explicitly selected, the review command SHALL suppress decorative progress because agent callers do not need progress display. If the user interrupts the command, the review command SHALL cancel pending work, terminate in-flight command adapter subprocesses when possible, and leave unfinished cells in a non-reviewed state.
 
-When a selected review adapter produces malformed verdict JSON, the review command SHALL treat the cell as failed and SHALL expose actionable diagnostics that identify the artifact paths and bounded raw output context. It SHALL NOT repair malformed verdict JSON or mark the failed cell reviewed.
-
-#### Scenario: Review advances once with remaining pending work
-
-**Given**: an active session with more pending review cells than the current review budget
-**When**: the developer runs `review-gauntlet review`
-**Then**: the CLI creates exactly one immutable run record
-**And**: reviews only the cells selected for that run
-**And**: leaves remaining eligible cells pending
-**And**: reports that the next required action is to run review again or triage findings, depending on the run result
-
-#### Scenario: Review rejects target selection flags
-
-**Given**: an active session
-**When**: the developer runs `review-gauntlet review --from main --to HEAD`, `review-gauntlet review --commit abc123`, `review-gauntlet review --worktree`, or `review-gauntlet review --all`
-**Then**: argument parsing fails with a usage error
-**And**: the active session target policy is not changed
-**And**: no review run is created
-
-#### Scenario: Review executes selected cells with bounded concurrency
-
-**Given**: an active session with multiple eligible pending review cells
-**And**: the current review budget permits multiple cells in the run
-**When**: the developer runs `review-gauntlet review --concurrency 2`
-**Then**: the CLI creates exactly one immutable run record
-**And**: selects eligible cells deterministically up to the configured budget
-**And**: executes adapter review work for no more than two selected cells at the same time
-**And**: applies findings, occurrences, and cell coverage updates deterministically for successfully reviewed cells
-
-#### Scenario: Review rejects invalid concurrency
-
-**Given**: an active session
-**When**: the developer runs `review-gauntlet review --concurrency 0`
-**Then**: argument handling fails with a usage error
-**And**: no adapter review work is executed
-**And**: no cell is marked reviewed because of that command
-
-#### Scenario: Concurrent review preserves budget semantics
-
-**Given**: an active session with more eligible review cells than the current review budget
-**When**: the developer runs `review-gauntlet review --budget 1 --concurrency 8`
-**Then**: the CLI selects at most one cell for that run
-**And**: reviews at most one cell even though the concurrency limit is higher than the budget
-**And**: leaves remaining eligible cells pending
-
-#### Scenario: Concurrent review preserves failed-cell visibility
-
-**Given**: an active session with multiple selected review cells
-**And**: the selected review adapter fails for one selected cell
-**When**: the developer runs `review-gauntlet review --concurrency 2 --format json`
-**Then**: the CLI exits non-zero and reports the failed cell id, error, failure details, and current session status
-**And**: the failed cell is not marked reviewed
-**And**: successful cells whose results were committed are recorded explicitly in coverage and findings state
+<!-- Expected canonical result after archive: review documents `--format text|json`, default `text`, keeps `--audience human|agent`, and rejects `--format human`. -->
 
 #### Scenario: Human review reports progress without corrupting final output
 
@@ -102,25 +47,11 @@ When a selected review adapter produces malformed verdict JSON, the review comma
 **Then**: stdout contains only the final parseable JSON result
 **And**: decorative progress text is not emitted for the agent audience
 
-#### Scenario: Interrupted review cancels unfinished work visibly
+#### Scenario: Review rejects obsolete human format option
 
-**Given**: an active session with multiple selected review cells
-**And**: at least one selected command adapter subprocess is still running
-**When**: the developer interrupts `review-gauntlet review`
-**Then**: the CLI cancels pending adapter work and terminates in-flight command adapter subprocesses when possible
-**And**: cells that did not complete successfully are not marked reviewed
-**And**: any cancellation or termination artifacts available for those cells are recorded under the run artifacts directory
-**And**: any successful cells whose results were already committed remain recorded in the ledger
-
-#### Scenario: Invalid verdict JSON reports actionable artifact diagnostics
-
-**Given**: an active session with a selected review cell
-**And**: the selected command adapter writes malformed verdict JSON containing Python-style single-quoted string values
-**When**: the developer runs `review-gauntlet review --format json`
-**Then**: the CLI exits non-zero and reports `failed_cell_id`, `error`, `failure`, and current session status
-**And**: the `failure` payload includes `output_mode`, `verdict_path`, `raw_verdict_path`, and a bounded `raw_snippet`
-**And**: the failed cell is not marked reviewed
-**And**: no malformed verdict JSON is repaired or accepted as review findings
+**Given**: an active session
+**When**: the developer runs `review-gauntlet review --format human`
+**Then**: the command fails with a usage error
 
 ### Requirement: Review rules and prompts SHALL port the pinned OCR corpus
 
@@ -204,22 +135,26 @@ Findings SHALL be managed at the review-session level and SHALL use deterministi
 
 ### Requirement: Finding triage SHALL be explicit and event-backed
 
-The CLI SHALL provide a `mark` command that records human or external-LLM triage decisions as events and updates the current finding state without executing review work.
+The CLI SHALL provide a `mark` command that records human or external-LLM triage decisions as events and updates the current finding state without executing review work. `mark` SHALL support `--format text|json`, defaulting to `text`, and SHALL NOT expose `--audience` because it only emits a final triage result.
+
+<!-- Expected canonical result after archive: mark documents `--format text|json`, default `text`, and rejection of non-progress audience options. -->
 
 #### Scenario: Mark finding false positive
 
 **Given**: an active session with an open finding
-**When**: the developer runs `review-gauntlet mark RGF-123 false-positive --reason "Protected by middleware"`
+**When**: the developer runs `review-gauntlet mark RGF-123 false-positive --reason "Protected by middleware" --format json`
 **Then**: the CLI records a finding event with the reason
 **And**: updates the finding status to `false_positive`
 **And**: does not create a review run
+**And**: stdout contains parseable JSON for the final mark result
 
-#### Scenario: Mark finding accepted risk with expiry
+#### Scenario: Mark rejects obsolete output controls
 
 **Given**: an active session with an open finding
-**When**: the developer runs `review-gauntlet mark RGF-123 accepted-risk --owner "@team-a" --until 2026-09-30`
-**Then**: the CLI records the owner and expiry metadata
-**And**: treats the finding as terminal only until the expiry date is reached
+**When**: the developer runs `review-gauntlet mark RGF-123 fixed --format human`
+**Then**: the command fails with a usage error
+**When**: the developer runs `review-gauntlet mark RGF-123 fixed --audience agent`
+**Then**: the command fails with a usage error
 
 ### Requirement: Fixed findings SHALL require later verification
 
@@ -250,21 +185,28 @@ Marking a finding fixed SHALL transition it to `fixed_pending_verification`. The
 
 The CLI SHALL expose current session state without modifying review coverage. `status` SHALL report coverage, finding counts, target freshness, finalization readiness, and the next required action. `findings` SHALL list open findings by default and support showing all findings.
 
-Session commands that emit summaries SHALL use `--format json` for structured output where supported. Commands that support decorative progress or audience-specific human output SHALL support `--audience agent` for automation-safe output. Because `findings` emits only a final result and no intermediate progress UI, `findings` SHALL NOT expose an `--audience` option. `findings` SHALL use `--format text` for human-readable output and `--format json` for structured output, with `text` as the default.
+Session commands that emit summaries SHALL use `--format text` for human-readable output and `--format json` for structured output where supported, with `text` as the default. Commands that support decorative progress or audience-specific progress output SHALL support `--audience human|agent` for progress control. Commands that only emit a final result and no intermediate progress UI SHALL NOT expose an `--audience` option.
+
+<!-- Expected canonical result after archive: status and findings use `--format text|json`, default `text`; findings continues to reject `--audience`; non-progress summary commands are not described as needing audience controls. -->
 
 #### Scenario: Status reports next action
 
 **Given**: an active session with reviewed cells and untriaged findings
-**When**: the developer runs `review-gauntlet status --format json --audience agent`
+**When**: the developer runs `review-gauntlet status --format json`
 **Then**: the JSON output includes `session_id`, `session_state`, coverage counts, finding state counts, `can_finalize`, and `next_required_action`
 **And**: `next_required_action` is `triage_findings`
 
-#### Scenario: Agent audience suppresses decorative output
+#### Scenario: Non-progress status rejects audience option
 
 **Given**: an active session
-**When**: the developer runs `review-gauntlet status --format json --audience agent`
-**Then**: stdout contains only parseable JSON for the final status result
-**And**: stdout does not include progress bars, spinners, markdown headings, or explanatory prose
+**When**: the developer runs `review-gauntlet status --audience agent`
+**Then**: the command fails with a usage error
+
+#### Scenario: Status rejects obsolete human format option
+
+**Given**: an active session
+**When**: the developer runs `review-gauntlet status --format human`
+**Then**: the command fails with a usage error
 
 #### Scenario: Findings hides terminal findings by default
 
@@ -296,7 +238,9 @@ Session commands that emit summaries SHALL use `--format json` for structured ou
 
 ### Requirement: Finalize SHALL validate completion without running review work
 
-`review-gauntlet finalize` SHALL determine whether the active session can be completed. It SHALL not execute review work, triage findings, or modify source code. If completion conditions are unmet, it SHALL fail with actionable reasons.
+`review-gauntlet finalize` SHALL determine whether the active session can be completed. It SHALL not execute review work, triage findings, or modify source code. If completion conditions are unmet, it SHALL fail with actionable reasons. `finalize` SHALL support `--format text|json` for final output, defaulting to `text`, and SHALL NOT expose `--audience` because it does not emit progress UI.
+
+<!-- Expected canonical result after archive: finalize documents `--format text|json`, default `text`, and rejection of non-progress audience options. -->
 
 #### Scenario: Finalize fails with pending cells
 
@@ -319,15 +263,23 @@ Session commands that emit summaries SHALL use `--format json` for structured ou
 **And**: all live findings are terminal
 **And**: no waiver or accepted-risk finding is expired
 **And**: the current target digest matches the last reviewed target digest
-**When**: the developer runs `review-gauntlet finalize`
+**When**: the developer runs `review-gauntlet finalize --format json`
 **Then**: the session is finalized
-**And**: the command reports final coverage and finding totals
+**And**: the command reports final coverage and finding totals as parseable JSON
+
+#### Scenario: Finalize rejects obsolete output controls
+
+**Given**: an active session
+**When**: the developer runs `review-gauntlet finalize --format human`
+**Then**: the command fails with a usage error
+**When**: the developer runs `review-gauntlet finalize --audience agent`
+**Then**: the command fails with a usage error
 
 ### Requirement: Existing planning commands SHALL remain compatible
 
-The session workflow SHALL preserve the existing `inventory`, `plan`, and `report` command concepts while making legacy planning command output selection explicit. `inventory` and `plan` SHALL accept `--format json|text`, default to `text`, and SHALL no longer accept the legacy `--json` flag. JSON output for `inventory --format json` and `plan --format json` SHALL remain parseable using the existing Pydantic JSON contracts. Inventory generation SHALL exclude review-gauntlet-generated session state, common cache/build/editor artifacts, and files ignored by Git when Git-backed discovery is available, so coverage reflects the project review target rather than generated tool state.
+The session workflow SHALL preserve the existing `inventory`, `plan`, and `report` command concepts while making planning command output selection explicit. `inventory`, `plan`, and `report` SHALL accept `--format json|text`, default to `text`, and SHALL no longer accept legacy output flags or obsolete format names. JSON output for `inventory --format json` and `plan --format json` SHALL remain parseable using the existing Pydantic JSON contracts. `report --format text` SHALL emit the existing Markdown-style review matrix report body. Inventory generation SHALL exclude review-gauntlet-generated session state, common cache/build/editor artifacts, and files ignored by Git when Git-backed discovery is available, so coverage reflects the project review target rather than generated tool state.
 
-<!-- Expected canonical result after archive: the planning command compatibility requirement documents `--format json|text` for inventory/plan, default text output, and removal of the legacy `--json` flag while retaining existing report behavior. -->
+<!-- Expected canonical result after archive: planning command compatibility documents `--format json|text` for inventory/plan/report, default text output, removal of the legacy `--json` flag, and rejection of `report --format markdown` while retaining existing report text content. -->
 
 #### Scenario: Existing inventory JSON remains parseable
 
@@ -361,19 +313,20 @@ The session workflow SHALL preserve the existing `inventory`, `plan`, and `repor
 **When**: the developer runs `review-gauntlet inventory <root> --json` or `review-gauntlet plan <root> --json`
 **Then**: argument parsing fails with a usage error
 
-#### Scenario: Existing report remains available
+#### Scenario: Existing report remains available as text
 
 **Given**: a repository with files to review
 **When**: the developer runs `review-gauntlet report <root>`
-**Then**: the command emits the markdown review matrix report
+**Then**: the command emits the existing Markdown-style review matrix report as text
 **And**: existing tests for report output continue to pass
 
-#### Scenario: Generated review state is excluded from inventory
+#### Scenario: Report accepts text format and rejects markdown format name
 
-**Given**: a repository containing `.review-gauntlet/` session state and run artifacts
-**When**: the developer runs `review-gauntlet inventory <root> --format json`
-**Then**: no path under `.review-gauntlet/` appears in the inventory output
-**And**: generated review state does not create review cells for subsequent session reconciliation
+**Given**: a repository with files to review
+**When**: the developer runs `review-gauntlet report <root> --format text`
+**Then**: the command emits the existing Markdown-style review matrix report as text
+**When**: the developer runs `review-gauntlet report <root> --format markdown`
+**Then**: argument parsing fails with a usage error
 
 ### Requirement: Review execution SHALL support JSON and JSONC command adapter configuration
 
