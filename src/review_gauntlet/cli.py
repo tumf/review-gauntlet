@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import posixpath
 import sys
 import uuid
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
@@ -40,6 +41,17 @@ from review_gauntlet.targets import (
 )
 
 USAGE_ERROR = 64
+
+_FINDING_MARK_TO_STATE = {
+    "untriaged": FindingState.UNTRIAGED,
+    "confirmed": FindingState.CONFIRMED,
+    "fixed-pending-verification": FindingState.FIXED_PENDING_VERIFICATION,
+    "fixed-verified": FindingState.FIXED_VERIFIED,
+    "false-positive": FindingState.FALSE_POSITIVE,
+    "waived": FindingState.WAIVED,
+    "accepted-risk": FindingState.ACCEPTED_RISK,
+    "reopened": FindingState.REOPENED,
+}
 
 
 @dataclass(frozen=True)
@@ -129,6 +141,13 @@ def build_parser() -> argparse.ArgumentParser:
     findings = subparsers.add_parser("findings")
     findings.add_argument("root", nargs="?", default=".")
     findings.add_argument("--all", action="store_true")
+    findings.add_argument("--path", action="append", default=[])
+    findings.add_argument(
+        "--mark",
+        action="append",
+        choices=tuple(_FINDING_MARK_TO_STATE),
+        default=[],
+    )
     findings.add_argument("--format", choices=("text", "json"), default="text")
 
     mark = subparsers.add_parser("mark")
@@ -225,7 +244,15 @@ def _run_session_command(args: argparse.Namespace, root: Path) -> None:
     elif args.command == "status":
         _emit(_status(store, root), args.format)
     elif args.command == "findings":
-        _emit(_findings(store, include_all=bool(args.all)), args.format)
+        _emit(
+            _findings(
+                store,
+                include_all=bool(args.all),
+                path_filters=tuple(args.path),
+                mark_filters=tuple(args.mark),
+            ),
+            args.format,
+        )
     elif args.command == "mark":
         _cmd_mark(args, store)
     elif args.command == "finalize":
@@ -518,13 +545,58 @@ def _status(store: SessionStore, root: Path) -> dict[str, object]:
     }
 
 
-def _findings(store: SessionStore, *, include_all: bool) -> dict[str, object]:
+def _findings(
+    store: SessionStore,
+    *,
+    include_all: bool,
+    path_filters: tuple[str, ...] = (),
+    mark_filters: tuple[str, ...] = (),
+) -> dict[str, object]:
     session_id = store.active_session_id()
-    terminal = {"fixed_verified", "false_positive", "waived", "accepted_risk"}
+    terminal = {state.value for state in _terminal_finding_states()}
+    requested_states = {str(_FINDING_MARK_TO_STATE[mark]) for mark in mark_filters}
+    normalized_path_filters = tuple(_normalize_finding_path(path) for path in path_filters)
     with store.connect() as conn:
         rows = list(conn.execute("select * from findings where session_id = ?", (session_id,)))
-    findings = [dict(row) for row in rows if include_all or row["state"] not in terminal]
+    findings = [
+        dict(row)
+        for row in rows
+        if (include_all or row["state"] not in terminal)
+        and (not requested_states or row["state"] in requested_states)
+        and _matches_finding_path_filters(str(row["path"]), normalized_path_filters)
+    ]
     return {"session_id": session_id, "findings": findings}
+
+
+def _terminal_finding_states() -> set[FindingState]:
+    return {
+        FindingState.FIXED_VERIFIED,
+        FindingState.FALSE_POSITIVE,
+        FindingState.WAIVED,
+        FindingState.ACCEPTED_RISK,
+    }
+
+
+def _matches_finding_path_filters(path: str, filters: tuple[str, ...]) -> bool:
+    if not filters:
+        return True
+    normalized_path = _normalize_finding_path(path)
+    return any(
+        _matches_finding_path_filter(normalized_path, path_filter) for path_filter in filters
+    )
+
+
+def _matches_finding_path_filter(path: str, path_filter: str) -> bool:
+    if path_filter.endswith("/"):
+        return path.startswith(path_filter)
+    return path == path_filter or path.startswith(f"{path_filter}/")
+
+
+def _normalize_finding_path(path: str) -> str:
+    normalized = posixpath.normpath(path.replace("\\", "/"))
+    if normalized in {".", ""}:
+        return ""
+    return normalized.removeprefix("./") + ("/" if path.replace("\\", "/").endswith("/") else "")
 
 
 def _finalize(store: SessionStore, root: Path) -> dict[str, object]:

@@ -199,11 +199,11 @@ Marking a finding fixed SHALL transition it to `fixed_pending_verification`. The
 
 ### Requirement: Status and findings commands SHALL expose actionable session state
 
-The CLI SHALL expose current session state without modifying review coverage. `status` SHALL report coverage, finding counts, target freshness, finalization readiness, and the next required action. `findings` SHALL list open findings by default and support showing all findings.
+The CLI SHALL expose current session state without modifying review coverage. `status` SHALL report coverage, finding counts, target freshness, finalization readiness, and the next required action. `findings` SHALL list open findings by default, support showing all findings, and support read-only filtering by finding path and triage mark.
 
 Session commands that emit summaries SHALL use `--format text` for human-readable output and `--format json` for structured output where supported, with `text` as the default. Commands that support decorative progress or audience-specific progress output SHALL support `--audience human|agent` for progress control. Commands that only emit a final result and no intermediate progress UI SHALL NOT expose an `--audience` option.
 
-<!-- Expected canonical result after archive: status and findings use `--format text|json`, default `text`; findings continues to reject `--audience`; non-progress summary commands are not described as needing audience controls. -->
+<!-- Expected canonical result after archive: findings documents repeatable `--path` and `--mark` filters while preserving default terminal suppression, `--all`, `--format text|json`, and rejection of `--audience`. -->
 
 #### Scenario: Status reports next action
 
@@ -236,6 +236,8 @@ Session commands that emit summaries SHALL use `--format text` for human-readabl
 **Given**: an active session
 **When**: the developer runs `review-gauntlet findings --help`
 **Then**: the help output lists `--format {text,json}`
+**And**: the help output lists `--path`
+**And**: the help output lists `--mark`
 **And**: the help output does not list `--audience`
 
 #### Scenario: Findings emits structured JSON on request
@@ -243,6 +245,35 @@ Session commands that emit summaries SHALL use `--format text` for human-readabl
 **Given**: an active session with findings
 **When**: the developer runs `review-gauntlet findings --format json`
 **Then**: stdout contains parseable JSON for the final findings result
+
+#### Scenario: Findings filters by mark
+
+**Given**: an active session with confirmed, reopened, and false-positive findings
+**When**: the developer runs `review-gauntlet findings --mark confirmed --format json`
+**Then**: stdout contains parseable JSON whose `findings` list contains only confirmed findings
+**And**: no finding state is modified
+
+#### Scenario: Findings filters by path
+
+**Given**: an active session with findings in multiple repository paths
+**When**: the developer runs `review-gauntlet findings --path src/review_gauntlet/config.py --format json`
+**Then**: stdout contains parseable JSON whose `findings` list contains only findings for that path
+**When**: the developer runs `review-gauntlet findings --path src/review_gauntlet/ --format json`
+**Then**: stdout contains parseable JSON whose `findings` list contains only findings under that path prefix
+
+#### Scenario: Findings combines path and mark filters
+
+**Given**: an active session with confirmed and reopened findings across multiple paths
+**When**: the developer runs `review-gauntlet findings --path src/review_gauntlet/ --mark confirmed --mark reopened --format json`
+**Then**: stdout contains parseable JSON whose `findings` list contains only confirmed or reopened findings under `src/review_gauntlet/`
+
+#### Scenario: Findings filter respects terminal visibility
+
+**Given**: an active session with a false-positive finding
+**When**: the developer runs `review-gauntlet findings --mark false-positive --format json`
+**Then**: stdout contains parseable JSON whose `findings` list omits the false-positive finding
+**When**: the developer runs `review-gauntlet findings --all --mark false-positive --format json`
+**Then**: stdout contains parseable JSON whose `findings` list includes the false-positive finding
 
 #### Scenario: Findings rejects obsolete audience and human format options
 
