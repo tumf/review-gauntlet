@@ -15,6 +15,10 @@ from review_gauntlet.ocr_rules import OCRComment, RuleDocument, Ruleset
 from review_gauntlet.review_cells import ReviewCell
 
 TEMPLATE_PATTERN = re.compile(r"\{([A-Za-z_][A-Za-z0-9_]*)\}")
+RAW_SNIPPET_LIMIT = 500
+STRICT_JSON_HINT = (
+    "External adapters must write strict JSON with double-quoted strings and no markdown fences."
+)
 
 
 class ReviewAdapterError(RuntimeError):
@@ -255,14 +259,21 @@ class CommandReviewAdapter:
             if self._config.output.mode == OutputMode.STDOUT_JSON
             else self._read_output_file(output_path, failure_file)
         )
-        (cell_dir / "verdict.raw.json").write_text(verdict_text, encoding="utf-8")
+        raw_verdict_file = cell_dir / "verdict.raw.json"
+        raw_verdict_file.write_text(verdict_text, encoding="utf-8")
         try:
             payload = VerdictPayload.model_validate_json(verdict_text)
         except (ValueError, ValidationError) as exc:
             self._fail(
                 "invalid verdict JSON",
                 failure_file,
-                {"error": str(exc), "output_mode": self._config.output.mode},
+                _invalid_verdict_failure_details(
+                    error=exc,
+                    output_mode=self._config.output.mode,
+                    verdict_path=output_path,
+                    raw_verdict_path=raw_verdict_file,
+                    verdict_text=verdict_text,
+                ),
             )
         output_file.write_text(payload.model_dump_json(indent=2), encoding="utf-8")
         return ReviewAdapterResult(cell_id=cell.id, comments=payload.comments)
@@ -403,6 +414,70 @@ class CommandReviewAdapter:
         payload = {"error": message, **details}
         failure_file.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
         raise ReviewAdapterError(message, failure=payload)
+
+
+def _invalid_verdict_failure_details(
+    *,
+    error: ValueError | ValidationError,
+    output_mode: OutputMode,
+    verdict_path: Path,
+    raw_verdict_path: Path,
+    verdict_text: str,
+) -> dict[str, object]:
+    return {
+        "error": str(error),
+        "output_mode": output_mode,
+        "verdict_path": str(verdict_path),
+        "raw_verdict_path": str(raw_verdict_path),
+        "raw_snippet": _raw_snippet(verdict_text, _json_error_position(error)),
+        "hint": STRICT_JSON_HINT,
+    }
+
+
+def _json_error_position(error: ValueError | ValidationError) -> int | None:
+    if isinstance(error, json.JSONDecodeError):
+        return error.pos
+    if isinstance(error, ValidationError):
+        for item in error.errors():
+            if item.get("type") != "json_invalid":
+                continue
+            ctx = item.get("ctx")
+            if not isinstance(ctx, dict):
+                continue
+            raw_error = ctx.get("error")
+            if isinstance(raw_error, str):
+                position = _line_column_position(str(item.get("input", "")), raw_error)
+                if position is not None:
+                    return position
+    return None
+
+
+def _line_column_position(value: str, message: str) -> int | None:
+    match = re.search(r"line (\d+) column (\d+)", message)
+    if match is None:
+        return None
+    line = int(match.group(1))
+    column = int(match.group(2))
+    if line < 1 or column < 1:
+        return None
+    lines = value.splitlines(keepends=True)
+    if line > len(lines):
+        return None
+    return sum(len(part) for part in lines[: line - 1]) + column - 1
+
+
+def _raw_snippet(value: str, position: int | None, *, limit: int = RAW_SNIPPET_LIMIT) -> str:
+    if len(value) <= limit:
+        return value
+    if position is None:
+        return value[:limit] + "…"
+    half_limit = limit // 2
+    start = max(position - half_limit, 0)
+    end = min(start + limit, len(value))
+    start = max(end - limit, 0)
+    prefix = "…" if start > 0 else ""
+    suffix = "…" if end < len(value) else ""
+    return f"{prefix}{value[start:end]}{suffix}"
 
 
 def _process_output_text(value: str | bytes | None) -> str:

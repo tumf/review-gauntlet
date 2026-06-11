@@ -356,6 +356,27 @@ def test_review_without_fixture_or_config_fails(
     assert "requires --fixture or a command adapter config" in capsys.readouterr().err
 
 
+def test_command_adapter_invalid_verdict_cli_failure_includes_diagnostics(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_session(tmp_path, capsys)
+    _command_config(tmp_path, "print(\"{'comments': []}\")")
+
+    with pytest.raises(SystemExit) as excinfo:
+        main(["review", str(tmp_path), "--budget", "1", "--format", "json"])
+
+    data = json.loads(capsys.readouterr().out)
+    failed_cell_id = data["failed_cell_id"]
+    failure = data["failure"]
+    assert excinfo.value.code == 1
+    assert failure["output_mode"] == "stdout-json"
+    assert failure["verdict_path"].endswith(f"/cells/{failed_cell_id}/verdict.json")
+    assert failure["raw_verdict_path"].endswith(f"/cells/{failed_cell_id}/verdict.raw.json")
+    assert "'comments'" in failure["raw_snippet"]
+    assert "strict JSON" in failure["hint"]
+    assert _coverage_for_cell(tmp_path, failed_cell_id) == "pending"
+
+
 @pytest.mark.parametrize(
     "script, expected",
     [
