@@ -10,7 +10,8 @@ from typing import Any, NoReturn, cast
 
 from review_gauntlet.config import ConfigError, load_config
 from review_gauntlet.findings import FindingState, normalize_ocr_comment
-from review_gauntlet.inventory import build_inventory
+from review_gauntlet.inventory import build_inventory, build_inventory_for_paths
+from review_gauntlet.models import ReviewPlan
 from review_gauntlet.ocr_rules import load_ruleset
 from review_gauntlet.planner import build_matrix, build_plan
 from review_gauntlet.report import render_markdown_report
@@ -21,7 +22,13 @@ from review_gauntlet.review_adapter import (
 )
 from review_gauntlet.review_cells import CellState, cells_from_plan
 from review_gauntlet.session_store import SessionStore
-from review_gauntlet.targets import file_digests, resolve_target, target_digest
+from review_gauntlet.targets import (
+    TargetSpec,
+    changed_files_for_target,
+    file_digests,
+    resolve_target,
+    target_digest,
+)
 
 USAGE_ERROR = 64
 
@@ -48,6 +55,7 @@ def build_parser() -> argparse.ArgumentParser:
     init.add_argument("--to", dest="head_ref")
     init.add_argument("--worktree", action="store_true")
     init.add_argument("--commit")
+    init.add_argument("--all", dest="all_files", action="store_true")
     init.add_argument("--format", choices=("human", "json"), default="human")
     init.add_argument("--audience", choices=("human", "agent"), default="human")
 
@@ -150,10 +158,10 @@ def _cmd_init(args: argparse.Namespace, root: Path, store: SessionStore) -> None
         head_ref=args.head_ref,
         worktree=bool(args.worktree),
         commit=args.commit,
+        all_files=bool(args.all_files),
     )
     ruleset = load_ruleset()
-    inventory = build_inventory(root)
-    plan = build_plan(inventory)
+    plan = _build_target_plan(root, target)
     cells = cells_from_plan(plan, file_digests(root))
     session_id = f"RGS-{uuid.uuid4().hex[:12]}"
     metadata = {
@@ -168,12 +176,23 @@ def _cmd_init(args: argparse.Namespace, root: Path, store: SessionStore) -> None
     _emit({"session_id": session_id, "cell_count": len(cells), "run_count": 0}, args.format)
 
 
+def _build_target_plan(root: Path, target: TargetSpec) -> ReviewPlan:
+    changed_paths = changed_files_for_target(root, target)
+    inventory = (
+        build_inventory(root)
+        if changed_paths is None
+        else build_inventory_for_paths(root, changed_paths)
+    )
+    return build_plan(inventory)
+
+
 def _cmd_review(args: argparse.Namespace, root: Path, store: SessionStore) -> None:
     session_id = store.active_session_id()
     metadata = store.session_metadata(session_id)
     ruleset = load_ruleset()
     digest = target_digest(root)
-    _reconcile_cells(store, root)
+    target = TargetSpec.model_validate(metadata["target"])
+    _reconcile_cells(store, root, target)
     run_id = store.create_run(session_id, digest)
     if args.budget <= 0:
         status = _status(store, root)
@@ -209,7 +228,7 @@ def _cmd_review(args: argparse.Namespace, root: Path, store: SessionStore) -> No
             and row["file_path"] not in fixed_pending_paths
         ):
             continue
-        cell = cells_from_plan(build_plan(build_inventory(root)), file_digests(root))
+        cell = cells_from_plan(_build_target_plan(root, target), file_digests(root))
         cell_map = {item.id: item for item in cell}
         selected = cell_map.get(str(row["cell_id"]))
         if selected is None:
@@ -251,11 +270,11 @@ def _cmd_review(args: argparse.Namespace, root: Path, store: SessionStore) -> No
     )
 
 
-def _reconcile_cells(store: SessionStore, root: Path) -> None:
+def _reconcile_cells(store: SessionStore, root: Path, target: TargetSpec) -> None:
     session_id = store.active_session_id()
     current = {
         cell.id: cell
-        for cell in cells_from_plan(build_plan(build_inventory(root)), file_digests(root))
+        for cell in cells_from_plan(_build_target_plan(root, target), file_digests(root))
     }
     existing = {str(row["cell_id"]): row for row in store.list_cells(session_id)}
     new_cells = tuple(cell for cell_id, cell in current.items() if cell_id not in existing)

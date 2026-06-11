@@ -1,0 +1,146 @@
+import json
+import subprocess
+from pathlib import Path
+
+import pytest
+
+from review_gauntlet.cli import main
+from review_gauntlet.session_store import SessionStore
+
+
+def _git(root: Path, *args: str) -> str:
+    return subprocess.run(
+        ["git", *args],
+        cwd=root,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+
+def _init_repo(root: Path) -> None:
+    _git(root, "init")
+    _git(root, "config", "user.email", "test@example.com")
+    _git(root, "config", "user.name", "Test User")
+    (root / "unchanged.py").write_text("print('unchanged')\n", encoding="utf-8")
+    _git(root, "add", "unchanged.py")
+    _git(root, "commit", "-m", "initial")
+
+
+def _cell_paths(root: Path) -> set[str]:
+    return {str(row["file_path"]) for row in SessionStore(root).list_cells()}
+
+
+def test_default_init_scopes_to_workspace_diff(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_repo(tmp_path)
+    (tmp_path / "staged.py").write_text("print('staged')\n", encoding="utf-8")
+    (tmp_path / "unstaged.py").write_text("print('unstaged')\n", encoding="utf-8")
+    (tmp_path / "untracked.py").write_text("print('untracked')\n", encoding="utf-8")
+    _git(tmp_path, "add", "staged.py")
+    _git(tmp_path, "add", "unstaged.py")
+    (tmp_path / "unstaged.py").write_text("print('unstaged changed')\n", encoding="utf-8")
+
+    main(["init", str(tmp_path), "--format", "json"])
+
+    data = json.loads(capsys.readouterr().out)
+    assert data["cell_count"] > 0
+    assert {"staged.py", "unstaged.py", "untracked.py"}.issubset(_cell_paths(tmp_path))
+    assert "unchanged.py" not in _cell_paths(tmp_path)
+
+
+def test_explicit_worktree_matches_default_workspace_diff(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_repo(tmp_path)
+    (tmp_path / "changed.py").write_text("print('changed')\n", encoding="utf-8")
+
+    main(["init", str(tmp_path), "--worktree", "--format", "json"])
+
+    assert json.loads(capsys.readouterr().out)["cell_count"] > 0
+    assert _cell_paths(tmp_path) == {"changed.py"}
+
+
+def test_branch_range_init_scopes_to_changed_files(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_repo(tmp_path)
+    base = _git(tmp_path, "rev-parse", "HEAD")
+    (tmp_path / "feature.py").write_text("print('feature')\n", encoding="utf-8")
+    _git(tmp_path, "add", "feature.py")
+    _git(tmp_path, "commit", "-m", "feature")
+    head = _git(tmp_path, "rev-parse", "HEAD")
+
+    main(["init", str(tmp_path), "--from", base, "--to", head, "--format", "json"])
+
+    assert json.loads(capsys.readouterr().out)["cell_count"] > 0
+    assert _cell_paths(tmp_path) == {"feature.py"}
+
+
+def test_commit_init_scopes_to_commit_files_and_records_fixed_head(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_repo(tmp_path)
+    (tmp_path / "commit_only.py").write_text("print('commit')\n", encoding="utf-8")
+    _git(tmp_path, "add", "commit_only.py")
+    _git(tmp_path, "commit", "-m", "commit only")
+    commit = _git(tmp_path, "rev-parse", "HEAD")
+
+    main(["init", str(tmp_path), "--commit", commit, "--format", "json"])
+
+    assert json.loads(capsys.readouterr().out)["cell_count"] > 0
+    assert _cell_paths(tmp_path) == {"commit_only.py"}
+    metadata = SessionStore(tmp_path).session_metadata(SessionStore(tmp_path).active_session_id())
+    assert metadata["target"]["kind"] == "commit"
+    assert metadata["target"]["head_mode"] == "fixed"
+
+
+def test_all_init_uses_full_inventory_and_exclusions(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_repo(tmp_path)
+    (tmp_path / "changed.py").write_text("print('changed')\n", encoding="utf-8")
+    state_dir = tmp_path / ".review-gauntlet"
+    state_dir.mkdir()
+    (state_dir / "ignored.py").write_text("print('ignored')\n", encoding="utf-8")
+
+    main(["init", str(tmp_path), "--all", "--format", "json"])
+
+    assert json.loads(capsys.readouterr().out)["cell_count"] > 0
+    paths = _cell_paths(tmp_path)
+    assert {"changed.py", "unchanged.py"}.issubset(paths)
+    assert ".review-gauntlet/ignored.py" not in paths
+
+
+@pytest.mark.parametrize("flag", ["--from", "--to", "--commit", "--worktree", "--all"])
+def test_review_rejects_target_flags(
+    tmp_path: Path, flag: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_repo(tmp_path)
+    main(["init", str(tmp_path), "--all", "--format", "json"])
+    capsys.readouterr()
+    argv = ["review", str(tmp_path), flag]
+    if flag in {"--from", "--to", "--commit"}:
+        argv.append("HEAD")
+
+    with pytest.raises(SystemExit) as exc:
+        main(argv)
+
+    assert exc.value.code == 2
+
+
+def test_review_still_advances_one_initialized_session(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_repo(tmp_path)
+    fixture = tmp_path / "fixture.json"
+    fixture.write_text("{}", encoding="utf-8")
+    main(["init", str(tmp_path), "--all", "--format", "json"])
+    capsys.readouterr()
+
+    main(["review", str(tmp_path), "--fixture", str(fixture), "--budget", "1", "--format", "json"])
+
+    data = json.loads(capsys.readouterr().out)
+    assert data["reviewed_cells"] == 1
+    assert data["run_count"] == 1
