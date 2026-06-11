@@ -250,7 +250,7 @@ Marking a finding fixed SHALL transition it to `fixed_pending_verification`. The
 
 The CLI SHALL expose current session state without modifying review coverage. `status` SHALL report coverage, finding counts, target freshness, finalization readiness, and the next required action. `findings` SHALL list open findings by default and support showing all findings.
 
-Session commands that emit summaries SHALL use `--format json` for structured output and SHALL support `--audience agent` for automation-safe output aligned with OCR review conventions. `--audience agent` SHALL suppress progress UI and decorative human output.
+Session commands that emit summaries SHALL use `--format json` for structured output where supported. Commands that support decorative progress or audience-specific human output SHALL support `--audience agent` for automation-safe output. Because `findings` emits only a final result and no intermediate progress UI, `findings` SHALL NOT expose an `--audience` option. `findings` SHALL use `--format text` for human-readable output and `--format json` for structured output, with `text` as the default.
 
 #### Scenario: Status reports next action
 
@@ -272,6 +272,27 @@ Session commands that emit summaries SHALL use `--format json` for structured ou
 **When**: the developer runs `review-gauntlet findings`
 **Then**: the output includes open findings
 **And**: terminal findings are omitted unless `--all` is provided
+
+#### Scenario: Findings uses text output by default
+
+**Given**: an active session
+**When**: the developer runs `review-gauntlet findings --help`
+**Then**: the help output lists `--format {text,json}`
+**And**: the help output does not list `--audience`
+
+#### Scenario: Findings emits structured JSON on request
+
+**Given**: an active session with findings
+**When**: the developer runs `review-gauntlet findings --format json`
+**Then**: stdout contains parseable JSON for the final findings result
+
+#### Scenario: Findings rejects obsolete audience and human format options
+
+**Given**: an active session
+**When**: the developer runs `review-gauntlet findings --audience agent`
+**Then**: the command fails with a usage error
+**When**: the developer runs `review-gauntlet findings --format human`
+**Then**: the command fails with a usage error
 
 ### Requirement: Finalize SHALL validate completion without running review work
 
