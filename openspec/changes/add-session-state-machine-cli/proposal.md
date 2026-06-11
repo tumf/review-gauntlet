@@ -8,6 +8,7 @@ references:
   - src/review_gauntlet/planner.py
   - tests/test_cli.py
   - tests/test_planner.py
+  - https://github.com/alibaba/open-code-review/tree/c323c6b40c72aa95d7cb801bedcb957b52ff9807
 ---
 
 # Add session state machine CLI
@@ -35,10 +36,13 @@ The new workflow stores durable state under `.review-gauntlet/`, with an active 
 
 `review-gauntlet review` advances the active session by one run only. It recalculates the current review universe, reconciles stale or new cells, updates coverage, deduplicates findings by stable fingerprint, verifies `fixed_pending_verification` findings when possible, and returns the next required human or external action. It must not automatically re-run itself, auto-fix code, auto-triage findings, or make risk decisions for the developer.
 
+The review logic, prompts, and default rule corpus must be derived from Alibaba's `open-code-review` project at commit `c323c6b40c72aa95d7cb801bedcb957b52ff9807`. The implementation must port the built-in system rule map and rule documents, plus the review-output contract needed to normalize line-level comments into session findings. This adopts OCR's review rules and prompt corpus, but not its agent plugin behavior that can autonomously apply fixes.
+
 ## Acceptance Criteria
 
 - A developer can initialize a review session for branch, worktree, or commit targets without starting an LLM review.
 - A review session records its base/head policy, target mode, active session metadata, ruleset digest, review universe, and ledger state under `.review-gauntlet/`.
+- The bundled review rules and prompts are traceable to the pinned `alibaba/open-code-review` snapshot and are included in the ruleset digest.
 - `review-gauntlet review` performs exactly one review-run advancement and exits with a structured summary of coverage, findings, finalization readiness, and `next_required_action`.
 - Repeated review runs in the same session deduplicate logically identical findings using stable session-level finding IDs rather than emitting duplicate new findings.
 - `review-gauntlet mark` records human or external-LLM triage decisions without running review work.
@@ -56,6 +60,7 @@ This change is complete when repository evidence shows all of the following:
 - `src/review_gauntlet/cli.py` exposes the new session commands and keeps existing commands compatible.
 - Session, run, review cell, finding, occurrence, and event models or persistence records exist in `src/review_gauntlet/` and are covered by typed tests.
 - The review universe generation reuses or adapts existing inventory/planner behavior rather than duplicating unrelated classification logic.
+- The repository contains the ported OCR system rule map, rule documents, and review comment normalization contract with attribution and tests proving rule selection parity for representative paths.
 - Tests cover init/status/finalize flows, mark transitions, fixed verification behavior, finding deduplication, stale target handling, and incomplete-session failure reasons.
 - `make check` passes.
 - Manual CLI smoke commands demonstrate the typical session loop on a temporary repository without requiring credentials or external services.
@@ -64,6 +69,7 @@ This change is complete when repository evidence shows all of the following:
 
 - Automatically looping `review-gauntlet review` until completion.
 - Automatically modifying source code to fix findings.
+- Migrating OCR's autonomous agent plugin workflow that applies fixes after review.
 - Automatically deciding false positive, waiver, or accepted-risk outcomes.
 - Implementing CI/CD bot orchestration, notifications, PR workflow automation, or developer wait loops.
 - Requiring live external LLM credentials for local verification; tests should use deterministic fakes, fixtures, or adapters.

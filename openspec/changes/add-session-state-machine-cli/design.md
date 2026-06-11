@@ -35,6 +35,42 @@ The core split is:
 - Occurrence: a finding appearance in a specific run/cell.
 - Event: human or external-system state transition evidence.
 
+## OCR-Derived Review Rules and Prompts
+
+The review engine should use Alibaba `open-code-review` as the reference implementation for review logic and default rules. Pin the upstream snapshot to commit `c323c6b40c72aa95d7cb801bedcb957b52ff9807` so future upstream changes do not silently alter session results.
+
+Port these upstream artifacts into this repository with Apache-2.0 attribution:
+
+- `internal/config/rules/system_rules.json` as the default path-to-rule mapping.
+- Every markdown rule document under `internal/config/rules/rule_docs/`.
+- The review comment output contract represented by OCR's `LlmComment`: `path`, `content`, `suggestion_code`, `existing_code`, `start_line`, `end_line`, and optional `thinking`.
+- The review command prompt/routing guidance that affects review generation and output normalization.
+
+The ported rules must be data, not hidden behavior. They should live under a deterministic package path such as `src/review_gauntlet/rules/ocr/`, be loaded without network access, and be included in the ruleset digest together with this repository's review adapter version. The implementation may translate the Go/JSON structures into Python/Pydantic models, but the effective path matching and rule text must remain traceable to the pinned upstream files.
+
+OCR's Codex/OpenCode plugin instructions include autonomous fix behavior. That behavior conflicts with this change's session boundary, so only the review generation, prompt/rule corpus, and line-level comment contract are adopted. `review-gauntlet review` still records findings only; source modification remains out of scope.
+
+The MVP review adapter should normalize OCR-style comments into findings. A comment with `start_line == 0` and `end_line == 0` is allowed but must be marked as imprecisely positioned instead of being discarded, because OCR treats those comments as valid but mispositioned.
+
+The port must include parity tests for representative OCR rule mappings:
+
+- `**/*.properties` -> `properties.md`
+- `**/*{mapper,dao}*.xml` -> `mapper_dao_xml.md`
+- `**/pom.xml` -> `pom_xml.md`
+- `**/build.gradle` -> `build_gradle.md`
+- `**/package.json` -> `package_json.md`
+- `**/Cargo.toml` -> `cargo_toml.md`
+- `**/*.{json,json5}` -> `json.md`
+- `**/*.{yaml,yml}` -> `yaml.md`
+- `**/*.java` -> `java.md`
+- `**/*.ets` -> `arkts.md`
+- `**/*.{ts,js,tsx,jsx}` -> `ts_js_tsx_jsx.md`
+- `**/*.kt` -> `kotlin.md`
+- `**/*.rs` -> `rust.md`
+- `**/*.{cpp,cc,hpp}` -> `cpp.md`
+- `**/*.c` -> `c.md`
+- unmatched paths -> `default.md`
+
 ## Storage
 
 Use `.review-gauntlet/` at the reviewed repository root:
@@ -94,6 +130,7 @@ Fingerprint inputs should include stable semantic anchors:
 - enclosing symbol when available
 - normalized code anchor
 - normalized claim
+- OCR rule document id and ruleset digest
 
 Line number alone must not define identity because edits can shift locations without changing the issue.
 

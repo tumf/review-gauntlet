@@ -46,6 +46,39 @@
 **Then**: the finding status is `untriaged`
 **And**: the CLI does not mark the finding false-positive, waived, accepted-risk, confirmed, or fixed on behalf of the developer
 
+### Requirement: Review rules and prompts SHALL port the pinned OCR corpus
+
+The default review logic SHALL derive its bundled prompts, path-based rules, and line-level review comment contract from Alibaba `open-code-review` commit `c323c6b40c72aa95d7cb801bedcb957b52ff9807`. The ported corpus SHALL include OCR's system rule map and all built-in rule documents, SHALL be usable without network access, and SHALL be included in the ruleset digest for stale-coverage detection.
+
+#### Scenario: OCR rule corpus is bundled and traceable
+
+**Given**: the installed `review-gauntlet` package
+**When**: the review ruleset is loaded
+**Then**: the ruleset records upstream repository `https://github.com/alibaba/open-code-review`
+**And**: records upstream commit `c323c6b40c72aa95d7cb801bedcb957b52ff9807`
+**And**: exposes the default OCR rule map and all OCR rule documents as local package data
+
+#### Scenario: OCR path rule mapping is preserved
+
+**Given**: files named `pom.xml`, `package.json`, `Cargo.toml`, `src/app.ts`, `src/main.rs`, `src/main.c`, and `README.md`
+**When**: the default ruleset selects review rules for those paths
+**Then**: the selected rule documents match OCR's pinned system rule map
+**And**: unmatched paths use OCR's `default.md` rule document
+
+#### Scenario: OCR comments normalize into findings
+
+**Given**: a review adapter returns OCR-style comments with `path`, `content`, `suggestion_code`, `existing_code`, `start_line`, `end_line`, and optional `thinking`
+**When**: `review-gauntlet review` records the run
+**Then**: each comment is normalized into a session finding occurrence
+**And**: comments whose `start_line` and `end_line` are both `0` are preserved as imprecisely positioned findings rather than discarded
+
+#### Scenario: OCR autonomous fix behavior is not adopted
+
+**Given**: OCR plugin guidance can ask an agent to apply fixes after review
+**When**: `review-gauntlet review` processes OCR-derived review output
+**Then**: the CLI records findings and occurrences only
+**And**: it does not modify source files or mark findings fixed automatically
+
 ### Requirement: Review cells SHALL model coverage independently from finding state
 
 The CLI SHALL track review cells as review coverage units separate from finding triage state. A cell MAY be reviewed while the session remains incomplete because associated findings are not terminal.
