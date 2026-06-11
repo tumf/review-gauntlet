@@ -20,4 +20,5 @@ Expected archive gate: `cflx openspec validate add-review-concurrency --archive-
 Implementation verification should run the project CI-equivalent command: `make check`.
 
 ## Acceptance #1 Failure Follow-up
-- [x] `make check` が失敗しており、実コミットパスで使われる品質ゲート相当の `lint` が通りません。実行コマンド: `agent-exec run -- make check`。失敗内容: `uv run ruff check .` が `tests/test_cli_session_review.py:310:101` の `E501 Line too long (118 > 100)` を報告し、`make: *** [lint] Error 1` で終了しています。これは `tasks.md:20` の Implementation verification (`make check`) に反しており、archive commitability blocker として修正が必要です。なお、`tasks.md` の active task sections は全て `[x]` で未チェック項目は確認されませんでした。解決: 長いテスト fixture 文字列を分割し、`agent-exec run -- make check`（job `df0fca424c899287b9c511810c42af35`）が exit code 0 で完了することを確認しました。
+
+Post-archive bookkeeping: `make check` が失敗しており、実コミットパスで使われる品質ゲート相当の `lint` が通りませんでした。実行コマンド: `agent-exec run -- make check`。失敗内容: `uv run ruff check .` が `tests/test_cli_session_review.py:310:101` の `E501 Line too long (118 > 100)` を報告し、`make: *** [lint] Error 1` で終了していました。これは `tasks.md:20` の Implementation verification (`make check`) に反し、archive commitability blocker でした。解決: 長いテスト fixture 文字列を分割し、`agent-exec run -- make check`（job `df0fca424c899287b9c511810c42af35`）が exit code 0 で完了するのを確認しました（verification: `agent-exec run -- make check` が exit code 0 で完了すること）。
