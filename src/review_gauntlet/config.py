@@ -44,13 +44,11 @@ class OutputMode(StrEnum):
 class CommandOutputConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    mode: OutputMode = OutputMode.STDOUT_JSON
+    mode: OutputMode = OutputMode.FILE_JSON
     path: str | None = None
 
     @model_validator(mode="after")
     def validate_path_for_file_output(self) -> CommandOutputConfig:
-        if self.mode == OutputMode.FILE_JSON and not self.path:
-            raise ValueError("adapter.output.path is required for file-json output")
         if self.mode == OutputMode.STDOUT_JSON and self.path is not None:
             raise ValueError("adapter.output.path is only supported for file-json output")
         return self

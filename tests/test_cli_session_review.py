@@ -80,6 +80,7 @@ def _command_config(
         "type": "command",
         "command": sys.executable,
         "args": ["-c", script, "{prompt}"],
+        "output": {"mode": "stdout-json"},
         "timeout_seconds": 5,
     }
     if legacy_input:

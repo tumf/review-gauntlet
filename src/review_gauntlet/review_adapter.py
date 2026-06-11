@@ -75,6 +75,8 @@ class PromptContext(BaseModel):
     rule: RuleDocument
     ruleset_digest: str
     file_content: str
+    output_mode: OutputMode = OutputMode.STDOUT_JSON
+    verdict_output_file: str | None = None
 
 
 def build_review_prompt(context: PromptContext) -> str:
@@ -91,12 +93,16 @@ def build_review_prompt(context: PromptContext) -> str:
             }
         ]
     }
+    output_instructions = _prompt_output_instructions(context)
     return "\n".join(
         [
             "# review-gauntlet OCR Review Prompt",
             "",
-            "You are an external code review CLI. Return only verdict JSON matching the contract.",
-            "Do not include provider credentials, markdown fences, or non-JSON text.",
+            "You are an external code review CLI. Produce verdict JSON matching the contract.",
+            "Do not include provider credentials or markdown fences in the verdict JSON.",
+            "",
+            "## Output Contract",
+            *output_instructions,
             "",
             "## Repository Context",
             f"repository_root: {context.repository_root}",
@@ -125,6 +131,24 @@ def build_review_prompt(context: PromptContext) -> str:
     )
 
 
+def _prompt_output_instructions(context: PromptContext) -> list[str]:
+    if context.output_mode == OutputMode.FILE_JSON:
+        if context.verdict_output_file is None:
+            raise ValueError("file-json prompt requires verdict_output_file")
+        return [
+            "Write the final verdict JSON to this file:",
+            context.verdict_output_file,
+            "Stdout and stderr are audit/progress channels only; they are preserved but not "
+            "parsed as verdict input.",
+            "Do not rely on stdout or stderr to deliver the verdict when file-json output "
+            "is active.",
+        ]
+    return [
+        "Write exactly one verdict JSON object to stdout.",
+        "Do not write progress text, markdown, or any non-JSON text to stdout.",
+    ]
+
+
 class CommandReviewAdapter:
     def __init__(
         self,
@@ -150,6 +174,8 @@ class CommandReviewAdapter:
         stdout_file = cell_dir / "stdout.txt"
         stderr_file = cell_dir / "stderr.txt"
         failure_file = cell_dir / "failure.json"
+        initial_variables = self._variables(cell, cell_dir, output_file, "")
+        output_path = self._resolve_output_path(initial_variables, cell_dir)
         prompt = build_review_prompt(
             PromptContext(
                 repository_root=str(self._root),
@@ -157,6 +183,8 @@ class CommandReviewAdapter:
                 rule=self._ruleset.select_rule_doc(cell.file_path),
                 ruleset_digest=self._ruleset.digest,
                 file_content=self._read_cell_file(cell),
+                output_mode=self._config.output.mode,
+                verdict_output_file=str(output_path),
             )
         )
         prompt_file.write_text(prompt, encoding="utf-8")
@@ -175,6 +203,7 @@ class CommandReviewAdapter:
             "cwd_mode": "inherited" if cwd is None else "explicit",
             "env_overrides": sorted(self._config.env),
             "output_mode": self._config.output.mode,
+            "output_path": str(output_path),
             "prompt_artifact": str(prompt_file),
             "timeout_seconds": self._config.timeout_seconds,
         }
@@ -283,9 +312,7 @@ class CommandReviewAdapter:
     def _resolve_output_path(self, variables: dict[str, str], cell_dir: Path) -> Path:
         if self._config.output.mode == OutputMode.STDOUT_JSON:
             return cell_dir / "verdict.json"
-        raw = self._config.output.path
-        if raw is None:
-            raise ReviewAdapterError("adapter.output.path is required")
+        raw = self._config.output.path or variables["output_file"]
         expanded = Path(self._expand(raw, variables))
         output_path = (
             (cell_dir / expanded).resolve() if not expanded.is_absolute() else expanded.resolve()
