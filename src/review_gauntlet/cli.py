@@ -4,7 +4,8 @@ import argparse
 import json
 import sys
 import uuid
-from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any, NoReturn, cast
@@ -26,6 +27,7 @@ from review_gauntlet.review_adapter import (
     ReviewAdapter,
     ReviewAdapterError,
     ReviewAdapterResult,
+    cancel_adapter,
 )
 from review_gauntlet.review_cells import CellState, ReviewCell, cells_from_plan
 from review_gauntlet.session_store import SessionStore
@@ -38,6 +40,52 @@ from review_gauntlet.targets import (
 )
 
 USAGE_ERROR = 64
+
+
+@dataclass(frozen=True)
+class ReviewProgressReporter:
+    enabled: bool
+
+    def run_start(
+        self,
+        *,
+        session_id: str,
+        run_id: int,
+        selected_count: int,
+        budget: int,
+        concurrency: int,
+        adapter_identity: str,
+        timeout_seconds: float | None,
+        artifact_dir: Path,
+    ) -> None:
+        self._emit(
+            "review progress: "
+            f"session_id={session_id} run_id={run_id} selected_cells={selected_count} "
+            f"budget={budget} concurrency={concurrency} adapter={adapter_identity} "
+            f"timeout_seconds={timeout_seconds if timeout_seconds is not None else 'n/a'} "
+            f"artifact_dir={artifact_dir}"
+        )
+
+    def cell_start(self, cell: ReviewCell) -> None:
+        self._emit(
+            f"review cell start: cell_id={cell.id} path={cell.file_path} rule={cell.rule_id}"
+        )
+
+    def cell_success(self, cell: ReviewCell) -> None:
+        self._emit(f"review cell success: cell_id={cell.id}")
+
+    def cell_failure(self, cell: ReviewCell, error: ReviewAdapterError) -> None:
+        self._emit(f"review cell failure: cell_id={cell.id} error={error}")
+
+    def cell_timeout(self, cell: ReviewCell, error: ReviewAdapterError) -> None:
+        self._emit(f"review cell timeout: cell_id={cell.id} error={error}")
+
+    def cell_cancelled(self, cell: ReviewCell) -> None:
+        self._emit(f"review cell cancelled: cell_id={cell.id}")
+
+    def _emit(self, message: str) -> None:
+        if self.enabled:
+            print(message, file=sys.stderr, flush=True)
 
 
 def fail(message: str, code: int = USAGE_ERROR) -> NoReturn:
@@ -271,7 +319,20 @@ def _cmd_review(args: argparse.Namespace, root: Path, store: SessionStore) -> No
         current_cells=current_cells,
         budget=args.budget,
     )
-    results = _review_cells_concurrently(adapter, selected_cells, concurrency=args.concurrency)
+    reporter = ReviewProgressReporter(enabled=args.audience == "human")
+    reporter.run_start(
+        session_id=session_id,
+        run_id=run_id,
+        selected_count=len(selected_cells),
+        budget=args.budget,
+        concurrency=args.concurrency,
+        adapter_identity=_adapter_identity(adapter),
+        timeout_seconds=_adapter_timeout_seconds(adapter),
+        artifact_dir=store.state_dir / "runs" / str(run_id),
+    )
+    results = review_cells_concurrently(
+        adapter, selected_cells, concurrency=args.concurrency, reporter=reporter
+    )
 
     reviewed = 0
     finding_ids: list[str] = []
@@ -338,26 +399,58 @@ def _select_review_cells(
     return selected
 
 
-def _review_cells_concurrently(
+def review_cells_concurrently(
     adapter: ReviewAdapter,
     cells: list[ReviewCell],
     *,
     concurrency: int,
+    reporter: ReviewProgressReporter | None = None,
 ) -> dict[str, ReviewAdapterResult | ReviewAdapterError]:
     if not cells:
         return {}
+    progress = reporter or ReviewProgressReporter(enabled=False)
     results: dict[str, ReviewAdapterResult | ReviewAdapterError] = {}
     max_workers = min(concurrency, len(cells))
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures: dict[str, Future[ReviewAdapterResult]] = {
-            cell.id: executor.submit(adapter.review, cell) for cell in cells
-        }
+    executor = ThreadPoolExecutor(max_workers=max_workers)
+    futures: dict[Future[ReviewAdapterResult], ReviewCell] = {}
+    try:
         for cell in cells:
+            progress.cell_start(cell)
+            futures[executor.submit(adapter.review, cell)] = cell
+        for future in as_completed(futures):
+            cell = futures[future]
             try:
-                results[cell.id] = futures[cell.id].result()
+                results[cell.id] = future.result()
+                progress.cell_success(cell)
             except ReviewAdapterError as exc:
                 results[cell.id] = exc
+                if _is_timeout_failure(exc):
+                    progress.cell_timeout(cell, exc)
+                else:
+                    progress.cell_failure(cell, exc)
+    except KeyboardInterrupt:
+        cancel_adapter(adapter)
+        for future, cell in futures.items():
+            if not future.done():
+                future.cancel()
+                progress.cell_cancelled(cell)
+        executor.shutdown(wait=False, cancel_futures=True)
+        raise
+    else:
+        executor.shutdown(wait=True, cancel_futures=False)
     return results
+
+
+def _is_timeout_failure(error: ReviewAdapterError) -> bool:
+    return "timeout_seconds" in error.failure or "timed out" in str(error)
+
+
+def _adapter_identity(adapter: ReviewAdapter) -> str:
+    return adapter.__class__.__name__
+
+
+def _adapter_timeout_seconds(adapter: ReviewAdapter) -> float | None:
+    return getattr(adapter, "timeout_seconds", None)
 
 
 def _reconcile_cells(store: SessionStore, root: Path, target: TargetSpec) -> None:

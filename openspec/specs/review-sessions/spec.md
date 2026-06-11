@@ -31,6 +31,8 @@
 
 The review command SHALL support a positive integer `--concurrency` option, defaulting to `8`, that limits how many selected review cells may execute adapter review work simultaneously within that one run. The concurrency option SHALL NOT change the review budget, selected-cell eligibility, target policy, or the requirement that coverage is recorded only for successfully executed cells.
 
+For default human-audience runs, the review command SHALL expose review-run and per-cell progress on stderr while adapter work is in progress. Progress output SHALL NOT pollute stdout final output. When `--audience agent` is explicitly selected, the review command SHALL suppress decorative progress because agent callers do not need progress display. If the user interrupts the command, the review command SHALL cancel pending work, terminate in-flight command adapter subprocesses when possible, and leave unfinished cells in a non-reviewed state.
+
 #### Scenario: Review advances once with remaining pending work
 
 **Given**: an active session with more pending review cells than the current review budget
@@ -82,6 +84,31 @@ The review command SHALL support a positive integer `--concurrency` option, defa
 **Then**: the CLI exits non-zero and reports the failed cell id, error, failure details, and current session status
 **And**: the failed cell is not marked reviewed
 **And**: successful cells whose results were committed are recorded explicitly in coverage and findings state
+
+#### Scenario: Human review reports progress without corrupting final output
+
+**Given**: an active session with selected review cells
+**When**: the developer runs `review-gauntlet review --format json`
+**Then**: the CLI writes run and per-cell progress to stderr while adapter work is in progress
+**And**: stdout remains exactly one parseable final JSON result
+**And**: the progress includes the run id, selected cell count, concurrency, adapter identity when available, and cell start/completion or failure events
+
+#### Scenario: Agent audience suppresses decorative review progress
+
+**Given**: an active session with selected review cells
+**When**: automation runs `review-gauntlet review --format json --audience agent`
+**Then**: stdout contains only the final parseable JSON result
+**And**: decorative progress text is not emitted for the agent audience
+
+#### Scenario: Interrupted review cancels unfinished work visibly
+
+**Given**: an active session with multiple selected review cells
+**And**: at least one selected command adapter subprocess is still running
+**When**: the developer interrupts `review-gauntlet review`
+**Then**: the CLI cancels pending adapter work and terminates in-flight command adapter subprocesses when possible
+**And**: cells that did not complete successfully are not marked reviewed
+**And**: any cancellation or termination artifacts available for those cells are recorded under the run artifacts directory
+**And**: any successful cells whose results were already committed remain recorded in the ledger
 
 ### Requirement: Review rules and prompts SHALL port the pinned OCR corpus
 

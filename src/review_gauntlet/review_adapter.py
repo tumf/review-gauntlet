@@ -4,6 +4,7 @@ import json
 import os
 import re
 import subprocess
+import threading
 from pathlib import Path
 from typing import NoReturn, Protocol, cast
 
@@ -31,6 +32,16 @@ class ReviewAdapterResult(BaseModel):
 
 class ReviewAdapter(Protocol):
     def review(self, cell: ReviewCell) -> ReviewAdapterResult: ...
+
+
+class CancellableReviewAdapter(ReviewAdapter, Protocol):
+    def cancel(self) -> None: ...
+
+
+def cancel_adapter(adapter: ReviewAdapter) -> None:
+    cancel = getattr(adapter, "cancel", None)
+    if callable(cancel):
+        cancel()
 
 
 class FakeReviewAdapter:
@@ -165,6 +176,19 @@ class CommandReviewAdapter:
         self._run_id = str(run_id)
         self._run_dir = (self._state_dir / "runs" / self._run_id).resolve()
         self._ruleset = ruleset
+        self._process_lock = threading.Lock()
+        self._active_processes: set[subprocess.Popen[str]] = set()
+
+    @property
+    def timeout_seconds(self) -> float:
+        return self._config.timeout_seconds
+
+    def cancel(self) -> None:
+        with self._process_lock:
+            processes = tuple(self._active_processes)
+        for process in processes:
+            if process.poll() is None:
+                process.terminate()
 
     def review(self, cell: ReviewCell) -> ReviewAdapterResult:
         cell_dir = (self._run_dir / "cells" / cell.id).resolve()
@@ -210,30 +234,14 @@ class CommandReviewAdapter:
         (cell_dir / "command.json").write_text(
             json.dumps(command_metadata, indent=2, sort_keys=True), encoding="utf-8"
         )
-        try:
-            completed = subprocess.run(
-                argv,
-                cwd=cwd,
-                env=env,
-                input=None,
-                text=True,
-                capture_output=True,
-                timeout=self._config.timeout_seconds,
-                shell=False,
-                check=False,
-            )
-        except FileNotFoundError as exc:
-            self._fail(
-                f"command not found: {argv[0]}", failure_file, {"argv": argv, "error": str(exc)}
-            )
-        except subprocess.TimeoutExpired as exc:
-            stdout_file.write_text(_process_output_text(exc.stdout), encoding="utf-8")
-            stderr_file.write_text(_process_output_text(exc.stderr), encoding="utf-8")
-            self._fail(
-                f"command timed out after {self._config.timeout_seconds} seconds",
-                failure_file,
-                {"argv": argv, "timeout_seconds": self._config.timeout_seconds},
-            )
+        completed = self._run_command(
+            argv=argv,
+            cwd=cwd,
+            env=env,
+            stdout_file=stdout_file,
+            stderr_file=stderr_file,
+            failure_file=failure_file,
+        )
         stdout_file.write_text(completed.stdout, encoding="utf-8")
         stderr_file.write_text(completed.stderr, encoding="utf-8")
         if completed.returncode != 0:
@@ -258,6 +266,63 @@ class CommandReviewAdapter:
             )
         output_file.write_text(payload.model_dump_json(indent=2), encoding="utf-8")
         return ReviewAdapterResult(cell_id=cell.id, comments=payload.comments)
+
+    def _run_command(
+        self,
+        *,
+        argv: list[str],
+        cwd: Path | None,
+        env: dict[str, str],
+        stdout_file: Path,
+        stderr_file: Path,
+        failure_file: Path,
+    ) -> subprocess.CompletedProcess[str]:
+        try:
+            process = subprocess.Popen(
+                argv,
+                cwd=cwd,
+                env=env,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                shell=False,
+            )
+        except FileNotFoundError as exc:
+            self._fail(
+                f"command not found: {argv[0]}", failure_file, {"argv": argv, "error": str(exc)}
+            )
+        with self._process_lock:
+            self._active_processes.add(process)
+        try:
+            try:
+                stdout, stderr = process.communicate(timeout=self._config.timeout_seconds)
+            except subprocess.TimeoutExpired:
+                process.terminate()
+                try:
+                    stdout, stderr = process.communicate(timeout=2)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    stdout, stderr = process.communicate()
+                stdout_file.write_text(_process_output_text(stdout), encoding="utf-8")
+                stderr_file.write_text(_process_output_text(stderr), encoding="utf-8")
+                self._fail(
+                    f"command timed out after {self._config.timeout_seconds} seconds",
+                    failure_file,
+                    {"argv": argv, "timeout_seconds": self._config.timeout_seconds},
+                )
+            stdout_file.write_text(stdout, encoding="utf-8")
+            stderr_file.write_text(stderr, encoding="utf-8")
+            if process.returncode is not None and process.returncode < 0:
+                self._fail(
+                    "command cancelled",
+                    failure_file,
+                    {"argv": argv, "returncode": process.returncode, "cancelled": True},
+                )
+            return subprocess.CompletedProcess(argv, process.returncode or 0, stdout, stderr)
+        finally:
+            with self._process_lock:
+                self._active_processes.discard(process)
 
     def _read_cell_file(self, cell: ReviewCell) -> str:
         file_path = (self._root / cell.file_path).resolve()
