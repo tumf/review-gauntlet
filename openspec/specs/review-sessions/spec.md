@@ -276,7 +276,7 @@ The new session workflow SHALL preserve the existing `inventory`, `plan`, and `r
 
 ### Requirement: Review execution SHALL support JSON and JSONC command adapter configuration
 
-`review-gauntlet` SHALL support external review execution through a JSON or JSONC command adapter configuration. The configuration SHALL identify the command, argv arguments, output mode, and optional timeout/cwd/env settings without requiring in-process LLM SDK dependencies. The generated OCR-derived prompt SHALL be available as the `{prompt}` template variable for argv/env expansion. Command adapter configuration SHALL NOT include an `input` section or prompt-file transport mode.
+`review-gauntlet` SHALL support external review execution through a JSON or JSONC command adapter configuration. The configuration SHALL identify the command, argv arguments, optional output mode, and optional timeout/cwd/env settings without requiring in-process LLM SDK dependencies. The generated OCR-derived prompt SHALL be available as the `{prompt}` template variable for argv/env expansion. Command adapter configuration SHALL NOT include an `input` section or prompt-file transport mode. When output configuration is omitted, the adapter SHALL default to file-backed verdict output using the per-cell output artifact path.
 
 #### Scenario: Review loads explicit adapter config
 
@@ -333,9 +333,16 @@ The new session workflow SHALL preserve the existing `inventory`, `plan`, and `r
 **And**: the external process inherits the parent process environment without automatic fixed env injection
 **And**: explicit `cwd` and `env` values remain supported when configured
 
+#### Scenario: Output config defaults to file-json
+
+**Given**: a valid command adapter configuration without an `output` section
+**When**: the review command evaluates a cell
+**Then**: the adapter treats the effective output mode as `file-json`
+**And**: the effective verdict path is the deterministic per-cell output artifact path
+
 ### Requirement: Command adapter SHALL invoke external tools safely and preserve artifacts
 
-The command adapter SHALL invoke configured tools without a shell, SHALL expose generated prompts through `{prompt}` argv/env template expansion, SHALL collect verdicts from stdout JSON or file JSON, and SHALL preserve per-cell artifacts for auditability.
+The command adapter SHALL invoke configured tools without a shell, SHALL expose generated prompts through `{prompt}` argv/env template expansion, SHALL collect verdicts from stdout JSON when explicitly configured or from file JSON by default, and SHALL preserve per-cell artifacts for auditability. In file-json mode, stdout and stderr SHALL be preserved as logs but SHALL NOT be parsed or trusted as verdict input.
 
 #### Scenario: Command adapter executes without shell
 
@@ -355,16 +362,33 @@ The command adapter SHALL invoke configured tools without a shell, SHALL expose 
 
 #### Scenario: Command adapter supports stdout-json output
 
-**Given**: a command adapter configuration using output mode `stdout-json`
+**Given**: a command adapter configuration explicitly using output mode `stdout-json`
 **When**: a review cell is evaluated
 **Then**: `review-gauntlet` validates the JSON verdict emitted to stdout
+**And**: non-JSON stdout text remains invalid verdict output
 
-#### Scenario: Command adapter supports file-json output
+#### Scenario: Command adapter defaults to file-json output
+
+**Given**: a command adapter configuration without an output mode
+**When**: a review cell is evaluated
+**Then**: `review-gauntlet` validates the JSON verdict written to the default per-cell output file
+**And**: stdout content is preserved but ignored for verdict parsing
+
+#### Scenario: Command adapter supports explicit file-json output paths
 
 **Given**: a command adapter configuration using output mode `file-json`
 **And**: the configured output path includes `{output_file}` or another safe artifact-local path
 **When**: a review cell is evaluated
 **Then**: `review-gauntlet` validates the JSON verdict written to the output file
+
+#### Scenario: File-json ignores noisy stdout
+
+**Given**: a command adapter configuration using file-json output
+**And**: the external command writes valid verdict JSON to the output file
+**And**: the external command writes progress text, reasoning text, or other non-JSON text to stdout
+**When**: a review cell is evaluated
+**Then**: the adapter validates the output file verdict
+**And**: stdout noise does not cause an invalid verdict failure
 
 #### Scenario: Review artifacts are persisted per evaluated cell
 
@@ -382,7 +406,7 @@ The command adapter SHALL invoke configured tools without a shell, SHALL expose 
 
 ### Requirement: Command verdicts SHALL normalize through OCR comments only
 
-External command adapter verdicts SHALL be JSON objects containing a `comments` array whose entries validate as OCR-style comments before they can affect findings or coverage.
+External command adapter verdicts SHALL be JSON objects containing a `comments` array whose entries validate as OCR-style comments before they can affect findings or coverage. The verdict source SHALL be the configured output transport: stdout only for explicit stdout-json mode, and the verdict file for file-json mode.
 
 #### Scenario: Valid command verdict creates finding occurrences
 
@@ -398,6 +422,16 @@ External command adapter verdicts SHALL be JSON objects containing a `comments` 
 **When**: `review-gauntlet review` processes the verdict
 **Then**: the selected cell can be marked reviewed
 **And**: no finding occurrence is created for that cell
+
+#### Scenario: Invalid file-json verdict is not rescued from stdout
+
+**Given**: a command adapter using file-json output
+**And**: the configured output file is missing or contains an invalid verdict
+**And**: stdout contains valid JSON or other text
+**When**: `review-gauntlet review` processes the adapter result
+**Then**: no finding occurrence is created from stdout
+**And**: the selected cell is not marked reviewed
+**And**: the review command exits non-zero with failure artifacts preserved
 
 #### Scenario: Invalid command verdict is not trusted
 

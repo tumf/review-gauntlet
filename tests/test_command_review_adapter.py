@@ -40,7 +40,12 @@ def test_command_adapter_stdout_json_success_and_artifacts(tmp_path: Path) -> No
         "print(json.dumps({'comments':[{'path':'README.md','content':'Issue','start_line':1,'end_line':1}]}))"
     )
     config = CommandAdapterConfig.model_validate(
-        {"type": "command", "command": sys.executable, "args": ["-c", script, "{prompt}"]}
+        {
+            "type": "command",
+            "command": sys.executable,
+            "args": ["-c", script, "{prompt}"],
+            "output": {"mode": "stdout-json"},
+        }
     )
 
     result = _adapter(tmp_path, config).review(_cell(tmp_path))
@@ -82,6 +87,66 @@ def test_command_adapter_prompt_argv_and_file_json_success(tmp_path: Path) -> No
     assert result.comments == ()
 
 
+def test_command_adapter_defaults_to_file_json_output_file_with_stdout_audit(
+    tmp_path: Path,
+) -> None:
+    script = (
+        "import json, pathlib, sys; "
+        "prompt=sys.argv[1]; "
+        "output_file=sys.argv[2]; "
+        "assert 'Write the final verdict JSON to this file:' in prompt; "
+        "assert output_file in prompt; "
+        "assert 'Stdout and stderr are audit/progress channels only' in prompt; "
+        "pathlib.Path(output_file).write_text(json.dumps({'comments':[]})); "
+        "print('progress: not json')"
+    )
+    config = CommandAdapterConfig.model_validate(
+        {
+            "type": "command",
+            "command": sys.executable,
+            "args": ["-c", script, "{prompt}", "{output_file}"],
+        }
+    )
+
+    result = _adapter(tmp_path, config).review(_cell(tmp_path))
+
+    cell_dir = tmp_path / ".review-gauntlet" / "runs" / "1" / "cells" / "RGC-test"
+    command = json.loads((cell_dir / "command.json").read_text(encoding="utf-8"))
+    assert result.comments == ()
+    assert command["output_mode"] == "file-json"
+    assert command["output_path"] == str(cell_dir / "verdict.json")
+    assert (cell_dir / "stdout.txt").read_text(encoding="utf-8") == "progress: not json\n"
+
+
+def test_stdout_json_rejects_output_path() -> None:
+    with pytest.raises(ValueError, match="only supported for file-json"):
+        CommandAdapterConfig.model_validate(
+            {
+                "type": "command",
+                "command": sys.executable,
+                "output": {"mode": "stdout-json", "path": "verdict.json"},
+            }
+        )
+
+
+def test_command_adapter_default_file_json_fails_when_output_file_missing(
+    tmp_path: Path,
+) -> None:
+    config = CommandAdapterConfig.model_validate(
+        {
+            "type": "command",
+            "command": sys.executable,
+            "args": ["-c", "print('{\\\"comments\\\": []}')"],
+        }
+    )
+
+    with pytest.raises(ReviewAdapterError, match="missing verdict output file"):
+        _adapter(tmp_path, config).review(_cell(tmp_path))
+
+    cell_dir = tmp_path / ".review-gauntlet" / "runs" / "1" / "cells" / "RGC-test"
+    assert (cell_dir / "stdout.txt").read_text(encoding="utf-8").strip() == '{"comments": []}'
+
+
 @pytest.mark.parametrize(
     "config_payload, error",
     [
@@ -95,7 +160,12 @@ def test_command_adapter_prompt_argv_and_file_json_success(tmp_path: Path) -> No
             "status 7",
         ),
         (
-            {"type": "command", "command": sys.executable, "args": ["-c", "print('not json')"]},
+            {
+                "type": "command",
+                "command": sys.executable,
+                "args": ["-c", "print('not json')"],
+                "output": {"mode": "stdout-json"},
+            },
             "invalid verdict JSON",
         ),
         (
@@ -106,6 +176,7 @@ def test_command_adapter_prompt_argv_and_file_json_success(tmp_path: Path) -> No
                     "-c",
                     "import json; print(json.dumps({'comments':[{'path':'README.md'}]}))",
                 ],
+                "output": {"mode": "stdout-json"},
             },
             "invalid verdict JSON",
         ),
