@@ -102,6 +102,27 @@ def test_commit_init_scopes_to_commit_files_and_records_fixed_head(
     assert metadata["target"]["head_mode"] == "fixed"
 
 
+def test_init_then_all_init_allows_overlapping_review_cells(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_repo(tmp_path)
+    (tmp_path / "changed.py").write_text("print('changed')\n", encoding="utf-8")
+
+    main(["init", str(tmp_path), "--format", "json"])
+    first = json.loads(capsys.readouterr().out)
+    assert first["cell_count"] > 0
+
+    main(["init", str(tmp_path), "--all", "--format", "json"])
+    second = json.loads(capsys.readouterr().out)
+    assert second["cell_count"] > first["cell_count"]
+    assert second["session_id"] != first["session_id"]
+
+    main(["status", str(tmp_path), "--format", "json"])
+    status = json.loads(capsys.readouterr().out)
+    assert status["session_id"] == second["session_id"]
+    assert status["coverage"] == {"pending": second["cell_count"]}
+
+
 def test_all_init_uses_full_inventory_and_exclusions(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

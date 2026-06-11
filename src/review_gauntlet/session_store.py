@@ -124,9 +124,16 @@ class SessionStore:
                 ],
             )
 
-    def update_cell_state(self, cell_id: str, state: CellState) -> None:
+    def update_cell_state(self, session_id: str, cell_id: str, state: CellState) -> None:
         with self.connect() as conn:
-            conn.execute("update review_cells set state = ? where cell_id = ?", (state, cell_id))
+            conn.execute(
+                """
+                update review_cells
+                set state = ?
+                where session_id = ? and cell_id = ?
+                """,
+                (state, session_id, cell_id),
+            )
 
     def fixed_pending_paths(self, session_id: str) -> set[str]:
         with self.connect() as conn:
@@ -283,12 +290,13 @@ def _create_schema(conn: sqlite3.Connection) -> None:
         );
         create table if not exists review_cells(
           session_id text not null,
-          cell_id text primary key,
+          cell_id text not null,
           file_path text not null,
           rule_id text not null,
           slice_id text not null,
           state text not null,
-          content_digest text not null
+          content_digest text not null,
+          primary key (session_id, cell_id)
         );
         create table if not exists findings(
           session_id text not null,
