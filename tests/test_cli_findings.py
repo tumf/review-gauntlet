@@ -36,7 +36,7 @@ def test_findings_all_includes_terminal_findings(
     }
 
 
-def test_findings_human_output_respects_all_flag(
+def test_findings_text_output_respects_all_flag(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _create_session_with_findings(tmp_path, capsys)
@@ -50,6 +50,32 @@ def test_findings_human_output_respects_all_flag(
     assert "RGF-fixed" not in default_output
     assert "RGF-fixed" in all_output
     assert "RGF-risk" in all_output
+
+
+def test_findings_help_uses_command_specific_output_options(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        main(["findings", "--help"])
+
+    output = capsys.readouterr().out
+    assert exc_info.value.code == 0
+    assert "--format {text,json}" in output
+    assert "--audience" not in output
+
+
+def test_findings_rejects_removed_human_format() -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        main(["findings", ".", "--format", "human"])
+
+    assert exc_info.value.code != 0
+
+
+def test_findings_rejects_removed_audience_option() -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        main(["findings", ".", "--audience", "agent"])
+
+    assert exc_info.value.code != 0
 
 
 def _create_session_with_findings(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

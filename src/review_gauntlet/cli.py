@@ -129,7 +129,7 @@ def build_parser() -> argparse.ArgumentParser:
     findings = subparsers.add_parser("findings")
     findings.add_argument("root", nargs="?", default=".")
     findings.add_argument("--all", action="store_true")
-    _session_output_args(findings)
+    findings.add_argument("--format", choices=("text", "json"), default="text")
 
     mark = subparsers.add_parser("mark")
     mark.add_argument("root", nargs="?", default=".")
