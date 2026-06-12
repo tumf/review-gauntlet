@@ -560,7 +560,7 @@ def _findings(
 ) -> dict[str, object]:
     session_id = store.active_session_id()
     terminal = {state.value for state in _terminal_finding_states()}
-    requested_states = {str(_FINDING_MARK_TO_STATE[mark]) for mark in mark_filters}
+    requested_states = {_FINDING_MARK_TO_STATE[mark].value for mark in mark_filters}
     normalized_path_filters = tuple(_normalize_finding_path(path) for path in path_filters)
     with store.connect() as conn:
         rows = list(conn.execute("select * from findings where session_id = ?", (session_id,)))

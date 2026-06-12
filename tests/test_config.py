@@ -106,6 +106,44 @@ def test_command_adapter_config_accepts_prompt_and_defaults_timeout() -> None:
     assert config.timeout_seconds == 600
 
 
+@pytest.mark.parametrize("name", ["MESSAGE", "_TOKEN", "A1", "PATH_WITH_UNDERSCORES"])
+def test_command_adapter_config_accepts_portable_env_names(name: str) -> None:
+    config = CommandAdapterConfig.model_validate(
+        {"type": "command", "command": "tool", "env": {name: "value"}}
+    )
+
+    assert config.env == {name: "value"}
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["", "BAD-NAME", "1BAD", "BAD=NAME", "BAD.NAME", "BAD NAME", "BAD\x00NAME"],
+)
+def test_command_adapter_config_rejects_invalid_env_names(name: str) -> None:
+    with pytest.raises(ValueError, match="portable environment variable names"):
+        CommandAdapterConfig.model_validate(
+            {"type": "command", "command": "tool", "env": {name: "value"}}
+        )
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["prefix {{ suffix", "prefix }} suffix", "{{prompt}}", "json {'comments': []}"],
+)
+def test_command_adapter_config_accepts_literal_braces(value: str) -> None:
+    config = CommandAdapterConfig.model_validate(
+        {"type": "command", "command": "tool", "args": [value]}
+    )
+
+    assert config.args == (value,)
+
+
+@pytest.mark.parametrize("value", ["literal { brace", "literal } brace", "{prompt", "prompt}"])
+def test_command_adapter_config_rejects_unescaped_literal_braces(value: str) -> None:
+    with pytest.raises(ValueError, match="literal brace"):
+        CommandAdapterConfig.model_validate({"type": "command", "command": "tool", "args": [value]})
+
+
 def test_command_adapter_config_rejects_non_positive_timeout() -> None:
     with pytest.raises(ValueError, match="greater than zero"):
         CommandAdapterConfig.model_validate(
