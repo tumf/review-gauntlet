@@ -72,6 +72,20 @@ def test_explicit_worktree_matches_default_workspace_diff(
     assert _cell_paths(tmp_path) == {"changed.py"}
 
 
+def test_package_only_worktree_changes_create_no_review_cells(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_repo(tmp_path)
+    (tmp_path / "uv.lock").write_text("version = 1\n", encoding="utf-8")
+    (tmp_path / "package-lock.json").write_text("{}\n", encoding="utf-8")
+    (tmp_path / "Cargo.lock").write_text("# lock\n", encoding="utf-8")
+
+    main(["init", str(tmp_path), "--worktree", "--format", "json"])
+
+    assert json.loads(capsys.readouterr().out)["cell_count"] == 0
+    assert _cell_paths(tmp_path) == set()
+
+
 def test_branch_range_init_scopes_to_changed_files(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
