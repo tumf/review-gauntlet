@@ -1,60 +1,110 @@
 ## ADDED Requirements
 
-### Requirement: Checkpoint command SHALL export Git-reviewable session snapshots
+### Requirement: Finalize SHALL write complete latest checkpoint snapshots
 
-`review-gauntlet checkpoint` SHALL export the active review session into deterministic latest-only checkpoint files that are suitable for Git diff review. The checkpoint SHALL be derived from the existing durable session ledger, SHALL include review coverage, findings, triage events, and finalization readiness, and SHALL NOT replace or mutate the ledger source of truth.
+`review-gauntlet finalize` SHALL close a complete active review session into deterministic latest-only checkpoint files that are suitable for Git diff review and safe as the next review base. Finalization SHALL only write checkpoint files when completion blockers are absent. The checkpoint SHALL be derived from the existing durable session ledger, SHALL include review coverage, findings, triage events, and review-base metadata, and SHALL NOT replace the ledger as the source of truth before successful finalization.
 
-#### Scenario: Checkpoint writes latest snapshot files
+#### Scenario: Successful finalize writes latest checkpoint files
 
-**Given**: an active review session with persisted review state
-**When**: the developer runs `review-gauntlet checkpoint --format json`
+**Given**: an active review session with complete reviewed coverage and all live findings closed
+**And**: the current repository `HEAD` can be resolved to a commit
+**When**: the developer runs `review-gauntlet finalize --format json`
 **Then**: `.review-gauntlet/checkpoints/latest/status.json` is written
 **And**: `.review-gauntlet/checkpoints/latest/findings.json` is written
 **And**: `.review-gauntlet/checkpoints/latest/events.json` is written
 **And**: `.review-gauntlet/checkpoints/latest/summary.md` is written
 **And**: stdout contains parseable JSON listing the generated files and checkpoint directory
+**And**: the result includes `checkpoint_state: complete`
+**And**: the result includes `usable_as_review_base: true`
+**And**: the result includes a `review_base_commit` equal to the resolved current `HEAD`
 
-#### Scenario: Checkpoint exposes full review state for diff review
+#### Scenario: Failed finalize does not update checkpoint or clean up session
 
-**Given**: an active review session with reviewed cells, open findings, terminal findings, finding occurrences, and finding events
-**When**: the developer runs `review-gauntlet checkpoint`
-**Then**: `status.json` includes session metadata, target information, current target digest, last reviewed target digest, ruleset digest, coverage counts, finding state counts, run count, finalization blockers, and next required action
+**Given**: an active review session with pending review cells, stale review cells, open findings, fixed findings requiring verification, expired terminal decisions, no completed review run, or stale target digest evidence
+**And**: an existing latest checkpoint may already exist
+**When**: the developer runs `review-gauntlet finalize --format json`
+**Then**: the command fails with structured blockers
+**And**: no latest checkpoint file is created or overwritten
+**And**: the active session marker remains usable for continuing review work
+**And**: no runtime session cleanup or archive is performed
+
+#### Scenario: Finalize exposes full review state for diff review
+
+**Given**: an active review session with reviewed cells, terminal findings, finding occurrences, and finding events
+**When**: the developer runs `review-gauntlet finalize`
+**Then**: `status.json` includes session metadata, target information, current target digest, last reviewed target digest, ruleset digest, coverage counts, finding state counts, run count, checkpoint state, review base commit, finalization blockers, and next required action
 **And**: `findings.json` includes all session findings including terminal findings
 **And**: each finding includes latest occurrence line evidence when occurrence evidence exists
 **And**: `events.json` includes triage and verification events for the session findings in deterministic order
 **And**: `summary.md` presents the same state in a Markdown format suitable for PR review
 
-#### Scenario: Checkpoint preserves malformed event metadata as evidence
+#### Scenario: Finalize preserves malformed event metadata as evidence
 
 **Given**: an active review session with a finding event whose metadata is malformed JSON or not a JSON object
-**When**: the developer runs `review-gauntlet checkpoint --format json`
-**Then**: checkpoint generation succeeds without a traceback
-**And**: `events.json` includes the event with raw metadata evidence
-**And**: checkpoint generation does not reinterpret the event as a different triage decision
+**When**: the developer runs `review-gauntlet finalize --format json`
+**Then**: finalization handles the metadata without a traceback
+**And**: `events.json` includes the event with raw metadata evidence when the checkpoint is written
+**And**: finalization does not reinterpret the event as a different triage decision
 
-#### Scenario: Checkpoint is latest-only by default
+#### Scenario: Finalize is latest-only by default
 
-**Given**: an active review session with an existing `.review-gauntlet/checkpoints/latest/` snapshot
-**When**: the developer runs `review-gauntlet checkpoint` again
+**Given**: an active review session eligible for finalization
+**And**: an existing `.review-gauntlet/checkpoints/latest/` snapshot
+**When**: the developer runs `review-gauntlet finalize`
 **Then**: the command overwrites the same latest snapshot files
 **And**: no timestamped or session-history checkpoint directory is created by default
 
-#### Scenario: Checkpoint does not mutate review session state
+#### Scenario: Successful finalize prevents continuing the old active session
 
-**Given**: an active review session with persisted run, review cell, finding, occurrence, and finding event records
-**When**: the developer runs `review-gauntlet checkpoint`
-**Then**: no new run record is created
-**And**: no review cell state changes
-**And**: no finding state changes
-**And**: no finding event is written
-**And**: no session is finalized
+**Given**: an active review session eligible for finalization
+**When**: the developer runs `review-gauntlet finalize`
+**Then**: the active session marker is removed or invalidated after checkpoint files are written
+**And**: subsequent `review-gauntlet review` without a new `init` fails with an actionable message
+**And**: subsequent `review-gauntlet status` without a new `init` fails with an actionable message
+**And**: neither command silently advances or reports the finalized old session as active
+
+### Requirement: Init SHALL default to latest checkpoint or all-files review
+
+`review-gauntlet init` without explicit target flags SHALL choose a deterministic default target. If a usable latest checkpoint exists, the default target SHALL be the diff from that checkpoint's `review_base_commit` to `HEAD`. If no latest checkpoint exists, the default target SHALL include all eligible repository files. If a latest checkpoint exists but cannot safely be used, `init` SHALL fail explicitly instead of silently falling back.
+
+#### Scenario: Init defaults to latest checkpoint diff when available
+
+**Given**: `.review-gauntlet/checkpoints/latest/status.json` exists
+**And**: it contains `usable_as_review_base: true`
+**And**: it contains a `review_base_commit` that resolves to a commit in the current repository
+**When**: the developer runs `review-gauntlet init --format json` without target flags
+**Then**: the initialized session target is equivalent to `--from <review_base_commit> --to HEAD`
+**And**: review cells are scoped to files changed between that commit and `HEAD`
+
+#### Scenario: Init defaults to all files when no checkpoint exists
+
+**Given**: `.review-gauntlet/checkpoints/latest/status.json` does not exist
+**When**: the developer runs `review-gauntlet init --format json` without target flags
+**Then**: the initialized session target is equivalent to `--all`
+**And**: review cells are built from all eligible repository files
+
+#### Scenario: Init rejects invalid latest checkpoint instead of falling back
+
+**Given**: `.review-gauntlet/checkpoints/latest/status.json` exists
+**And**: the checkpoint is malformed, has `usable_as_review_base` other than `true`, lacks `review_base_commit`, or references a commit that cannot be resolved
+**When**: the developer runs `review-gauntlet init --format json` without target flags
+**Then**: the command fails with an actionable checkpoint error
+**And**: no all-files fallback session is created
+
+#### Scenario: Explicit init target flags override checkpoint default
+
+**Given**: `.review-gauntlet/checkpoints/latest/status.json` exists and is usable
+**When**: the developer runs `review-gauntlet init --all`, `review-gauntlet init --worktree`, `review-gauntlet init --from main --to HEAD`, or `review-gauntlet init --commit <commit>`
+**Then**: the explicit target mode is used
+**And**: the latest checkpoint does not override that explicit target selection
 
 #### Scenario: Checkpoint files are the only tracked review-gauntlet state
 
 **Given**: repository ignore rules for `.review-gauntlet` state
-**When**: checkpoint files exist under `.review-gauntlet/checkpoints/latest/`
+**When**: finalize writes checkpoint files under `.review-gauntlet/checkpoints/latest/`
 **Then**: those checkpoint files are eligible for Git tracking
 **And**: `.review-gauntlet/ledger.sqlite` remains ignored
 **And**: `.review-gauntlet/active-session.json` remains ignored
 **And**: `.review-gauntlet/runs/` remains ignored
 **And**: `.review-gauntlet/rules.lock` remains ignored
+**And**: `.review-gauntlet/archive/` remains ignored
