@@ -1,9 +1,9 @@
 ## Implementation Tasks
 
-- [ ] Add a phony `install` target to `Makefile` that runs `uv tool install .`. (verification: manual - inspect `Makefile` and run `make install`; manual coverage is intentional because `uv tool install` mutates the user's uv tool environment)
-- [ ] Preserve the canonical `review-gauntlet` console script and avoid adding the typo alias. (verification: manual - inspect `pyproject.toml` or run `rg -n "review-gauntlet|review-guantlet" pyproject.toml` to confirm `review-gauntlet` exists and `review-guantlet` does not)
-- [ ] Document the local install workflow in `README.md`, including `make install` and `review-gauntlet --help`. (verification: manual - run `rg -n "make install|review-gauntlet --help|review-guantlet" README.md` and confirm only the correct install commands are documented)
-- [ ] Verify the installed CLI runs after installation. (verification: manual - run `review-gauntlet --help` after `make install` and confirm argparse help exits successfully)
+- [x] Add a phony `install` target to `Makefile` that runs `uv tool install .`. (verification: manual - inspected `Makefile` and ran `make install`; manual coverage is intentional because `uv tool install` mutates the user's uv tool environment)
+- [x] Preserve the canonical `review-gauntlet` console script and avoid adding the typo alias. (verification: manual - ran `rg -n "review-gauntlet|review-guantlet" pyproject.toml` and confirmed `review-gauntlet` exists and `review-guantlet` does not)
+- [x] Document the local install workflow in `README.md`, including `make install` and `review-gauntlet --help`. (verification: manual - ran `rg -n "make install|review-gauntlet --help|review-guantlet" README.md` and confirmed only the correct install commands are documented)
+- [x] Verify the installed CLI runs after installation. (verification: manual - ran `review-gauntlet --help` after `make install` and confirmed argparse help exits successfully)
 
 ## Final Validation
 
