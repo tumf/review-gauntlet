@@ -17,3 +17,10 @@
 
 Archive validation itself is the authoritative final OpenSpec validation gate.
 Expected archive gate: `cflx openspec validate harden-path-and-verdict-boundaries --archive-gate`
+
+## Acceptance Notes
+
+- Acceptance #1 cross-cell verdict requirement is implemented by rejecting comments whose path differs from the selected cell path with `ReviewAdapterError`; focused verification: `uv run pytest tests/test_command_review_adapter.py tests/test_cli_session_review.py`.
+- Acceptance #1 out-of-range verdict requirement is implemented by rejecting invalid precise line ranges with `ReviewAdapterError`; focused verification: `uv run pytest tests/test_command_review_adapter.py tests/test_cli_session_review.py`.
+- The verdict validation evidence now covers accepted imprecise/precise comments, rejected cross-cell comments, rejected invalid line ranges, and CLI-level non-zero/no-coverage behavior for invalid verdict comments.
+- Previous confirmation context: prior `make check` and strict OpenSpec validation had passed before these follow-up fixes; final validation for this apply is recorded separately by command output.

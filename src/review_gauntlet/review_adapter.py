@@ -288,7 +288,9 @@ class CommandReviewAdapter:
                     verdict_text=verdict_text,
                 ),
             )
-        comments = _validated_comments_for_cell(payload.comments, cell, file_metadata.line_count)
+        comments = self._validated_comments_for_cell(
+            payload.comments, cell, file_metadata.line_count, failure_file
+        )
         output_file.write_text(
             VerdictPayload(comments=comments).model_dump_json(indent=2), encoding="utf-8"
         )
@@ -441,23 +443,54 @@ class CommandReviewAdapter:
         failure_file.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
         raise ReviewAdapterError(message, failure=payload)
 
-
-def _validated_comments_for_cell(
-    comments: tuple[OCRComment, ...], cell: ReviewCell, line_count: int
-) -> tuple[OCRComment, ...]:
-    accepted: list[OCRComment] = []
-    for comment in comments:
-        if comment.path != cell.file_path:
-            continue
-        if comment.imprecise:
+    def _validated_comments_for_cell(
+        self,
+        comments: tuple[OCRComment, ...],
+        cell: ReviewCell,
+        line_count: int,
+        failure_file: Path,
+    ) -> tuple[OCRComment, ...]:
+        accepted: list[OCRComment] = []
+        for index, comment in enumerate(comments):
+            if comment.path != cell.file_path:
+                self._fail(
+                    "verdict comment targets a different review cell path",
+                    failure_file,
+                    {
+                        "comment_index": index,
+                        "comment_path": comment.path,
+                        "cell_path": cell.file_path,
+                    },
+                )
+            if comment.imprecise:
+                accepted.append(comment)
+                continue
+            if comment.start_line < 1 or comment.end_line < comment.start_line:
+                self._fail(
+                    "verdict comment has an invalid line range",
+                    failure_file,
+                    {
+                        "comment_index": index,
+                        "comment_path": comment.path,
+                        "start_line": comment.start_line,
+                        "end_line": comment.end_line,
+                        "line_count": line_count,
+                    },
+                )
+            if comment.end_line > line_count:
+                self._fail(
+                    "verdict comment line range exceeds review cell line count",
+                    failure_file,
+                    {
+                        "comment_index": index,
+                        "comment_path": comment.path,
+                        "start_line": comment.start_line,
+                        "end_line": comment.end_line,
+                        "line_count": line_count,
+                    },
+                )
             accepted.append(comment)
-            continue
-        if comment.start_line < 1 or comment.end_line < comment.start_line:
-            continue
-        if comment.end_line > line_count:
-            continue
-        accepted.append(comment)
-    return tuple(accepted)
+        return tuple(accepted)
 
 
 def _invalid_verdict_failure_details(
