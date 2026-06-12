@@ -5,9 +5,15 @@ from pathlib import Path
 
 import pytest
 
-from review_gauntlet.cli import build_parser, main
+from review_gauntlet.cli import build_parser, main, review_cells_concurrently
 from review_gauntlet.findings import normalize_ocr_comment
 from review_gauntlet.ocr_rules import OCRComment
+from review_gauntlet.review_adapter import (
+    FakeReviewAdapter,
+    ReviewAdapterError,
+    ReviewAdapterResult,
+)
+from review_gauntlet.review_cells import ReviewCell
 from review_gauntlet.session_store import SessionStore
 
 
@@ -421,6 +427,82 @@ def test_concurrent_review_failure_persists_later_successes(
     assert _coverage_for_cell(tmp_path, failing_cell) == "reviewed"
 
 
+class _RaisingAdapter:
+    def review(self, cell: ReviewCell) -> ReviewAdapterResult:
+        raise RuntimeError("boom")
+
+
+def test_review_cells_concurrently_converts_unexpected_exceptions_to_failures() -> None:
+    cell = ReviewCell(
+        id="RGC-boom",
+        file_path="README.md",
+        rule_id="docs",
+        slice_id="docs",
+        content_digest="digest",
+    )
+
+    results = review_cells_concurrently(_RaisingAdapter(), [cell], concurrency=1)
+
+    outcome = results[cell.id]
+    assert isinstance(outcome, ReviewAdapterError)
+    assert outcome.failure == {
+        "error": "unexpected adapter exception",
+        "exception_type": "RuntimeError",
+        "message": "boom",
+        "cell_id": "RGC-boom",
+    }
+
+
+def test_review_partial_success_when_adapter_raises_unexpected_exception(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "app.py").write_text("print('hello')\n", encoding="utf-8")
+    _init_session(tmp_path, capsys)
+    ordered_cells = [str(row["cell_id"]) for row in SessionStore(tmp_path).list_cells()]
+    failing_cell = ordered_cells[0]
+    fixture = tmp_path / "empty-fixture.json"
+    fixture.write_text("{}", encoding="utf-8")
+    original_review = FakeReviewAdapter.review
+
+    def raising_review(self: FakeReviewAdapter, cell: ReviewCell) -> ReviewAdapterResult:
+        if cell.id == failing_cell:
+            raise RuntimeError("adapter exploded")
+        return original_review(self, cell)
+
+    monkeypatch.setattr(FakeReviewAdapter, "review", raising_review)
+
+    with pytest.raises(SystemExit) as excinfo:
+        main(
+            [
+                "review",
+                str(tmp_path),
+                "--fixture",
+                str(fixture),
+                "--budget",
+                "3",
+                "--concurrency",
+                "2",
+                "--format",
+                "json",
+            ]
+        )
+
+    data = json.loads(capsys.readouterr().out)
+    assert excinfo.value.code == 1
+    assert data["reviewed_cells"] == 2
+    assert data["failed_cell_id"] == failing_cell
+    assert data["failure"]["error"] == "unexpected adapter exception"
+    assert data["failure"]["exception_type"] == "RuntimeError"
+    assert _coverage_for_cell(tmp_path, failing_cell) == "pending"
+    assert len(_reviewed_cell_ids(tmp_path)) == 2
+
+    monkeypatch.setattr(FakeReviewAdapter, "review", original_review)
+    main(["review", str(tmp_path), "--fixture", str(fixture), "--budget", "1", "--format", "json"])
+    retry_data = json.loads(capsys.readouterr().out)
+    assert retry_data["reviewed_cells"] == 1
+    assert _coverage_for_cell(tmp_path, failing_cell) == "reviewed"
+
+
 def test_legacy_command_adapter_config_fails_clearly(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -468,6 +550,20 @@ def test_review_budget_zero_does_not_create_finalization_evidence(
     assert data["run_id"] is None
     assert data["reviewed_cells"] == 0
     assert _run_count(tmp_path) == before_runs
+
+
+def test_status_default_root_json_succeeds_from_repository_root(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _init_session(tmp_path, capsys)
+    monkeypatch.chdir(tmp_path)
+
+    main(["status", "--format", "json"])
+
+    data = json.loads(capsys.readouterr().out)
+    assert data["session_state"] == "active"
+    assert data["run_count"] == 0
+    assert "target digest has changed since the last review run" not in data["finalize_blockers"]
 
 
 def test_review_without_fixture_or_config_fails(
