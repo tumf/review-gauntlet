@@ -113,6 +113,12 @@ class CommandAdapterConfig(BaseModel):
     def validate_output_templates(self) -> CommandAdapterConfig:
         if self.output.path is not None:
             _validate_template_string(self.output.path)
+            _reject_template_variable(
+                self.output.path,
+                "prompt",
+                "adapter.output.path must not use {prompt}; use {output_file}, {cell_dir}, "
+                "or a deterministic path instead",
+            )
         return self
 
 
@@ -167,6 +173,12 @@ def _validate_template_string(value: str) -> None:
             "unsupported template literal brace; literal braces must be balanced or escaped "
             "as '{{' and '}}'"
         )
+
+
+def _reject_template_variable(value: str, variable: str, message: str) -> None:
+    literal_removed = value.replace("{{", "").replace("}}", "")
+    if any(match.group(1) == variable for match in TEMPLATE_PATTERN.finditer(literal_removed)):
+        raise ValueError(message)
 
 
 def _strip_jsonc(text: str) -> str:

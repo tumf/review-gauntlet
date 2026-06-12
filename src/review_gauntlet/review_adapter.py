@@ -250,6 +250,8 @@ class CommandReviewAdapter:
         (cell_dir / "command.json").write_text(
             json.dumps(command_metadata, indent=2, sort_keys=True), encoding="utf-8"
         )
+        if self._config.output.mode == OutputMode.FILE_JSON:
+            output_path.parent.mkdir(parents=True, exist_ok=True)
         completed = self._run_command(
             argv=argv,
             cwd=cwd,

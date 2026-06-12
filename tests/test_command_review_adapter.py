@@ -582,3 +582,39 @@ def test_file_json_output_path_allows_cell_dir_template(tmp_path: Path) -> None:
     )
 
     assert _adapter(tmp_path, config).review(_cell(tmp_path)).comments == ()
+
+
+def test_file_json_output_path_rejects_prompt_template() -> None:
+    with pytest.raises(ValueError, match="must not use .*prompt"):
+        CommandAdapterConfig.model_validate(
+            {
+                "type": "command",
+                "command": sys.executable,
+                "args": ["-c", "pass", "{prompt}"],
+                "env": {"PROMPT": "{prompt}"},
+                "output": {"mode": "file-json", "path": "{prompt}.json"},
+            }
+        )
+
+
+def test_file_json_output_path_creates_nested_parent_directory(tmp_path: Path) -> None:
+    script = (
+        "import json, pathlib, sys; "
+        "pathlib.Path(sys.argv[1]).write_text(json.dumps({'comments':[]}))"
+    )
+    config = CommandAdapterConfig.model_validate(
+        {
+            "type": "command",
+            "command": sys.executable,
+            "args": ["-c", script, "{cell_dir}/out/verdict.json"],
+            "output": {"mode": "file-json", "path": "out/verdict.json"},
+        }
+    )
+
+    result = _adapter(tmp_path, config).review(_cell(tmp_path))
+
+    cell_dir = tmp_path / ".review-gauntlet" / "runs" / "1" / "cells" / "RGC-test"
+    assert result.comments == ()
+    assert (cell_dir / "out" / "verdict.json").is_file()
+    command = json.loads((cell_dir / "command.json").read_text(encoding="utf-8"))
+    assert command["output_path"] == str(cell_dir / "out" / "verdict.json")
