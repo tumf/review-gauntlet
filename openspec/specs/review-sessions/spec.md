@@ -1,48 +1,20 @@
 ### Requirement: Review sessions SHALL persist durable state
 
-`review-gauntlet` SHALL support durable review sessions stored under `.review-gauntlet/` at the reviewed repository root. A session SHALL preserve the target policy, active session metadata, ruleset identity, review universe state, immutable run history, review cells, findings, finding occurrences, and finding events. Target policy selection SHALL occur during `init`, not during `review`. The default `init` target SHALL be OCR-compatible workspace diff review; full-repository review SHALL require explicit `--all`. Review universe construction SHALL apply deterministic built-in artifact exclusions and default review-path exclusions before creating review cells. Default review-path exclusions SHALL include `openspec/`, `tests/`, `docs/`, common test-file patterns, and package manager manifest or lock files such as `uv.lock`, `package.json`, `package-lock.json`, `Cargo.toml`, `Cargo.lock`, `go.mod`, `go.sum`, `pom.xml`, `Gemfile.lock`, and equivalent dependency metadata files. Review-path exclusions SHALL apply consistently to session review cell creation, review universe file digests, and target digests. Package manager manifest or lock files MAY remain visible in general inventory diagnostics. Review cell ledger identity SHALL be scoped to the owning session, so multiple sessions MAY contain the same deterministic review cell ID without corrupting or blocking each other. `init` SHALL support `--format text|json`, defaulting to `text`, and SHALL NOT expose `--audience` because it only emits a final initialization result.
+`review-gauntlet` SHALL construct review universes from repository-confined files only. Target-scoped path inputs, review universe traversal, target digests, and file digests SHALL reject or omit absolute paths, parent-directory traversal, and symlink escapes that resolve outside the reviewed repository root. Invalid path inputs SHALL fail explicitly rather than being silently interpreted as repository files.
 
-<!-- Expected canonical result after archive: the review universe requirement documents package manager manifest and lock file exclusions as default review-path exclusions that affect session cells and digests, while inventory diagnostics may still list them. -->
+#### Scenario: Target-scoped inventory rejects escaping paths
 
-#### Scenario: Initialize a second session with overlapping review cells
+**Given**: a repository root and a target path list containing `/tmp/escape.py` or `../escape.py`
+**When**: the CLI builds target-scoped inventory for a review session
+**Then**: the escaping paths are not classified as repository files
+**And**: the command fails with an actionable path validation error when the path came from direct user input
 
-**Given**: a repository with an existing `.review-gauntlet/` ledger from a prior `review-gauntlet init`
-**And**: the next requested target includes one or more files that produce the same deterministic review cell IDs as the prior session
-**When**: the developer runs `review-gauntlet init --all --format json`
-**Then**: the CLI creates a new durable session
-**And**: records review cells for the new session without failing on duplicate deterministic `cell_id` values from the prior session
-**And**: keeps coverage and cell state scoped to each session
-**And**: stdout contains parseable JSON for the final initialization result
+#### Scenario: Review universe skips symlink escapes
 
-#### Scenario: Init rejects obsolete output controls
-
-**Given**: a repository root
-**When**: the developer runs `review-gauntlet init --format human`
-**Then**: the command fails with a usage error
-**When**: the developer runs `review-gauntlet init --audience agent`
-**Then**: the command fails with a usage error
-
-#### Scenario: Package files are excluded from default review cells
-
-**Given**: a repository with changed package files such as `uv.lock`, `package.json`, `package-lock.json`, `Cargo.toml`, `Cargo.lock`, `go.mod`, `go.sum`, `pom.xml`, and `Gemfile.lock`
-**And**: the same repository has a changed source file such as `src/app.py`
-**When**: the developer runs `review-gauntlet init --worktree --format json`
-**Then**: review cells are created for the changed source file
-**And**: no review cell is created for the changed package files
-
-#### Scenario: Full-repository review still excludes package files
-
-**Given**: a repository containing source files and package files such as `uv.lock`, `package-lock.json`, and `Cargo.lock`
-**When**: the developer runs `review-gauntlet init --all --format json`
-**Then**: review cells are created for eligible source files
-**And**: no review cell is created for package manager manifest or lock files
-
-#### Scenario: Package-only changes do not stale review target digest
-
-**Given**: an active moving-target session whose current review universe has no package files
-**When**: only package manager manifest or lock files change before a later status or review command
-**Then**: those package-only changes are omitted from review universe file digests and the target digest
-**And**: no new package-file review cells are added by default
+**Given**: a repository containing a symlink that points to a file outside the repository root
+**When**: `review-gauntlet` computes target digest and file digests
+**Then**: the external symlink target is not read or hashed
+**And**: in-repository regular files remain eligible for review universe hashing
 
 ### Requirement: Review command SHALL advance exactly one run
 
@@ -245,89 +217,14 @@ Marking a finding fixed SHALL transition it to `fixed_pending_verification`. The
 
 ### Requirement: Status and findings commands SHALL expose actionable session state
 
-The CLI SHALL expose current session state without modifying review coverage. `status` SHALL report coverage, finding counts, target freshness, finalization readiness, and the next required action. `findings` SHALL list open findings by default, support showing all findings, and support read-only filtering by finding path and triage mark.
+`findings --path` filters SHALL accept only repository-relative paths and directory prefixes. Absolute paths and parent-directory traversal SHALL fail with a usage error so filtering semantics remain repository-scoped and deterministic.
 
-Session commands that emit summaries SHALL use `--format text` for human-readable output and `--format json` for structured output where supported, with `text` as the default. Commands that support decorative progress or audience-specific progress output SHALL support `--audience human|agent` for progress control. Commands that only emit a final result and no intermediate progress UI SHALL NOT expose an `--audience` option.
-
-<!-- Expected canonical result after archive: findings documents repeatable `--path` and `--mark` filters while preserving default terminal suppression, `--all`, `--format text|json`, and rejection of `--audience`. -->
-
-#### Scenario: Status reports next action
-
-**Given**: an active session with reviewed cells and untriaged findings
-**When**: the developer runs `review-gauntlet status --format json`
-**Then**: the JSON output includes `session_id`, `session_state`, coverage counts, finding state counts, `can_finalize`, and `next_required_action`
-**And**: `next_required_action` is `triage_findings`
-
-#### Scenario: Non-progress status rejects audience option
+#### Scenario: Findings path filter rejects traversal
 
 **Given**: an active session
-**When**: the developer runs `review-gauntlet status --audience agent`
+**When**: the developer runs `review-gauntlet findings --path ../src`
 **Then**: the command fails with a usage error
-
-#### Scenario: Status rejects obsolete human format option
-
-**Given**: an active session
-**When**: the developer runs `review-gauntlet status --format human`
-**Then**: the command fails with a usage error
-
-#### Scenario: Findings hides terminal findings by default
-
-**Given**: an active session with open and terminal findings
-**When**: the developer runs `review-gauntlet findings`
-**Then**: the output includes open findings
-**And**: terminal findings are omitted unless `--all` is provided
-
-#### Scenario: Findings uses text output by default
-
-**Given**: an active session
-**When**: the developer runs `review-gauntlet findings --help`
-**Then**: the help output lists `--format {text,json}`
-**And**: the help output lists `--path`
-**And**: the help output lists `--mark`
-**And**: the help output does not list `--audience`
-
-#### Scenario: Findings emits structured JSON on request
-
-**Given**: an active session with findings
-**When**: the developer runs `review-gauntlet findings --format json`
-**Then**: stdout contains parseable JSON for the final findings result
-
-#### Scenario: Findings filters by mark
-
-**Given**: an active session with confirmed, reopened, and false-positive findings
-**When**: the developer runs `review-gauntlet findings --mark confirmed --format json`
-**Then**: stdout contains parseable JSON whose `findings` list contains only confirmed findings
 **And**: no finding state is modified
-
-#### Scenario: Findings filters by path
-
-**Given**: an active session with findings in multiple repository paths
-**When**: the developer runs `review-gauntlet findings --path src/review_gauntlet/config.py --format json`
-**Then**: stdout contains parseable JSON whose `findings` list contains only findings for that path
-**When**: the developer runs `review-gauntlet findings --path src/review_gauntlet/ --format json`
-**Then**: stdout contains parseable JSON whose `findings` list contains only findings under that path prefix
-
-#### Scenario: Findings combines path and mark filters
-
-**Given**: an active session with confirmed and reopened findings across multiple paths
-**When**: the developer runs `review-gauntlet findings --path src/review_gauntlet/ --mark confirmed --mark reopened --format json`
-**Then**: stdout contains parseable JSON whose `findings` list contains only confirmed or reopened findings under `src/review_gauntlet/`
-
-#### Scenario: Findings filter respects terminal visibility
-
-**Given**: an active session with a false-positive finding
-**When**: the developer runs `review-gauntlet findings --mark false-positive --format json`
-**Then**: stdout contains parseable JSON whose `findings` list omits the false-positive finding
-**When**: the developer runs `review-gauntlet findings --all --mark false-positive --format json`
-**Then**: stdout contains parseable JSON whose `findings` list includes the false-positive finding
-
-#### Scenario: Findings rejects obsolete audience and human format options
-
-**Given**: an active session
-**When**: the developer runs `review-gauntlet findings --audience agent`
-**Then**: the command fails with a usage error
-**When**: the developer runs `review-gauntlet findings --format human`
-**Then**: the command fails with a usage error
 
 ### Requirement: Finalize SHALL validate completion without running review work
 
@@ -437,131 +334,58 @@ The session workflow SHALL preserve the existing `inventory`, `plan`, and `repor
 
 ### Requirement: Review execution SHALL support JSON and JSONC command adapter configuration
 
-`review-gauntlet` SHALL support external review execution through a JSON or JSONC command adapter configuration. The configuration SHALL identify the command, argv arguments, optional output mode, and optional timeout/cwd/env settings without requiring in-process LLM SDK dependencies. The generated OCR-derived prompt SHALL be available as the `{prompt}` template variable for argv/env expansion. Command adapter configuration SHALL NOT include an `input` section or prompt-file transport mode. When output configuration is omitted, the adapter SHALL default to file-backed verdict output using the per-cell output artifact path.
+Explicit command adapter configuration paths and adapter `cwd` settings SHALL resolve under the reviewed repository root. Configuration paths or cwd values that resolve outside the repository SHALL be rejected before executing any adapter command.
 
-#### Scenario: Review loads explicit adapter config
+#### Scenario: Explicit config path outside repository is rejected
 
 **Given**: an active review session
-**And**: a valid command adapter configuration file at `/tmp/review-gauntlet.jsonc`
 **When**: the developer runs `review-gauntlet review --config /tmp/review-gauntlet.jsonc`
-**Then**: the review command uses that configuration for external command execution
-**And**: no repository default config path overrides it
-
-#### Scenario: Review discovers repository adapter config
-
-**Given**: an active review session
-**And**: no `--config` argument
-**And**: config files may exist at `.review-gauntlet/config.jsonc`, `.review-gauntlet/config.json`, `review-gauntlet.jsonc`, and `review-gauntlet.json`
-**When**: the developer runs `review-gauntlet review`
-**Then**: the review command selects the first existing valid config in that precedence order
-
-#### Scenario: JSONC config is accepted
-
-**Given**: a command adapter config containing `//` line comments, `/* */` block comments, and trailing commas
-**When**: the review command loads the config
-**Then**: the config is parsed as JSONC
-**And**: comment-like text inside JSON strings remains unchanged
-
-#### Scenario: Missing command config does not implicitly execute a tool
-
-**Given**: an active review session
-**And**: no `--fixture` argument
-**And**: no command adapter configuration is available
-**When**: the developer runs `review-gauntlet review`
 **Then**: the command fails with an actionable configuration error
-**And**: it does not implicitly execute `opencode`, `claude`, `codex`, or any other default external tool
+**And**: no external adapter command is executed
 
-#### Scenario: Prompt template is accepted in argv
+#### Scenario: Adapter cwd outside repository is rejected
 
-**Given**: a valid command adapter configuration whose `args` include `{prompt}`
-**When**: the review command loads the config
-**Then**: `{prompt}` is accepted as a supported template variable
-**And**: `{prompt_file}` is rejected as an unsupported template variable
-**And**: no `input` or `input.mode` field is accepted in the config
-
-#### Scenario: Timeout defaults to 600 seconds
-
-**Given**: a valid command adapter configuration without `timeout_seconds`
-**When**: the review command loads the config
-**Then**: the command adapter timeout defaults to 600 seconds
-**And**: explicitly configured non-positive timeout values remain invalid
-
-#### Scenario: Process context controls are optional
-
-**Given**: a valid command adapter configuration without `cwd` or `env`
-**When**: the review command invokes the command adapter
-**Then**: the external process inherits the parent process cwd
-**And**: the external process inherits the parent process environment without automatic fixed env injection
-**And**: explicit `cwd` and `env` values remain supported when configured
-
-#### Scenario: Output config defaults to file-json
-
-**Given**: a valid command adapter configuration without an `output` section
-**When**: the review command evaluates a cell
-**Then**: the adapter treats the effective output mode as `file-json`
-**And**: the effective verdict path is the deterministic per-cell output artifact path
+**Given**: an active review session with a command adapter config whose `cwd` resolves outside the repository
+**When**: `review-gauntlet review` evaluates a cell
+**Then**: the selected cell fails with a structured adapter failure
+**And**: no command is executed from the out-of-repository working directory
 
 ### Requirement: Command adapter SHALL invoke external tools safely and preserve artifacts
 
-The command adapter SHALL invoke configured tools without a shell, SHALL expose generated prompts through `{prompt}` argv/env template expansion, SHALL collect verdicts from stdout JSON when explicitly configured or from file JSON by default, and SHALL preserve per-cell artifacts for auditability. In file-json mode, stdout and stderr SHALL be preserved as logs but SHALL NOT be parsed or trusted as verdict input. The generated prompt exposed through `{prompt}` SHALL describe the target file with metadata rather than embedding the target file body.
+Command adapter artifact paths SHALL remain confined to the deterministic per-run cell artifact tree. Review cell IDs loaded from persisted state SHALL NOT be trusted as filesystem paths; malformed IDs containing path separators or parent traversal SHALL fail before artifact directories are created outside the cell artifact root.
 
-#### Scenario: Command adapter executes without shell
+#### Scenario: Unsafe cell id cannot escape artifact directory
 
-**Given**: a valid command adapter configuration with `command` and `args` as structured values
-**When**: `review-gauntlet review` invokes the command adapter
-**Then**: the process is executed without `shell=True`
-**And**: configured arguments are passed as an argv array
-**And**: shell metacharacters in paths, arguments, or generated prompt text are not interpreted by a shell
-
-#### Scenario: Command adapter expands generated prompt as argv element
-
-**Given**: a command adapter configuration whose args include `{prompt}`
-**When**: a review cell is evaluated
-**Then**: `review-gauntlet` expands `{prompt}` to the generated OCR-derived prompt as one argv element
-**And**: the expanded prompt identifies the target file using path, digest, byte size, and line count rather than file body text
-**And**: the command adapter does not send the prompt through stdin as a transport side effect
-**And**: the command adapter does not pass a prompt file as a transport side effect
-
-#### Scenario: Command adapter supports stdout-json output
-
-**Given**: a command adapter configuration explicitly using output mode `stdout-json`
-**When**: a review cell is evaluated
-**Then**: `review-gauntlet` validates the JSON verdict emitted to stdout
-**And**: non-JSON stdout text remains invalid verdict output
+**Given**: a command adapter receives a review cell whose ID contains `../`
+**When**: the adapter prepares per-cell artifacts
+**Then**: the adapter fails with a structured safety error
+**And**: no artifact is written outside `.review-gauntlet/runs/<run_id>/cells/`
 
 ### Requirement: Command verdicts SHALL normalize through OCR comments only
 
-External command adapter verdicts SHALL be JSON objects containing a `comments` array whose entries validate as OCR-style comments before they can affect findings or coverage. The verdict source SHALL be the configured output transport: stdout only for explicit stdout-json mode, and the verdict file for file-json mode.
+External command adapter verdict comments SHALL be validated against the selected review cell before they affect findings or coverage. Each precise comment SHALL target the selected cell path and use a line range within the reviewed file. OCR-style imprecise comments with `start_line=0` and `end_line=0` SHALL remain valid.
 
-#### Scenario: Valid command verdict creates finding occurrences
+#### Scenario: Cross-cell verdict comment is rejected
 
-**Given**: a command adapter verdict with one valid OCR-style comment
+**Given**: a selected review cell for `src/app.py`
+**And**: the external command emits a valid JSON verdict whose comment path is `src/other.py`
 **When**: `review-gauntlet review` processes the verdict
-**Then**: the comment is validated against the OCR comment model
-**And**: the existing finding normalization and deduplication path records the finding occurrence
-**And**: the finding remains untriaged until explicitly marked
-
-#### Scenario: Empty command verdict reviews the cell without findings
-
-**Given**: a command adapter verdict with an empty `comments` array
-**When**: `review-gauntlet review` processes the verdict
-**Then**: the selected cell can be marked reviewed
-**And**: no finding occurrence is created for that cell
-
-#### Scenario: Invalid file-json verdict is not rescued from stdout
-
-**Given**: a command adapter using file-json output
-**And**: the configured output file is missing or contains an invalid verdict
-**And**: stdout contains valid JSON or other text
-**When**: `review-gauntlet review` processes the adapter result
-**Then**: no finding occurrence is created from stdout
+**Then**: no finding occurrence is created from that comment
 **And**: the selected cell is not marked reviewed
 **And**: the review command exits non-zero with failure artifacts preserved
 
-#### Scenario: Invalid command verdict is not trusted
+#### Scenario: Out-of-range verdict comment is rejected
 
-**Given**: a command adapter returns unparseable JSON or a JSON object that does not match the verdict contract
-**When**: `review-gauntlet review` processes the adapter result
-**Then**: no finding occurrence is created from that result
-**And**: the selected cell is not marked reviewed
-**And**: the review command exits non-zero with failure artifacts preserved
+**Given**: a selected review cell with ten lines
+**And**: the external command emits a precise comment ending at line 999
+**When**: `review-gauntlet review` processes the verdict
+**Then**: the verdict is rejected as outside the review cell
+**And**: coverage is not recorded for that cell
+
+#### Scenario: Imprecise OCR verdict comment remains valid
+
+**Given**: a selected review cell
+**And**: the external command emits a comment for that cell with `start_line=0` and `end_line=0`
+**When**: `review-gauntlet review` processes the verdict
+**Then**: the comment is recorded as an imprecise finding occurrence
+**And**: successful coverage can be recorded for the selected cell
