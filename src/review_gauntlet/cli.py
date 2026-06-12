@@ -14,8 +14,10 @@ from typing import Any, NoReturn, cast
 from review_gauntlet.config import ConfigError, load_config
 from review_gauntlet.findings import FindingState, normalize_ocr_comment
 from review_gauntlet.inventory import (
+    UnsafeRepositoryPathError,
     build_inventory,
     build_inventory_for_paths,
+    normalize_repository_relative_path,
     should_include_review_relative_path,
 )
 from review_gauntlet.models import Inventory, ReviewPlan
@@ -599,10 +601,12 @@ def _matches_finding_path_filter(path: str, path_filter: str) -> bool:
 
 
 def _normalize_finding_path(path: str) -> str:
-    normalized = posixpath.normpath(path.replace("\\", "/"))
-    if normalized in {".", ""}:
-        return ""
-    return normalized.removeprefix("./") + ("/" if path.replace("\\", "/").endswith("/") else "")
+    suffix = "/" if path.replace("\\", "/").endswith("/") else ""
+    try:
+        normalized = normalize_repository_relative_path(path)
+    except UnsafeRepositoryPathError as exc:
+        raise ValueError(f"invalid finding path filter: {path}") from exc
+    return posixpath.normpath(normalized) + suffix
 
 
 def _finalize(store: SessionStore, root: Path) -> dict[str, object]:

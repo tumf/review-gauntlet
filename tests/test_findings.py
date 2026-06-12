@@ -2,10 +2,36 @@ import json
 import sqlite3
 from pathlib import Path
 
+import pytest
+
 from review_gauntlet.findings import FindingState, normalize_ocr_comment
 from review_gauntlet.ocr_rules import OCRComment
 from review_gauntlet.review_cells import ReviewCell
 from review_gauntlet.session_store import SessionStore
+
+
+@pytest.mark.parametrize("path", ["/tmp/escape.py", "../escape.py"])
+def test_normalize_ocr_comment_rejects_unsafe_paths(path: str) -> None:
+    with pytest.raises(ValueError, match="repository path"):
+        normalize_ocr_comment(
+            OCRComment(path=path, content="Issue"),
+            repository_id="repo",
+            base_target="target",
+            rule_id="security",
+            ruleset_digest="rules",
+        )
+
+
+def test_normalize_ocr_comment_normalizes_safe_paths() -> None:
+    finding = normalize_ocr_comment(
+        OCRComment(path="./src/app.py", content="Issue"),
+        repository_id="repo",
+        base_target="target",
+        rule_id="security",
+        ruleset_digest="rules",
+    )
+
+    assert finding.path == "src/app.py"
 
 
 def test_repeated_findings_reuse_session_id_and_add_occurrences(tmp_path: Path) -> None:

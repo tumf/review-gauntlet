@@ -7,7 +7,11 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
 
-from review_gauntlet.inventory import should_include_review_relative_path
+from review_gauntlet.inventory import (
+    UnsafeRepositoryPathError,
+    resolve_under_root,
+    should_include_review_relative_path,
+)
 
 
 class TargetKind(StrEnum):
@@ -94,14 +98,22 @@ def _split_git_paths(output: str) -> tuple[str, ...]:
 
 
 def review_universe_files(root: Path) -> tuple[Path, ...]:
-    return tuple(
-        sorted(
-            path
-            for path in root.rglob("*")
-            if path.is_file()
-            and should_include_review_relative_path(path.relative_to(root).as_posix())
-        )
-    )
+    repo_root = root.resolve()
+    paths: list[Path] = []
+    for path in repo_root.rglob("*"):
+        if not path.is_file():
+            continue
+        relative = path.relative_to(repo_root).as_posix()
+        if not should_include_review_relative_path(relative):
+            continue
+        try:
+            resolved = resolve_under_root(repo_root, relative)
+        except UnsafeRepositoryPathError:
+            continue
+        if resolved != path.resolve():
+            continue
+        paths.append(path)
+    return tuple(sorted(paths))
 
 
 def target_digest(root: Path) -> str:

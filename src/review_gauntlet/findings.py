@@ -5,6 +5,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict
 
+from review_gauntlet.inventory import normalize_repository_relative_path
 from review_gauntlet.ocr_rules import OCRComment
 
 
@@ -81,13 +82,14 @@ def normalize_ocr_comment(
     rule_id: str,
     ruleset_digest: str,
 ) -> NormalizedFinding:
+    normalized_path = normalize_repository_relative_path(comment.path)
     normalized_claim = " ".join(comment.content.split()).lower()
     code_anchor = " ".join((comment.existing_code or comment.suggestion_code).split()).lower()
     fingerprint_payload = "\0".join(
         [
             repository_id,
             base_target,
-            comment.path,
+            normalized_path,
             rule_id,
             normalized_claim,
             code_anchor,
@@ -97,7 +99,7 @@ def normalize_ocr_comment(
     fingerprint = hashlib.sha256(fingerprint_payload.encode("utf-8")).hexdigest()
     return NormalizedFinding(
         fingerprint=fingerprint,
-        path=comment.path,
+        path=normalized_path,
         rule_id=rule_id,
         content=comment.content,
         suggestion_code=comment.suggestion_code,

@@ -119,12 +119,20 @@ class ReviewGauntletConfig(BaseModel):
 
 
 def discover_config_path(root: Path, explicit: Path | None = None) -> Path | None:
+    repo_root = root.resolve()
     if explicit is not None:
-        if not explicit.is_file():
+        resolved = (
+            (repo_root / explicit).resolve() if not explicit.is_absolute() else explicit.resolve()
+        )
+        try:
+            resolved.relative_to(repo_root)
+        except ValueError as exc:
+            raise ConfigError(f"review config must be inside repository root: {explicit}") from exc
+        if not resolved.is_file():
             raise ConfigError(f"review config does not exist: {explicit}")
-        return explicit
+        return resolved
     for name in CONFIG_DISCOVERY_NAMES:
-        candidate = root / name
+        candidate = repo_root / name
         if candidate.is_file():
             return candidate
     return None

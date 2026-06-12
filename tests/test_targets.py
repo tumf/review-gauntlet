@@ -106,6 +106,22 @@ def test_rejects_partial_branch_options(tmp_path: Path) -> None:
         resolve_target(root=tmp_path, base_ref="main", head_ref=None, worktree=False, commit=None)
 
 
+def test_target_digest_and_file_digests_skip_symlink_escape(tmp_path: Path) -> None:
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "app.py").write_text("print('ok')\n", encoding="utf-8")
+    outside = tmp_path.parent / "outside-target-digest.py"
+    outside.write_text("print('escape v1')\n", encoding="utf-8")
+    (tmp_path / "src" / "escape.py").symlink_to(outside)
+
+    original_digest = target_digest(tmp_path)
+    original_file_digests = file_digests(tmp_path)
+    outside.write_text("print('escape v2')\n", encoding="utf-8")
+
+    assert target_digest(tmp_path) == original_digest
+    assert file_digests(tmp_path) == original_file_digests
+    assert set(original_file_digests) == {"src/app.py"}
+
+
 def test_target_digest_and_file_digests_ignore_default_review_exclusions(tmp_path: Path) -> None:
     (tmp_path / "src").mkdir()
     source = tmp_path / "src" / "app.py"
