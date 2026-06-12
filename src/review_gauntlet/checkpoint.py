@@ -4,6 +4,7 @@ import json
 import os
 import shutil
 import subprocess
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -47,7 +48,9 @@ def target_from_latest_checkpoint(root: Path) -> TargetSpec | None:
     if checkpoint is None:
         return None
     _validate_latest_checkpoint(root, checkpoint)
-    base = str(checkpoint["review_base_commit"])
+    base = checkpoint["review_base_commit"]
+    if not isinstance(base, str):
+        raise ValueError("latest checkpoint review_base_commit must be a string")
     head = _git(root, "rev-parse", "--verify", "HEAD^{commit}")
     return TargetSpec(
         kind=TargetKind.BRANCH, base_ref=base, head_ref=head, head_mode=HeadMode.MOVING
@@ -65,11 +68,15 @@ def _validate_latest_checkpoint(root: Path, checkpoint: dict[str, Any]) -> None:
     missing = sorted(required - set(checkpoint))
     if missing:
         raise ValueError(f"latest checkpoint is missing required fields: {', '.join(missing)}")
+    if checkpoint["schema_version"] != CHECKPOINT_SCHEMA_VERSION:
+        raise ValueError("latest checkpoint schema_version is not supported")
     if checkpoint["checkpoint_state"] != "complete":
         raise ValueError("latest checkpoint is not complete")
     if checkpoint["usable_as_review_base"] is not True:
         raise ValueError("latest checkpoint is not usable as review base")
-    checkpoint_id = str(checkpoint["checkpoint_id"])
+    checkpoint_id = checkpoint["checkpoint_id"]
+    if not isinstance(checkpoint_id, str):
+        raise ValueError("latest checkpoint checkpoint_id must be a string")
     for name in ("findings.json", "events.json"):
         path = latest_checkpoint_dir(root) / name
         if not path.exists():
@@ -83,10 +90,15 @@ def _validate_latest_checkpoint(root: Path, checkpoint: dict[str, Any]) -> None:
         checkpoint_file = cast(dict[str, Any], data)
         if checkpoint_file.get("checkpoint_id") != checkpoint_id:
             raise ValueError(f"latest checkpoint is internally inconsistent: {name}")
+        payload_key = "findings" if name == "findings.json" else "events"
+        if not isinstance(checkpoint_file.get(payload_key), list):
+            raise ValueError(f"latest checkpoint is internally inconsistent: {name}")
     summary = latest_checkpoint_dir(root) / "summary.md"
     if not summary.exists():
         raise ValueError("latest checkpoint is internally inconsistent: missing summary.md")
-    base = str(checkpoint["review_base_commit"])
+    base = checkpoint["review_base_commit"]
+    if not isinstance(base, str):
+        raise ValueError("latest checkpoint review_base_commit must be a string")
     try:
         _git(root, "rev-parse", "--verify", f"{base}^{{commit}}")
         _git(root, "merge-base", "--is-ancestor", base, "HEAD")
@@ -165,7 +177,8 @@ def write_latest_checkpoint(
                 shutil.rmtree(old_dir)
             checkpoint_dir.rename(old_dir)
             tmp_dir.rename(checkpoint_dir)
-            shutil.rmtree(old_dir)
+            with suppress(OSError):
+                shutil.rmtree(old_dir)
         else:
             checkpoint_dir.parent.mkdir(parents=True, exist_ok=True)
             tmp_dir.rename(checkpoint_dir)

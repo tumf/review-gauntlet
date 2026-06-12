@@ -300,9 +300,9 @@ class SessionStore:
 
 
 def _next_finding_id(conn: sqlite3.Connection, session_id: str) -> str:
+    del session_id
     rows = conn.execute(
-        "select finding_id from findings where session_id = ? and finding_id glob 'RGF-[0-9]*'",
-        (session_id,),
+        "select finding_id from findings where finding_id glob 'RGF-[0-9]*'"
     ).fetchall()
     max_numeric_id = 0
     for row in rows:

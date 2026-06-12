@@ -254,7 +254,7 @@ def test_findings_rejects_invalid_mark_value() -> None:
     with pytest.raises(SystemExit) as exc_info:
         main(["findings", ".", "--mark", "not-a-mark"])
 
-    assert exc_info.value.code != 0
+    assert exc_info.value.code == 64
 
 
 def test_findings_help_uses_command_specific_output_options(
@@ -275,14 +275,14 @@ def test_findings_rejects_removed_human_format() -> None:
     with pytest.raises(SystemExit) as exc_info:
         main(["findings", ".", "--format", "human"])
 
-    assert exc_info.value.code != 0
+    assert exc_info.value.code == 64
 
 
 def test_findings_rejects_removed_audience_option() -> None:
     with pytest.raises(SystemExit) as exc_info:
         main(["findings", ".", "--audience", "agent"])
 
-    assert exc_info.value.code != 0
+    assert exc_info.value.code == 64
 
 
 def test_filtered_findings_does_not_mutate_runs_or_finding_events(

@@ -105,7 +105,7 @@ def build_review_prompt(context: PromptContext) -> str:
         "comments": [
             {
                 "path": context.cell.file_path,
-                "content": "Issue description",
+                "content": "Issue description for this exact review cell path only",
                 "suggestion_code": "Suggested code",
                 "existing_code": "Existing code",
                 "start_line": 1,
@@ -141,11 +141,19 @@ def build_review_prompt(context: PromptContext) -> str:
             "Source file contents are not embedded in this prompt. When source inspection is "
             "needed, read the target file from repository_root plus file_path.",
             "",
+            "## Review Scope Guardrails",
+            "Only report issues whose JSON path exactly equals the Review Cell file_path above.",
+            "You may inspect related files to understand context, but do not emit comments for "
+            "related files or helper files.",
+            "If the only issue you find is in a different file, return an empty comments array.",
+            "A verdict comment whose path differs from file_path will be rejected by the adapter.",
+            "",
             "## Selected Rule",
             f"rule_document: {context.rule.filename}",
             context.rule.content,
             "",
             "## Verdict JSON Contract",
+            f"Every comment.path MUST equal: {context.cell.file_path}",
             json.dumps(contract, indent=2, sort_keys=True),
             "",
         ]

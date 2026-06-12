@@ -54,10 +54,13 @@ _FINDING_MARK_TO_STATE = {
     "untriaged": FindingState.UNTRIAGED,
     "confirmed": FindingState.CONFIRMED,
     "fixed-pending-verification": FindingState.FIXED_PENDING_VERIFICATION,
+    "fixed_pending_verification": FindingState.FIXED_PENDING_VERIFICATION,
     "fixed-verified": FindingState.FIXED_VERIFIED,
     "false-positive": FindingState.FALSE_POSITIVE,
+    "false_positive": FindingState.FALSE_POSITIVE,
     "waived": FindingState.WAIVED,
     "accepted-risk": FindingState.ACCEPTED_RISK,
+    "accepted_risk": FindingState.ACCEPTED_RISK,
     "reopened": FindingState.REOPENED,
 }
 
@@ -113,9 +116,17 @@ def fail(message: str, code: int = USAGE_ERROR) -> NoReturn:
     raise SystemExit(code)
 
 
+class UsageArgumentParser(argparse.ArgumentParser):
+    def error(self, message: str) -> NoReturn:
+        self.print_usage(sys.stderr)
+        self.exit(USAGE_ERROR, f"{self.prog}: error: {message}\n")
+
+
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="review-gauntlet")
-    subparsers = parser.add_subparsers(dest="command", required=True)
+    parser = UsageArgumentParser(prog="review-gauntlet")
+    subparsers = parser.add_subparsers(
+        dest="command", required=True, parser_class=UsageArgumentParser
+    )
     for command in ("inventory", "plan"):
         subparser = subparsers.add_parser(command)
         subparser.add_argument("root", nargs="?", default=".")

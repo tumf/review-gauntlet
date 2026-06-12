@@ -137,6 +137,79 @@ def test_default_init_rejects_invalid_latest_checkpoint(
     assert "not usable" in capsys.readouterr().err
 
 
+def test_default_init_rejects_unsupported_checkpoint_schema_version(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_repo(tmp_path)
+    _write_checkpoint(tmp_path, _git(tmp_path, "rev-parse", "HEAD"), schema_version=2)
+
+    with pytest.raises(SystemExit) as excinfo:
+        main(["init", str(tmp_path), "--format", "json"])
+
+    assert excinfo.value.code == 64
+    assert "schema_version" in capsys.readouterr().err
+
+
+def test_default_init_rejects_non_string_review_base_commit(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_repo(tmp_path)
+    _write_checkpoint(tmp_path, None)
+
+    with pytest.raises(SystemExit) as excinfo:
+        main(["init", str(tmp_path), "--format", "json"])
+
+    assert excinfo.value.code == 64
+    assert "review_base_commit must be a string" in capsys.readouterr().err
+
+
+def test_default_init_rejects_non_string_checkpoint_id(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_repo(tmp_path)
+    _write_checkpoint(
+        tmp_path,
+        _git(tmp_path, "rev-parse", "HEAD"),
+        checkpoint_id=123,
+        companion_checkpoint_id="123",
+    )
+
+    with pytest.raises(SystemExit) as excinfo:
+        main(["init", str(tmp_path), "--format", "json"])
+
+    assert excinfo.value.code == 64
+    assert "checkpoint_id must be a string" in capsys.readouterr().err
+
+
+def test_default_init_rejects_missing_payload_array(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_repo(tmp_path)
+    checkpoint_dir = tmp_path / ".review-gauntlet" / "checkpoints" / "latest"
+    checkpoint_dir.mkdir(parents=True, exist_ok=True)
+    status = {
+        "schema_version": 1,
+        "checkpoint_id": "RGC-test",
+        "checkpoint_state": "complete",
+        "usable_as_review_base": True,
+        "review_base_commit": _git(tmp_path, "rev-parse", "HEAD"),
+    }
+    (checkpoint_dir / "status.json").write_text(json.dumps(status), encoding="utf-8")
+    (checkpoint_dir / "findings.json").write_text(
+        json.dumps({"checkpoint_id": "RGC-test"}), encoding="utf-8"
+    )
+    (checkpoint_dir / "events.json").write_text(
+        json.dumps({"checkpoint_id": "RGC-test", "events": []}), encoding="utf-8"
+    )
+    (checkpoint_dir / "summary.md").write_text("# checkpoint\n", encoding="utf-8")
+
+    with pytest.raises(SystemExit) as excinfo:
+        main(["init", str(tmp_path), "--format", "json"])
+
+    assert excinfo.value.code == 64
+    assert "internally inconsistent" in capsys.readouterr().err
+
+
 def test_default_init_rejects_non_ancestor_checkpoint(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -265,7 +338,7 @@ def test_review_rejects_target_flags(
     with pytest.raises(SystemExit) as exc:
         main(argv)
 
-    assert exc.value.code == 2
+    assert exc.value.code == 64
 
 
 def test_review_still_advances_one_initialized_session(
@@ -284,21 +357,45 @@ def test_review_still_advances_one_initialized_session(
     assert data["run_count"] == 1
 
 
-def _write_checkpoint(root: Path, base: str, *, usable: bool = True) -> None:
+def _write_checkpoint(
+    root: Path,
+    base: object,
+    *,
+    usable: bool = True,
+    schema_version: int = 1,
+    checkpoint_id: object = "RGC-test",
+    companion_checkpoint_id: object | None = None,
+) -> None:
     checkpoint_dir = root / ".review-gauntlet" / "checkpoints" / "latest"
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
     status = {
-        "schema_version": 1,
-        "checkpoint_id": "RGC-test",
+        "schema_version": schema_version,
+        "checkpoint_id": checkpoint_id,
         "checkpoint_state": "complete",
         "usable_as_review_base": usable,
         "review_base_commit": base,
     }
     (checkpoint_dir / "status.json").write_text(json.dumps(status), encoding="utf-8")
     (checkpoint_dir / "findings.json").write_text(
-        json.dumps({"checkpoint_id": "RGC-test", "findings": []}), encoding="utf-8"
+        json.dumps(
+            {
+                "checkpoint_id": companion_checkpoint_id
+                if companion_checkpoint_id is not None
+                else checkpoint_id,
+                "findings": [],
+            }
+        ),
+        encoding="utf-8",
     )
     (checkpoint_dir / "events.json").write_text(
-        json.dumps({"checkpoint_id": "RGC-test", "events": []}), encoding="utf-8"
+        json.dumps(
+            {
+                "checkpoint_id": companion_checkpoint_id
+                if companion_checkpoint_id is not None
+                else checkpoint_id,
+                "events": [],
+            }
+        ),
+        encoding="utf-8",
     )
     (checkpoint_dir / "summary.md").write_text("# checkpoint\n", encoding="utf-8")

@@ -70,11 +70,11 @@ def test_cli_completion_outputs_script_for_supported_shells(
 @pytest.mark.parametrize(
     "argv", [["completion", "powershell"], ["completion", "bash", "--format", "json"]]
 )
-def test_cli_completion_preserves_argparse_usage_errors(argv: list[str]) -> None:
+def test_cli_completion_uses_usage_error_code(argv: list[str]) -> None:
     with pytest.raises(SystemExit) as exc_info:
         main(argv)
 
-    assert exc_info.value.code == 2
+    assert exc_info.value.code == 64
 
 
 def test_readme_documents_canonical_shell_completion_commands() -> None:
@@ -176,7 +176,7 @@ def test_cli_rejects_legacy_json_flag(command: str, tmp_path: Path) -> None:
     with pytest.raises(SystemExit) as exc:
         main([command, str(tmp_path), "--json"])
 
-    assert exc.value.code == 2
+    assert exc.value.code == 64
 
 
 def test_cli_report_outputs_markdown(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -252,7 +252,7 @@ def test_cli_rejects_obsolete_format_choices(command: str, obsolete_format: str)
     with pytest.raises(SystemExit) as exc_info:
         main(argv)
 
-    assert exc_info.value.code == 2
+    assert exc_info.value.code == 64
 
 
 @pytest.mark.parametrize("command", ["init", "status", "mark", "finalize", "findings"])
@@ -264,7 +264,7 @@ def test_cli_rejects_audience_on_non_review_commands(command: str) -> None:
     with pytest.raises(SystemExit) as exc_info:
         main(argv)
 
-    assert exc_info.value.code == 2
+    assert exc_info.value.code == 64
 
 
 def test_cli_review_help_exposes_audience(capsys: pytest.CaptureFixture[str]) -> None:

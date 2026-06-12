@@ -37,6 +37,9 @@ def test_review_prompt_contains_cell_rule_context_and_verdict_contract() -> None
     assert f"line_count: {UNIQUE_FILE_BODY_TEXT.count(chr(10))}" in prompt
     assert "Source file contents are not embedded in this prompt" in prompt
     assert "repository_root plus file_path" in prompt
+    assert "Only report issues whose JSON path exactly equals" in prompt
+    assert "If the only issue you find is in a different file" in prompt
+    assert "Every comment.path MUST equal: src/app.py" in prompt
     assert "Check auth boundaries" in prompt
     assert '"comments"' in prompt
     assert '"suggestion_code"' in prompt
