@@ -66,6 +66,18 @@ def test_findings_text_output_respects_all_flag(
     assert "RGF-risk" in all_output
 
 
+@pytest.mark.parametrize("path", ["/tmp/escape.py", "../escape.py"])
+def test_findings_rejects_unsafe_path_filters(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], path: str
+) -> None:
+    _create_session_with_findings(tmp_path, capsys)
+
+    with pytest.raises(SystemExit) as exc_info:
+        main(["findings", str(tmp_path), "--path", path])
+
+    assert exc_info.value.code == 64
+
+
 def test_findings_filters_by_single_file_path(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

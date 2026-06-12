@@ -5,6 +5,7 @@ import pytest
 
 from review_gauntlet.inventory import (
     build_inventory,
+    build_inventory_for_paths,
     matches_review_excluded_package_file_name_pattern,
     matches_review_excluded_package_relative_path_pattern,
     should_include_review_relative_path,
@@ -207,6 +208,20 @@ def test_package_files_remain_in_general_inventory(tmp_path: Path) -> None:
 
     assert set(package_files) <= inventory_paths
     assert "src/app.py" in inventory_paths
+
+
+def test_target_scoped_inventory_skips_unsafe_relative_paths(tmp_path: Path) -> None:
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "app.py").write_text("print('ok')\n", encoding="utf-8")
+    outside = tmp_path.parent / "outside-review-gauntlet.py"
+    outside.write_text("print('escape')\n", encoding="utf-8")
+
+    inventory = build_inventory_for_paths(
+        tmp_path,
+        ("src/app.py", "../outside-review-gauntlet.py", str(outside)),
+    )
+
+    assert [file.path for file in inventory.files] == ["src/app.py"]
 
 
 @pytest.mark.parametrize(

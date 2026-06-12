@@ -69,6 +69,70 @@ def test_command_adapter_stdout_json_success_and_artifacts(tmp_path: Path) -> No
     assert "input_mode" not in command
 
 
+def test_command_adapter_accepts_imprecise_and_precise_verdict_comments(
+    tmp_path: Path,
+) -> None:
+    script = (
+        "import json, sys; "
+        "comments=["
+        "{'path':'README.md','content':'file-level','start_line':0,'end_line':0},"
+        "{'path':'README.md','content':'precise','start_line':1,'end_line':1}]; "
+        "print(json.dumps({'comments': comments}))"
+    )
+    config = CommandAdapterConfig.model_validate(
+        {
+            "type": "command",
+            "command": sys.executable,
+            "args": ["-c", script],
+            "output": {"mode": "stdout-json"},
+        }
+    )
+
+    result = _adapter(tmp_path, config).review(_cell(tmp_path))
+
+    assert [comment.content for comment in result.comments] == ["file-level", "precise"]
+
+
+@pytest.mark.parametrize(
+    ("comment", "message"),
+    [
+        (
+            {"path": "other.py", "content": "cross", "start_line": 1, "end_line": 1},
+            "different review cell path",
+        ),
+        (
+            {"path": "README.md", "content": "bad-order", "start_line": 2, "end_line": 1},
+            "invalid line range",
+        ),
+        (
+            {"path": "README.md", "content": "too-large", "start_line": 2, "end_line": 2},
+            "exceeds review cell line count",
+        ),
+    ],
+)
+def test_command_adapter_rejects_out_of_scope_verdict_comments(
+    tmp_path: Path, comment: dict[str, object], message: str
+) -> None:
+    script = f"import json; print(json.dumps({{'comments': [{comment!r}]}}))"
+    config = CommandAdapterConfig.model_validate(
+        {
+            "type": "command",
+            "command": sys.executable,
+            "args": ["-c", script],
+            "output": {"mode": "stdout-json"},
+        }
+    )
+
+    with pytest.raises(ReviewAdapterError, match=message) as excinfo:
+        _adapter(tmp_path, config).review(_cell(tmp_path))
+
+    cell_dir = tmp_path / ".review-gauntlet" / "runs" / "1" / "cells" / "RGC-test"
+    failure = json.loads((cell_dir / "failure.json").read_text(encoding="utf-8"))
+    assert excinfo.value.failure == failure
+    assert failure["comment_path"] == comment["path"]
+    assert failure["comment_index"] == 0
+
+
 def test_command_adapter_prompt_argv_and_file_json_success(tmp_path: Path) -> None:
     script = (
         "import json, pathlib, sys; "
@@ -309,6 +373,26 @@ def test_command_adapter_cancel_writes_failure_and_terminates_child(tmp_path: Pa
     assert failure["cancelled"] is True
     assert (cell_dir / "stdout.txt").read_text(encoding="utf-8") == "started\n"
     assert (cell_dir / "stderr.txt").is_file()
+
+
+def test_command_adapter_rejects_cell_id_artifact_escape(tmp_path: Path) -> None:
+    config = CommandAdapterConfig.model_validate(
+        {"type": "command", "command": sys.executable, "args": ["-c", "pass"]}
+    )
+    cell = _cell(tmp_path).model_copy(update={"id": "../escape"})
+
+    with pytest.raises(ReviewAdapterError, match="unsafe review cell id"):
+        _adapter(tmp_path, config).review(cell)
+
+
+@pytest.mark.parametrize("cwd", ["..", "/"])
+def test_command_adapter_rejects_cwd_outside_repo(tmp_path: Path, cwd: str) -> None:
+    config = CommandAdapterConfig.model_validate(
+        {"type": "command", "command": sys.executable, "args": ["-c", "pass"], "cwd": cwd}
+    )
+
+    with pytest.raises(ReviewAdapterError, match="inside repository root"):
+        _adapter(tmp_path, config).review(_cell(tmp_path))
 
 
 def test_command_adapter_rejects_invalid_cwd(tmp_path: Path) -> None:

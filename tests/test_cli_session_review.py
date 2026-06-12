@@ -528,6 +528,45 @@ def test_command_adapter_failure_keeps_cell_pending_and_exits_nonzero(
     assert _coverage_for_cell(tmp_path, cell_id) == "pending"
 
 
+@pytest.mark.parametrize(
+    ("script", "expected"),
+    [
+        (
+            "import json; "
+            "print(json.dumps({'comments': "
+            "[{'path':'other.py','content':'cross','start_line':1,'end_line':1}]}))",
+            "different review cell path",
+        ),
+        (
+            "import json, re, sys; "
+            "path=re.search(r'file_path: (.+)', sys.argv[1]).group(1); "
+            "print(json.dumps({'comments': "
+            "[{'path':path,'content':'too-large','start_line':1,'end_line':999}]}))",
+            "exceeds review cell line count",
+        ),
+    ],
+)
+def test_command_adapter_rejects_out_of_scope_verdict_without_coverage(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    script: str,
+    expected: str,
+) -> None:
+    _init_session(tmp_path, capsys)
+    cell_id = _cell_for_path(tmp_path, "README.md")
+    _command_config(tmp_path, script)
+
+    with pytest.raises(SystemExit) as excinfo:
+        main(["review", str(tmp_path), "--budget", "1", "--format", "json"])
+
+    data = json.loads(capsys.readouterr().out)
+    assert excinfo.value.code == 1
+    assert expected in data["error"]
+    assert data["reviewed_cells"] == 0
+    assert data["finding_ids"] == []
+    assert _coverage_for_cell(tmp_path, cell_id) == "pending"
+
+
 def test_command_adapter_success_and_failure_create_one_run(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

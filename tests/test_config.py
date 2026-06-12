@@ -24,6 +24,14 @@ def test_config_discovery_precedence(tmp_path: Path) -> None:
     assert discover_config_path(tmp_path) == tmp_path / ".review-gauntlet/config.jsonc"
 
 
+def test_explicit_config_rejects_out_of_repo_path(tmp_path: Path) -> None:
+    outside = tmp_path.parent / "outside-review-gauntlet.json"
+    outside.write_text('{"adapter":{"type":"command","command":"tool"}}', encoding="utf-8")
+
+    with pytest.raises(ConfigError, match="inside repository root"):
+        load_config(tmp_path, outside)
+
+
 def test_explicit_config_takes_precedence(tmp_path: Path) -> None:
     default = tmp_path / ".review-gauntlet" / "config.jsonc"
     default.parent.mkdir(parents=True)

@@ -201,7 +201,12 @@ class CommandReviewAdapter:
                 process.terminate()
 
     def review(self, cell: ReviewCell) -> ReviewAdapterResult:
-        cell_dir = (self._run_dir / "cells" / cell.id).resolve()
+        cells_dir = (self._run_dir / "cells").resolve()
+        cell_dir = (cells_dir / cell.id).resolve()
+        try:
+            cell_dir.relative_to(cells_dir)
+        except ValueError as exc:
+            raise ReviewAdapterError(f"unsafe review cell id for artifacts: {cell.id}") from exc
         cell_dir.mkdir(parents=True, exist_ok=True)
         prompt_file = cell_dir / "prompt.md"
         output_file = cell_dir / "verdict.json"
@@ -210,13 +215,14 @@ class CommandReviewAdapter:
         failure_file = cell_dir / "failure.json"
         initial_variables = self._variables(cell, cell_dir, output_file, "")
         output_path = self._resolve_output_path(initial_variables, cell_dir)
+        file_metadata = self._read_cell_file_metadata(cell)
         prompt = build_review_prompt(
             PromptContext(
                 repository_root=str(self._root),
                 cell=cell,
                 rule=self._ruleset.select_rule_doc(cell.file_path),
                 ruleset_digest=self._ruleset.digest,
-                file_metadata=self._read_cell_file_metadata(cell),
+                file_metadata=file_metadata,
                 output_mode=self._config.output.mode,
                 verdict_output_file=str(output_path),
             )
@@ -281,8 +287,13 @@ class CommandReviewAdapter:
                     verdict_text=verdict_text,
                 ),
             )
-        output_file.write_text(payload.model_dump_json(indent=2), encoding="utf-8")
-        return ReviewAdapterResult(cell_id=cell.id, comments=payload.comments)
+        comments = self._validated_comments_for_cell(
+            payload.comments, cell, file_metadata.line_count, failure_file
+        )
+        output_file.write_text(
+            VerdictPayload(comments=comments).model_dump_json(indent=2), encoding="utf-8"
+        )
+        return ReviewAdapterResult(cell_id=cell.id, comments=comments)
 
     def _run_command(
         self,
@@ -395,6 +406,12 @@ class CommandReviewAdapter:
             return None
         cwd = Path(self._expand(self._config.cwd, variables))
         resolved = (self._root / cwd).resolve() if not cwd.is_absolute() else cwd.resolve()
+        try:
+            resolved.relative_to(self._root)
+        except ValueError as exc:
+            raise ReviewAdapterError(
+                f"adapter.cwd must stay inside repository root: {resolved}"
+            ) from exc
         if not resolved.is_dir():
             raise ReviewAdapterError(f"adapter.cwd is not a directory: {resolved}")
         return resolved
@@ -428,6 +445,55 @@ class CommandReviewAdapter:
         payload = {"error": message, **details}
         failure_file.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
         raise ReviewAdapterError(message, failure=payload)
+
+    def _validated_comments_for_cell(
+        self,
+        comments: tuple[OCRComment, ...],
+        cell: ReviewCell,
+        line_count: int,
+        failure_file: Path,
+    ) -> tuple[OCRComment, ...]:
+        accepted: list[OCRComment] = []
+        for index, comment in enumerate(comments):
+            if comment.path != cell.file_path:
+                self._fail(
+                    "verdict comment targets a different review cell path",
+                    failure_file,
+                    {
+                        "comment_index": index,
+                        "comment_path": comment.path,
+                        "cell_path": cell.file_path,
+                    },
+                )
+            if comment.imprecise:
+                accepted.append(comment)
+                continue
+            if comment.start_line < 1 or comment.end_line < comment.start_line:
+                self._fail(
+                    "verdict comment has an invalid line range",
+                    failure_file,
+                    {
+                        "comment_index": index,
+                        "comment_path": comment.path,
+                        "start_line": comment.start_line,
+                        "end_line": comment.end_line,
+                        "line_count": line_count,
+                    },
+                )
+            if comment.end_line > line_count:
+                self._fail(
+                    "verdict comment line range exceeds review cell line count",
+                    failure_file,
+                    {
+                        "comment_index": index,
+                        "comment_path": comment.path,
+                        "start_line": comment.start_line,
+                        "end_line": comment.end_line,
+                        "line_count": line_count,
+                    },
+                )
+            accepted.append(comment)
+        return tuple(accepted)
 
 
 def _invalid_verdict_failure_details(

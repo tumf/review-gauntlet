@@ -127,6 +127,46 @@ CONFIG_NAMES = {
 }
 
 
+class UnsafeRepositoryPathError(ValueError):
+    pass
+
+
+def normalize_repository_relative_path(value: str | Path) -> str:
+    path = Path(value)
+    raw = str(value).replace("\\", "/")
+    if path.is_absolute() or raw.startswith("/"):
+        raise UnsafeRepositoryPathError(f"repository path must be relative: {value}")
+    parts = tuple(part for part in raw.split("/") if part not in {"", "."})
+    if not parts:
+        raise UnsafeRepositoryPathError("repository path must not be empty")
+    if any(part == ".." for part in parts):
+        raise UnsafeRepositoryPathError(
+            f"repository path must not contain parent traversal: {value}"
+        )
+    return "/".join(parts)
+
+
+def is_safe_repository_relative_path(value: str | Path) -> bool:
+    try:
+        normalize_repository_relative_path(value)
+    except UnsafeRepositoryPathError:
+        return False
+    return True
+
+
+def resolve_under_root(root: Path, relative: str | Path) -> Path:
+    repo_root = root.resolve()
+    normalized = normalize_repository_relative_path(relative)
+    resolved = (repo_root / normalized).resolve()
+    try:
+        resolved.relative_to(repo_root)
+    except ValueError as exc:
+        raise UnsafeRepositoryPathError(
+            f"repository path resolves outside root: {relative}"
+        ) from exc
+    return resolved
+
+
 def build_inventory(root: Path) -> Inventory:
     repo_root = root.resolve()
     files = tuple(classify_file(path, repo_root) for path in list_project_files(repo_root))
@@ -136,18 +176,33 @@ def build_inventory(root: Path) -> Inventory:
 def build_inventory_for_paths(root: Path, relative_paths: tuple[str, ...]) -> Inventory:
     repo_root = root.resolve()
     files = tuple(
-        classify_file(repo_root / relative, repo_root)
-        for relative in sorted(relative_paths)
-        if should_include_artifact_relative_path(relative) and (repo_root / relative).is_file()
+        classify_file(resolved, repo_root)
+        for resolved in _safe_existing_files(repo_root, relative_paths)
+        if should_include_artifact_relative_path(resolved.relative_to(repo_root))
     )
     return Inventory(root=display_root(repo_root), files=files)
+
+
+def _safe_existing_files(root: Path, relative_paths: tuple[str, ...]) -> tuple[Path, ...]:
+    files: list[Path] = []
+    for relative in sorted(relative_paths):
+        try:
+            path = resolve_under_root(root, relative)
+        except UnsafeRepositoryPathError:
+            continue
+        if path.is_file():
+            files.append(path)
+    return tuple(files)
 
 
 def list_project_files(root: Path) -> list[Path]:
     tracked = git_file_list(root)
     if tracked is not None:
         return sorted(
-            root / path for path in tracked if should_include_artifact_relative_path(path)
+            resolve_under_root(root, path)
+            for path in tracked
+            if is_safe_repository_relative_path(path)
+            and should_include_artifact_relative_path(path)
         )
     return sorted(path for path in root.rglob("*") if should_include_path(path, root))
 
@@ -168,7 +223,11 @@ def git_file_list(root: Path) -> list[str] | None:
 
 
 def should_include_artifact_relative_path(relative: str | Path) -> bool:
-    path = Path(relative)
+    try:
+        normalized = normalize_repository_relative_path(relative)
+    except UnsafeRepositoryPathError:
+        return False
+    path = Path(normalized)
     return not any(
         part in ARTIFACT_EXCLUDED_DIR_NAMES
         or part in ARTIFACT_EXCLUDED_FILE_NAMES
