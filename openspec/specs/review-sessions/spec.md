@@ -46,53 +46,14 @@
 
 ### Requirement: Review command SHALL advance exactly one run
 
-`review-gauntlet review` SHALL advance the active session by one review run only. It SHALL recalculate the current review universe according to the active session's target policy, reconcile existing ledger state, review eligible cells within the configured budget, execute review work through the selected review adapter, update cell coverage only for successfully reviewed cells, record findings and occurrences, verify pending fixes when possible, and return the next required action without recursively continuing the session loop. It SHALL NOT accept target selection flags or retarget the active session.
+`review-gauntlet review` SHALL create durable run evidence only for review attempts that can evaluate selected cells. A review invocation with no selected current cells SHALL NOT create a run record that can satisfy finalization freshness or reviewed-target evidence.
 
-The review command SHALL support a positive integer `--concurrency` option, defaulting to `8`, that limits how many selected review cells may execute adapter review work simultaneously within that one run. The concurrency option SHALL NOT change the review budget, selected-cell eligibility, target policy, or the requirement that coverage is recorded only for successfully executed cells.
+#### Scenario: Zero-cell review does not refresh finalization evidence
 
-The review command SHALL support `--format text|json`, defaulting to `text`. For default human-audience runs, the review command SHALL expose review-run and per-cell progress on stderr while adapter work is in progress. Progress output SHALL NOT pollute stdout final output. When `--audience agent` is explicitly selected, the review command SHALL suppress decorative progress because agent callers do not need progress display. If the user interrupts the command, the review command SHALL cancel pending work, terminate in-flight command adapter subprocesses when possible, and leave unfinished cells in a non-reviewed state.
-
-If one or more selected cells fail after other selected cells have completed successfully, the review command SHALL persist coverage, findings, occurrences, and applicable fixed-finding verification for the successful cells before returning a failed command result. Failed cells SHALL remain non-reviewed and visible for later retry.
-
-#### Scenario: Human review reports progress without corrupting final output
-
-**Given**: an active session with selected review cells
-**When**: the developer runs `review-gauntlet review --format json`
-**Then**: the CLI writes run and per-cell progress to stderr while adapter work is in progress
-**And**: stdout remains exactly one parseable final JSON result
-**And**: the progress includes the run id, selected cell count, concurrency, adapter identity when available, and cell start/completion or failure events
-
-#### Scenario: Agent audience suppresses decorative review progress
-
-**Given**: an active session with selected review cells
-**When**: automation runs `review-gauntlet review --format json --audience agent`
-**Then**: stdout contains only the final parseable JSON result
-**And**: decorative progress text is not emitted for the agent audience
-
-#### Scenario: Review rejects obsolete human format option
-
-**Given**: an active session
-**When**: the developer runs `review-gauntlet review --format human`
-**Then**: the command fails with a usage error
-
-#### Scenario: Partial failure preserves successful coverage
-
-**Given**: an active session where a review run selects multiple cells
-**And**: at least one selected cell succeeds
-**And**: at least one selected cell fails in the same run
-**When**: `review-gauntlet review` finalizes that run
-**Then**: every successful selected cell is recorded as reviewed with its findings and occurrences
-**And**: the final output reports the number of successful cells persisted in `reviewed_cells`
-**And**: the command exits with a failure result that identifies a failed cell
-**And**: failed cells remain pending or stale for later retry
-
-#### Scenario: Partial failure verifies only successful paths
-
-**Given**: an active session with fixed findings awaiting verification on two paths
-**And**: a review run succeeds for one path and fails for the other path
-**When**: `review-gauntlet review` finalizes that partial run
-**Then**: fixed-finding verification may update the finding for the successfully evaluated path
-**And**: the finding for the failed path remains `fixed_pending_verification`
+**Given**: an active session whose current cells are already reviewed
+**When**: the developer runs `review-gauntlet review --budget 1`
+**Then**: no new reviewed-cell coverage is recorded
+**And**: no zero-cell run is used as the last reviewed target digest for finalization
 
 ### Requirement: Review rules and prompts SHALL port the pinned OCR corpus
 
@@ -143,105 +104,47 @@ Generated review prompts SHALL identify the target file by repository root, repo
 
 ### Requirement: Review cells SHALL model coverage independently from finding state
 
-The CLI SHALL track review cells as review coverage units separate from finding triage state. A cell MAY be reviewed while the session remains incomplete because associated findings are not terminal. Review coverage for current cells SHALL be tied to the reviewed content digest: when a stale current cell is successfully reviewed again, the ledger SHALL refresh that cell's stored digest to the current digest so that unchanged content is not repeatedly marked stale.
+Review cell state mutations SHALL be durable and explicit. Attempts to update a review cell state for an unknown session/cell pair SHALL fail rather than silently succeeding with zero changed rows.
 
-#### Scenario: Reviewed cell with untriaged finding is not complete session
+#### Scenario: Unknown review cell update fails
 
-**Given**: a review cell has been reviewed and produced a finding
-**When**: the finding remains `untriaged`
-**Then**: the cell counts as reviewed for coverage
-**But**: the session cannot finalize
-
-#### Scenario: Changed target invalidates prior coverage
-
-**Given**: an active moving-target session with previously reviewed cells
-**When**: the target content changes before a later review run
-**Then**: affected current cells are marked stale or superseded according to whether they remain in the current review universe
-**And**: new current cells are added as pending when required
-
-#### Scenario: Successful stale review refreshes the reviewed digest
-
-**Given**: an active session where a previously reviewed current cell has become stale because its file content changed
-**When**: a later `review-gauntlet review` run successfully reviews that current cell
-**Then**: the cell is recorded as `reviewed`
-**And**: the cell's stored content digest is refreshed to the current digest that was reviewed
-**And**: a later review run without another file change does not mark that same cell stale again
-**And**: the later review run can select remaining pending or stale cells according to normal budget order
-
-#### Scenario: Unsuccessful stale review does not refresh coverage
-
-**Given**: an active session where a previously reviewed current cell has become stale because its file content changed
-**When**: a later `review-gauntlet review` run fails, is interrupted, or does not select that cell
-**Then**: the cell is not recorded as refreshed reviewed coverage
-**And**: the stale or pending coverage remains visible until a successful review evaluates the current cell
+**Given**: a session ledger without cell `RGC-missing`
+**When**: internal reconciliation attempts to update `RGC-missing`
+**Then**: the store raises an actionable lookup error
+**And**: no caller can treat the missing cell as updated coverage
 
 ### Requirement: Findings SHALL use stable session-level identity
 
-Findings SHALL be managed at the review-session level and SHALL use deterministic IDs based on stable fingerprints. Repeated occurrences of the same logical issue across review runs SHALL attach to the existing finding instead of creating duplicate new findings.
+Finding ID allocation SHALL be deterministic and monotonic within a session. New IDs SHALL NOT be based on the current finding row count because row gaps from migration, repair, or deletion can otherwise reuse an existing human-readable ID.
 
-#### Scenario: Same issue appears in multiple runs
+#### Scenario: Finding id allocation does not reuse gaps
 
-**Given**: a review run detects a missing authorization finding in a file
-**And**: a later review run detects the same logical issue with shifted line numbers
-**When**: the later finding output is reconciled
-**Then**: the CLI reuses the existing finding ID
-**And**: records a new occurrence for the later run
-**And**: does not display the issue as a new finding
-
-#### Scenario: Fingerprint avoids line-number-only identity
-
-**Given**: code edits shift a finding location without changing the enclosing issue
-**When**: the finding fingerprint is computed
-**Then**: semantic inputs such as file path, rule id, issue kind, enclosing symbol, normalized code anchor, and normalized claim are used
-**And**: line number alone is insufficient to create a distinct finding identity
+**Given**: a session with existing findings `RGF-0001` and `RGF-0003`
+**When**: a new distinct finding is recorded
+**Then**: the new finding ID is `RGF-0004`
+**And**: no existing finding ID is reused
 
 ### Requirement: Finding triage SHALL be explicit and event-backed
 
-The CLI SHALL provide a `mark` command that records human or external-LLM triage decisions as events and updates the current finding state without executing review work. `mark` SHALL support `--format text|json`, defaulting to `text`, and SHALL NOT expose `--audience` because it only emits a final triage result.
+Triage event metadata SHALL be validated before persistence. If a developer provides `--until`, the value SHALL be an ISO calendar date. Invalid date metadata SHALL be rejected by `mark` before a finding event is written.
 
-<!-- Expected canonical result after archive: mark documents `--format text|json`, default `text`, and rejection of non-progress audience options. -->
-
-#### Scenario: Mark finding false positive
+#### Scenario: Mark rejects invalid until date
 
 **Given**: an active session with an open finding
-**When**: the developer runs `review-gauntlet mark RGF-123 false-positive --reason "Protected by middleware" --format json`
-**Then**: the CLI records a finding event with the reason
-**And**: updates the finding status to `false_positive`
-**And**: does not create a review run
-**And**: stdout contains parseable JSON for the final mark result
-
-#### Scenario: Mark rejects obsolete output controls
-
-**Given**: an active session with an open finding
-**When**: the developer runs `review-gauntlet mark RGF-123 fixed --format human`
+**When**: the developer runs `review-gauntlet mark RGF-0001 waived --until tomorrow`
 **Then**: the command fails with a usage error
-**When**: the developer runs `review-gauntlet mark RGF-123 fixed --audience agent`
-**Then**: the command fails with a usage error
+**And**: no finding event is written for that invalid decision
 
 ### Requirement: Fixed findings SHALL require later verification
 
-Marking a finding fixed SHALL transition it to `fixed_pending_verification`. The finding SHALL become terminal only after a later review run verifies the fix, and SHALL reopen if the same issue is detected again.
+When the same finding is detected while it is `fixed_pending_verification`, the finding SHALL reopen deterministically and SHALL NOT be immediately verified in the same run that re-detected it.
 
-#### Scenario: Mark fixed is not terminal
-
-**Given**: an active session with a confirmed finding
-**When**: the developer runs `review-gauntlet mark RGF-123 fixed --reason "Added guard"`
-**Then**: the finding status becomes `fixed_pending_verification`
-**And**: the session cannot finalize until a later review verifies the fix
-
-#### Scenario: Later review verifies fix
-
-**Given**: a finding is `fixed_pending_verification`
-**When**: a later review run evaluates the relevant current target and does not detect the same finding fingerprint
-**Then**: the finding status becomes `fixed_verified`
-**And**: the finding is terminal
-
-#### Scenario: Later review reopens unfixed issue
+#### Scenario: Redetected fixed finding remains reopened
 
 **Given**: a finding is `fixed_pending_verification`
 **When**: a later review run detects the same finding fingerprint again
 **Then**: the finding status becomes `reopened`
-**And**: the session cannot finalize until the reopened finding reaches a terminal state
+**And**: later verification logic in the same run does not transition it to `fixed_verified`
 
 ### Requirement: Status and findings commands SHALL expose actionable session state
 
@@ -331,42 +234,15 @@ Session commands that emit summaries SHALL use `--format text` for human-readabl
 
 ### Requirement: Finalize SHALL validate completion without running review work
 
-`review-gauntlet finalize` SHALL determine whether the active session can be completed. It SHALL not execute review work, triage findings, or modify source code. If completion conditions are unmet, it SHALL fail with actionable reasons. `finalize` SHALL support `--format text|json` for final output, defaulting to `text`, and SHALL NOT expose `--audience` because it does not emit progress UI.
+`status` and `finalize` SHALL tolerate malformed persisted finding-event metadata without crashing. Malformed terminal-decision metadata SHALL be surfaced conservatively as a blocker so completion cannot hide invalid waiver or accepted-risk state.
 
-<!-- Expected canonical result after archive: finalize documents `--format text|json`, default `text`, and rejection of non-progress audience options. -->
+#### Scenario: Malformed decision metadata blocks finalize without crashing
 
-#### Scenario: Finalize fails with pending cells
-
-**Given**: an active session with pending review cells
-**When**: the developer runs `review-gauntlet finalize`
-**Then**: the command fails
-**And**: reports that review cells are still pending
-**And**: does not create a review run
-
-#### Scenario: Finalize fails with unverified fixes
-
-**Given**: an active session with a `fixed_pending_verification` finding
-**When**: the developer runs `review-gauntlet finalize`
-**Then**: the command fails
-**And**: reports that fixed findings require verification
-
-#### Scenario: Finalize succeeds when coverage and findings are terminal
-
-**Given**: all current review cells are terminal
-**And**: all live findings are terminal
-**And**: no waiver or accepted-risk finding is expired
-**And**: the current target digest matches the last reviewed target digest
+**Given**: a terminal finding event with malformed JSON metadata or an invalid `until` date
 **When**: the developer runs `review-gauntlet finalize --format json`
-**Then**: the session is finalized
-**And**: the command reports final coverage and finding totals as parseable JSON
-
-#### Scenario: Finalize rejects obsolete output controls
-
-**Given**: an active session
-**When**: the developer runs `review-gauntlet finalize --format human`
-**Then**: the command fails with a usage error
-**When**: the developer runs `review-gauntlet finalize --audience agent`
-**Then**: the command fails with a usage error
+**Then**: the command returns a structured failure result
+**And**: the result includes a blocker for invalid or expired terminal-decision metadata
+**And**: no traceback is printed
 
 ### Requirement: Existing planning commands SHALL remain compatible
 
