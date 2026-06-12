@@ -178,6 +178,9 @@ def build_parser() -> argparse.ArgumentParser:
     finalize = subparsers.add_parser("finalize")
     finalize.add_argument("root", nargs="?", default=".")
     _output_format_arg(finalize)
+
+    completion = subparsers.add_parser("completion")
+    completion.add_argument("shell", choices=("bash", "zsh", "fish"))
     return parser
 
 
@@ -185,12 +188,125 @@ def _output_format_arg(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--format", choices=("text", "json"), default="text")
 
 
+def _completion_script(parser: argparse.ArgumentParser, shell: str) -> str:
+    commands = _parser_commands(parser)
+    if shell == "bash":
+        return _bash_completion_script(commands)
+    if shell == "zsh":
+        return _zsh_completion_script(commands)
+    if shell == "fish":
+        return _fish_completion_script(commands)
+    raise ValueError(f"unsupported shell: {shell}")
+
+
+def _parser_commands(parser: argparse.ArgumentParser) -> dict[str, tuple[str, ...]]:
+    subparsers = _subparser_actions(parser)
+    if not subparsers:
+        return {}
+    command_parsers = cast(dict[str, argparse.ArgumentParser], subparsers[0].choices)
+    return {
+        command: tuple(
+            sorted(
+                {
+                    option
+                    for action in command_parser._actions
+                    for option in action.option_strings
+                    if option.startswith("--")
+                }
+            )
+        )
+        for command, command_parser in sorted(command_parsers.items())
+    }
+
+
+def _subparser_actions(parser: argparse.ArgumentParser) -> list[Any]:
+    return [
+        action
+        for action in parser._actions
+        if action.__class__.__name__ == "_SubParsersAction" and hasattr(action, "choices")
+    ]
+
+
+def _completion_words(commands: dict[str, tuple[str, ...]]) -> str:
+    words = sorted(set(commands) | {option for options in commands.values() for option in options})
+    return " ".join(words)
+
+
+def _bash_completion_script(commands: dict[str, tuple[str, ...]]) -> str:
+    cases = "\n".join(
+        f"    {command}) opts='{' '.join(options)}' ;;" for command, options in commands.items()
+    )
+    command_words = " ".join(commands)
+    all_words = _completion_words(commands)
+    return f"""# bash completion for review-gauntlet
+_review_gauntlet_completion() {{
+  local cur prev cmd opts
+  COMPREPLY=()
+  cur="${{COMP_WORDS[COMP_CWORD]}}"
+  prev="${{COMP_WORDS[COMP_CWORD-1]}}"
+  cmd="${{COMP_WORDS[1]}}"
+  if [[ $COMP_CWORD -eq 1 ]]; then
+    COMPREPLY=( $(compgen -W '{command_words}' -- "$cur") )
+    return 0
+  fi
+  case "$cmd" in
+{cases}
+    *) opts='{all_words}' ;;
+  esac
+  COMPREPLY=( $(compgen -W "$opts" -- "$cur") )
+}}
+complete -F _review_gauntlet_completion review-gauntlet
+"""
+
+
+def _zsh_completion_script(commands: dict[str, tuple[str, ...]]) -> str:
+    command_specs = " ".join(f"'{command}:{command}'" for command in commands)
+    cases = "\n".join(
+        f"    {command}) _arguments {_zsh_option_specs(options)} ;;"
+        for command, options in commands.items()
+    )
+    return f"""#compdef review-gauntlet
+# zsh completion for review-gauntlet
+_review_gauntlet() {{
+  local -a commands
+  commands=({command_specs})
+  if (( CURRENT == 2 )); then
+    _describe 'command' commands
+    return
+  fi
+  case $words[2] in
+{cases}
+  esac
+}}
+_review_gauntlet "$@"
+"""
+
+
+def _zsh_option_specs(options: tuple[str, ...]) -> str:
+    return " ".join(repr(f"{option}[{option}]") for option in options)
+
+
+def _fish_completion_script(commands: dict[str, tuple[str, ...]]) -> str:
+    lines = ["# fish completion for review-gauntlet"]
+    for command, options in commands.items():
+        lines.append(f"complete -c review-gauntlet -f -n '__fish_use_subcommand' -a {command}")
+        for option in options:
+            condition = f"__fish_seen_subcommand_from {command}"
+            lines.append(f"complete -c review-gauntlet -f -n '{condition}' -l {option[2:]}")
+    return "\n".join(lines) + "\n"
+
+
 def main(argv: list[str] | None = None) -> None:
     if argv == ["--version"] or (argv is None and sys.argv[1:] == ["--version"]):
         print(f"review-gauntlet {__version__}")
         return
 
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    if args.command == "completion":
+        print(_completion_script(parser, args.shell), end="")
+        return
+
     root = Path(args.root)
     if not root.is_dir():
         fail(f"root does not exist or is not a directory: {root}")
