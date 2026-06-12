@@ -332,7 +332,7 @@ def _run_legacy_command(args: argparse.Namespace, root: Path) -> None:
             return
         print(_render_inventory_text(inventory))
         return
-    plan = build_plan(inventory)
+    plan = build_plan(_review_inventory(inventory))
     if args.command == "plan":
         if args.format == "json":
             print(plan.model_dump_json(indent=2))
