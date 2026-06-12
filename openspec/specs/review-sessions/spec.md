@@ -30,7 +30,7 @@ The review command SHALL support a positive integer `--concurrency` option, defa
 
 The review command SHALL support `--format text|json`, defaulting to `text`. For default human-audience runs, the review command SHALL expose review-run and per-cell progress on stderr while adapter work is in progress. Progress output SHALL NOT pollute stdout final output. When `--audience agent` is explicitly selected, the review command SHALL suppress decorative progress because agent callers do not need progress display. If the user interrupts the command, the review command SHALL cancel pending work, terminate in-flight command adapter subprocesses when possible, and leave unfinished cells in a non-reviewed state.
 
-<!-- Expected canonical result after archive: review documents `--format text|json`, default `text`, keeps `--audience human|agent`, and rejects `--format human`. -->
+If one or more selected cells fail after other selected cells have completed successfully, the review command SHALL persist coverage, findings, occurrences, and applicable fixed-finding verification for the successful cells before returning a failed command result. Failed cells SHALL remain non-reviewed and visible for later retry.
 
 #### Scenario: Human review reports progress without corrupting final output
 
@@ -52,6 +52,25 @@ The review command SHALL support `--format text|json`, defaulting to `text`. For
 **Given**: an active session
 **When**: the developer runs `review-gauntlet review --format human`
 **Then**: the command fails with a usage error
+
+#### Scenario: Partial failure preserves successful coverage
+
+**Given**: an active session where a review run selects multiple cells
+**And**: at least one selected cell succeeds
+**And**: at least one selected cell fails in the same run
+**When**: `review-gauntlet review` finalizes that run
+**Then**: every successful selected cell is recorded as reviewed with its findings and occurrences
+**And**: the final output reports the number of successful cells persisted in `reviewed_cells`
+**And**: the command exits with a failure result that identifies a failed cell
+**And**: failed cells remain pending or stale for later retry
+
+#### Scenario: Partial failure verifies only successful paths
+
+**Given**: an active session with fixed findings awaiting verification on two paths
+**And**: a review run succeeds for one path and fails for the other path
+**When**: `review-gauntlet review` finalizes that partial run
+**Then**: fixed-finding verification may update the finding for the successfully evaluated path
+**And**: the finding for the failed path remains `fixed_pending_verification`
 
 ### Requirement: Review rules and prompts SHALL port the pinned OCR corpus
 

@@ -62,6 +62,12 @@ def _finding_id(tmp_path: Path) -> str:
         return str(conn.execute("select finding_id from findings").fetchone()[0])
 
 
+def _finding_states_by_path(tmp_path: Path) -> dict[str, str]:
+    with sqlite3.connect(tmp_path / ".review-gauntlet" / "ledger.sqlite") as conn:
+        rows = conn.execute("select path, state from findings order by path").fetchall()
+    return {str(path): str(state) for path, state in rows}
+
+
 def _coverage_for_cell(tmp_path: Path, cell_id: str) -> str:
     with sqlite3.connect(tmp_path / ".review-gauntlet" / "ledger.sqlite") as conn:
         return str(
@@ -210,6 +216,85 @@ def test_fixed_finding_is_verified_only_when_relevant_path_is_reviewed(
     assert _finding_state(tmp_path) == "fixed_verified"
 
 
+def test_partial_failure_verifies_fixed_findings_only_for_successful_paths(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "app.py").write_text("print('hello')\n", encoding="utf-8")
+    _init_session(tmp_path, capsys)
+    readme_cell = _cell_for_path(tmp_path, "README.md")
+    app_cell = _cell_for_path(tmp_path, "app.py")
+    fixture = tmp_path / ".review-gauntlet" / "findings.json"
+    fixture.write_text(
+        json.dumps(
+            {
+                readme_cell: [
+                    {
+                        "path": "README.md",
+                        "content": "Docs issue",
+                        "existing_code": "# docs",
+                        "start_line": 1,
+                        "end_line": 1,
+                    }
+                ],
+                app_cell: [
+                    {
+                        "path": "app.py",
+                        "content": "Code issue",
+                        "existing_code": "print('hello')",
+                        "start_line": 1,
+                        "end_line": 1,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    main(["review", str(tmp_path), "--fixture", str(fixture), "--budget", "3", "--format", "json"])
+    capsys.readouterr()
+
+    with sqlite3.connect(tmp_path / ".review-gauntlet" / "ledger.sqlite") as conn:
+        finding_ids = [str(row[0]) for row in conn.execute("select finding_id from findings")]
+    for finding_id in finding_ids:
+        main(["mark", str(tmp_path), finding_id, "fixed", "--format", "json"])
+        capsys.readouterr()
+
+    script = (
+        "import json, re, sys; "
+        "match = re.search(r'cell_id: (\\S+)', sys.argv[1]); "
+        "cell_id = match.group(1) if match else 'missing'; "
+        f"\nif cell_id == {readme_cell!r}:\n"
+        "    print('not-json')\n"
+        "else:\n"
+        "    print(json.dumps({'comments':[]}))\n"
+    )
+    config = _command_config(tmp_path, script, name=".review-gauntlet/partial-review.json")
+
+    with pytest.raises(SystemExit) as excinfo:
+        main(
+            [
+                "review",
+                str(tmp_path),
+                "--config",
+                str(config),
+                "--budget",
+                "3",
+                "--concurrency",
+                "2",
+                "--format",
+                "json",
+            ]
+        )
+
+    data = json.loads(capsys.readouterr().out)
+    assert excinfo.value.code == 1
+    assert data["reviewed_cells"] == 2
+    assert data["failed_cell_id"] == readme_cell
+    assert _finding_states_by_path(tmp_path) == {
+        "README.md": "fixed_pending_verification",
+        "app.py": "fixed_verified",
+    }
+
+
 def test_fixed_finding_reopens_when_fingerprint_is_seen_again(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -296,13 +381,13 @@ def test_command_adapter_reviews_selected_cells_concurrently_with_isolated_artif
         assert (cell_dir / "verdict.json").is_file()
 
 
-def test_concurrent_review_failure_preserves_ordered_failure_contract(
+def test_concurrent_review_failure_persists_later_successes(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     (tmp_path / "app.py").write_text("print('hello')\n", encoding="utf-8")
     _init_session(tmp_path, capsys)
     ordered_cells = [str(row["cell_id"]) for row in SessionStore(tmp_path).list_cells()]
-    failing_cell = ordered_cells[1]
+    failing_cell = ordered_cells[0]
     script = (
         "import json, re, sys; "
         "match = re.search(r'cell_id: (\\S+)', sys.argv[1]); "
@@ -319,12 +404,19 @@ def test_concurrent_review_failure_preserves_ordered_failure_contract(
 
     data = json.loads(capsys.readouterr().out)
     assert excinfo.value.code == 1
-    assert data["reviewed_cells"] == 1
+    assert data["reviewed_cells"] == 2
+    assert data["finding_ids"] == []
     assert data["failed_cell_id"] == failing_cell
     assert "invalid verdict JSON" in data["error"]
-    assert _coverage_for_cell(tmp_path, ordered_cells[0]) == "reviewed"
+    assert data["coverage"]["reviewed"] == 2
     assert _coverage_for_cell(tmp_path, failing_cell) == "pending"
-    assert _coverage_for_cell(tmp_path, ordered_cells[2]) == "pending"
+    assert len(_reviewed_cell_ids(tmp_path)) == 2
+
+    _command_config(tmp_path, "import json; print(json.dumps({'comments':[]}))")
+    main(["review", str(tmp_path), "--budget", "1", "--format", "json"])
+    retry_data = json.loads(capsys.readouterr().out)
+    assert retry_data["reviewed_cells"] == 1
+    assert _coverage_for_cell(tmp_path, failing_cell) == "reviewed"
 
 
 def test_legacy_command_adapter_config_fails_clearly(
