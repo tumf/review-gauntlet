@@ -56,12 +56,18 @@ uv run review-gauntlet review --config review-gauntlet.jsonc
 ```
 
 Target selection happens on `init`; `review` only advances the active session once.
+A bare `init` now uses `.review-gauntlet/checkpoints/latest/status.json` when a
+complete usable checkpoint exists, reviewing from its `review_base_commit` to
+`HEAD`. If no checkpoint exists, bare `init` reviews all eligible files. Scripts
+that need the previous workspace-diff default must pass `--worktree` explicitly.
 OCR-compatible target mappings are:
 
 ```bash
-# OCR workspace diff review: staged, unstaged, and untracked non-ignored files.
+# Default review: latest finalized checkpoint -> HEAD, or all files for first review.
 uv run review-gauntlet init
-uv run review-gauntlet init --worktree  # explicit alias
+
+# OCR workspace diff review: staged, unstaged, and untracked non-ignored files.
+uv run review-gauntlet init --worktree
 
 # OCR branch/range review: files changed between two refs.
 uv run review-gauntlet init --from main --to HEAD
@@ -88,7 +94,16 @@ uv run review-gauntlet findings
 uv run review-gauntlet mark <finding-id> fixed --reason "fixed in follow-up"
 uv run review-gauntlet verify-fixes --config review-gauntlet.jsonc
 uv run review-gauntlet finalize
+# Finalize writes Git-reviewable JSON/Markdown snapshots atomically.
+git add .review-gauntlet/checkpoints/latest
 ```
+
+Successful `finalize` requires both coverage and live findings to be closed and
+review-universe files to match `HEAD`; dirty tracked, staged, unstaged, or
+untracked eligible files block checkpoint creation. It writes
+`.review-gauntlet/checkpoints/latest/status.json`, `findings.json`, `events.json`,
+and `summary.md`, then clears the active session so the next command is
+`review-gauntlet init`. There is intentionally no separate checkpoint command.
 
 `review --concurrency` defaults to `8` and must be a positive integer. `--budget`
 still caps the total cells selected for one review run; `--concurrency` only limits

@@ -69,6 +69,8 @@ class SessionStore:
         return session_id
 
     def active_session_id(self) -> str:
+        if not self.active_path.exists():
+            raise LookupError("no active review session; run review-gauntlet init")
         data = json.loads(self.active_path.read_text(encoding="utf-8"))
         return str(data["session_id"])
 

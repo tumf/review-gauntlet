@@ -32,7 +32,7 @@ def _cell_paths(root: Path) -> set[str]:
     return {str(row["file_path"]) for row in SessionStore(root).list_cells()}
 
 
-def test_default_init_scopes_to_workspace_diff(
+def test_default_init_without_checkpoint_uses_all_files(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _init_repo(tmp_path)
@@ -47,8 +47,9 @@ def test_default_init_scopes_to_workspace_diff(
 
     data = json.loads(capsys.readouterr().out)
     assert data["cell_count"] > 0
-    assert {"staged.py", "unstaged.py", "untracked.py"}.issubset(_cell_paths(tmp_path))
-    assert "unchanged.py" not in _cell_paths(tmp_path)
+    assert {"staged.py", "unstaged.py", "untracked.py", "unchanged.py"}.issubset(
+        _cell_paths(tmp_path)
+    )
 
 
 def test_explicit_worktree_matches_default_workspace_diff(
@@ -104,6 +105,59 @@ def test_branch_range_init_scopes_to_changed_files(
     assert _cell_paths(tmp_path) == {"feature.py"}
 
 
+def test_default_init_uses_latest_checkpoint_base_to_head(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_repo(tmp_path)
+    base = _git(tmp_path, "rev-parse", "HEAD")
+    _write_checkpoint(tmp_path, base)
+    (tmp_path / "after.py").write_text("print('after')\n", encoding="utf-8")
+    _git(tmp_path, "add", "after.py")
+    _git(tmp_path, "commit", "-m", "after")
+
+    main(["init", str(tmp_path), "--format", "json"])
+
+    assert json.loads(capsys.readouterr().out)["cell_count"] > 0
+    metadata = SessionStore(tmp_path).session_metadata()
+    assert metadata["target"]["kind"] == "branch"
+    assert metadata["target"]["base_ref"] == base
+    assert _cell_paths(tmp_path) == {"after.py"}
+
+
+def test_default_init_rejects_invalid_latest_checkpoint(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_repo(tmp_path)
+    _write_checkpoint(tmp_path, _git(tmp_path, "rev-parse", "HEAD"), usable=False)
+
+    with pytest.raises(SystemExit) as excinfo:
+        main(["init", str(tmp_path), "--format", "json"])
+
+    assert excinfo.value.code == 64
+    assert "not usable" in capsys.readouterr().err
+
+
+def test_default_init_rejects_non_ancestor_checkpoint(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_repo(tmp_path)
+    old = _git(tmp_path, "rev-parse", "HEAD")
+    (tmp_path / "other.py").write_text("print('other')\n", encoding="utf-8")
+    _git(tmp_path, "add", "other.py")
+    _git(tmp_path, "commit", "-m", "other")
+    _git(tmp_path, "checkout", "--orphan", "newroot")
+    (tmp_path / "fresh.py").write_text("print('fresh')\n", encoding="utf-8")
+    _git(tmp_path, "add", "fresh.py")
+    _git(tmp_path, "commit", "-m", "fresh")
+    _write_checkpoint(tmp_path, old)
+
+    with pytest.raises(SystemExit) as excinfo:
+        main(["init", str(tmp_path), "--format", "json"])
+
+    assert excinfo.value.code == 64
+    assert "not an ancestor" in capsys.readouterr().err
+
+
 def test_commit_init_scopes_to_commit_files_and_records_fixed_head(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -130,7 +184,7 @@ def test_init_then_all_init_allows_overlapping_review_cells(
     _init_repo(tmp_path)
     (tmp_path / "changed.py").write_text("print('changed')\n", encoding="utf-8")
 
-    main(["init", str(tmp_path), "--format", "json"])
+    main(["init", str(tmp_path), "--worktree", "--format", "json"])
     first = json.loads(capsys.readouterr().out)
     assert first["cell_count"] > 0
 
@@ -228,3 +282,23 @@ def test_review_still_advances_one_initialized_session(
     data = json.loads(capsys.readouterr().out)
     assert data["reviewed_cells"] == 1
     assert data["run_count"] == 1
+
+
+def _write_checkpoint(root: Path, base: str, *, usable: bool = True) -> None:
+    checkpoint_dir = root / ".review-gauntlet" / "checkpoints" / "latest"
+    checkpoint_dir.mkdir(parents=True, exist_ok=True)
+    status = {
+        "schema_version": 1,
+        "checkpoint_id": "RGC-test",
+        "checkpoint_state": "complete",
+        "usable_as_review_base": usable,
+        "review_base_commit": base,
+    }
+    (checkpoint_dir / "status.json").write_text(json.dumps(status), encoding="utf-8")
+    (checkpoint_dir / "findings.json").write_text(
+        json.dumps({"checkpoint_id": "RGC-test", "findings": []}), encoding="utf-8"
+    )
+    (checkpoint_dir / "events.json").write_text(
+        json.dumps({"checkpoint_id": "RGC-test", "events": []}), encoding="utf-8"
+    )
+    (checkpoint_dir / "summary.md").write_text("# checkpoint\n", encoding="utf-8")
