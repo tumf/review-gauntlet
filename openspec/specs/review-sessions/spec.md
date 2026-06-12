@@ -370,70 +370,21 @@ Session commands that emit summaries SHALL use `--format text` for human-readabl
 
 ### Requirement: Existing planning commands SHALL remain compatible
 
-The session workflow SHALL preserve the existing `inventory`, `plan`, and `report` command concepts while making legacy planning command output selection explicit. `inventory` and `plan` SHALL accept `--format json|text`, default to `text`, and SHALL no longer accept the legacy `--json` flag. JSON output for `inventory --format json` and `plan --format json` SHALL remain parseable using the existing Pydantic JSON contracts. `report --format text` SHALL emit the existing Markdown-style review matrix report body. Inventory generation SHALL exclude review-gauntlet-generated session state, common cache/build/editor artifacts, and files ignored by Git when Git-backed discovery is available, so coverage reflects the project review target rather than generated tool state. User-facing README command guidance SHALL present the session workflow as the primary review path and document `inventory`, `plan`, and `report` as diagnostic or legacy planning inspection commands rather than the first day-to-day entry points.
+Documentation for planning diagnostics SHALL use the current `--format json` output flag and SHALL NOT instruct users to run removed `--json` flags. Markdown report rendering SHALL preserve table structure by escaping or normalizing dynamic table-cell values such as IDs, statuses, checks, and evidence.
 
-<!-- Expected canonical result after archive: the planning command compatibility requirement documents `--format json|text` for inventory/plan, default text output, removal of the legacy `--json` flag, retained report behavior, and README guidance that places planning commands after the primary session workflow as diagnostic inspection commands. -->
+#### Scenario: Documentation uses current planning flags
 
-#### Scenario: Existing inventory JSON remains parseable
+**Given**: a reader follows repository smoke-command guidance
+**When**: they run the documented inventory or plan JSON command
+**Then**: the command uses `--format json`
+**And**: the command is accepted by the current parser
 
-**Given**: a repository with files to classify
-**When**: the developer runs `review-gauntlet inventory <root> --format json`
-**Then**: stdout is valid JSON emitted with the existing Pydantic JSON contract
+#### Scenario: Report escapes table separators
 
-#### Scenario: Existing plan JSON remains parseable
-
-**Given**: a repository with files to classify into review slices
-**When**: the developer runs `review-gauntlet plan <root> --format json`
-**Then**: stdout is valid JSON emitted with the existing Pydantic JSON contract
-
-#### Scenario: Inventory defaults to text output
-
-**Given**: a repository with files to classify
-**When**: the developer runs `review-gauntlet inventory <root>`
-**Then**: stdout is deterministic human-readable text
-**And**: stdout is not required to be parseable as JSON
-
-#### Scenario: Plan defaults to text output
-
-**Given**: a repository with files to classify into review slices
-**When**: the developer runs `review-gauntlet plan <root>`
-**Then**: stdout is deterministic human-readable text
-**And**: stdout is not required to be parseable as JSON
-
-#### Scenario: Legacy JSON flag is rejected for planning commands
-
-**Given**: a repository with files to classify
-**When**: the developer runs `review-gauntlet inventory <root> --json` or `review-gauntlet plan <root> --json`
-**Then**: argument parsing fails with a usage error
-
-#### Scenario: Existing report remains available as text
-
-**Given**: a repository with files to review
-**When**: the developer runs `review-gauntlet report <root>`
-**Then**: the command emits the existing Markdown-style review matrix report as text
-**And**: existing tests for report output continue to pass
-
-#### Scenario: Report accepts text format and rejects markdown format name
-
-**Given**: a repository with files to review
-**When**: the developer runs `review-gauntlet report <root> --format text`
-**Then**: the command emits the existing Markdown-style review matrix report as text
-**When**: the developer runs `review-gauntlet report <root> --format markdown`
-**Then**: argument parsing fails with a usage error
-
-#### Scenario: README leads with session workflow
-
-**Given**: a reader opens the README command guidance
-**When**: they follow the first operational Review Gauntlet review workflow shown after setup
-**Then**: the guidance starts with session initialization through `review-gauntlet init`
-**And**: it continues through one `review-gauntlet review` run and related session-state commands before introducing `inventory`, `plan`, or `report`
-
-#### Scenario: Planning commands are documented as diagnostics
-
-**Given**: a reader needs to inspect file discovery, slicing, or report rendering
-**When**: they read the README command guidance for `inventory`, `plan`, and `report`
-**Then**: those commands are still documented with example invocations
-**And**: the wording identifies them as diagnostic, inspection, or legacy planning commands rather than the primary review lifecycle
+**Given**: a review matrix row whose evidence contains a pipe character or newline
+**When**: `review-gauntlet report` renders markdown output
+**Then**: the coverage matrix remains a valid four-column markdown table
+**And**: evidence content is preserved in escaped or normalized form
 
 ### Requirement: Review execution SHALL support JSON and JSONC command adapter configuration
 
@@ -565,3 +516,25 @@ External command adapter verdicts SHALL be JSON objects containing a `comments` 
 **Then**: no finding occurrence is created from that result
 **And**: the selected cell is not marked reviewed
 **And**: the review command exits non-zero with failure artifacts preserved
+
+### Requirement: Bootstrap instructions SHALL avoid mutable remote code execution
+
+Repository bootstrap scripts SHALL NOT execute mutable remote installer content directly without pinning or integrity verification. If an automatic installer is used, the downloaded artifact SHALL be pinned and verified before execution; otherwise the script SHALL fail closed with an actionable instruction.
+
+#### Scenario: Worktree setup does not pipe latest installer to shell
+
+**Given**: a developer runs `.wt/setup` in a new worktree without the required hook tool installed
+**When**: the setup script reaches hook installation
+**Then**: it does not execute `curl ... | sh` from a mutable latest URL
+**And**: it either verifies a pinned installer before execution or fails with instructions to install the tool manually
+
+### Requirement: README design documentation SHALL describe implemented review execution
+
+The README Design section SHALL reflect the current implemented capabilities: inventory/plan/report diagnostics, durable review sessions, command adapter execution, finding tracking, and finalization.
+
+#### Scenario: README design section is current
+
+**Given**: a reader opens the README Design section
+**When**: they read the closing design description
+**Then**: it does not claim that the project only creates inventory, plans, and matrices
+**And**: it acknowledges the implemented session lifecycle and external command adapter support
