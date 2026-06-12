@@ -4,6 +4,8 @@ from pathlib import Path
 import pytest
 
 from review_gauntlet.cli import main
+from review_gauntlet.models import MatrixRow, ReviewCheck, ReviewMatrix, ReviewPlan, ReviewSlice
+from review_gauntlet.report import render_markdown_report
 
 
 def test_cli_inventory_outputs_json(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -84,6 +86,36 @@ def test_cli_report_format_text_outputs_markdown(
     assert "# Review Gauntlet Report" in output
     assert "docs-accuracy" in output
     assert "NEEDS_REVIEW" in output
+
+
+def test_markdown_report_escapes_table_cell_pipes_and_newlines() -> None:
+    plan = ReviewPlan(
+        root="/repo",
+        slices=(
+            ReviewSlice(
+                id="docs|api",
+                title="Docs",
+                files=("README.md",),
+                checks=(ReviewCheck(id="docs|accuracy", title="Docs", why="Evidence"),),
+            ),
+        ),
+    )
+    matrix = ReviewMatrix(
+        root="/repo",
+        rows=(
+            MatrixRow(
+                slice_id="docs|api",
+                check_id="docs|accuracy",
+                evidence="finding RGF|0001\r\nline two\npath C:\\tmp",
+            ),
+        ),
+    )
+
+    output = render_markdown_report(plan, matrix)
+
+    assert "`docs\\|api`" in output
+    assert "docs\\|accuracy" in output
+    assert "finding RGF\\|0001<br>line two<br>path C:\\\\tmp" in output
 
 
 @pytest.mark.parametrize(
