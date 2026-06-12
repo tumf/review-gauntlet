@@ -1,0 +1,271 @@
+{
+  "checkpoint_id": "RGC-a597b7ffc2c0-RGS-7372f688802f",
+  "events": [
+    {
+      "checkpoint_id": "RGC-a597b7ffc2c0-RGS-7372f688802f",
+      "created_at": "2026-06-12 21:13:04",
+      "event_id": 78,
+      "finding_id": "RGF-0050",
+      "from_state": "untriaged",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "\u4fee\u6b63\u6e08\u307f: cleanup failure\u3092finalize\u5931\u6557\u306b\u3057\u306a\u3044\u3088\u3046\u306b\u3057\u305f",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-a597b7ffc2c0-RGS-7372f688802f",
+      "created_at": "2026-06-12 21:13:04",
+      "event_id": 79,
+      "finding_id": "RGF-0051",
+      "from_state": "untriaged",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "\u4fee\u6b63\u6e08\u307f: checkpoint schema_version\u691c\u8a3c\u3092\u8ffd\u52a0",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-a597b7ffc2c0-RGS-7372f688802f",
+      "created_at": "2026-06-12 21:13:04",
+      "event_id": 80,
+      "finding_id": "RGF-0052",
+      "from_state": "untriaged",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "\u4fee\u6b63\u6e08\u307f: review_base_commit\u306e\u578b\u691c\u8a3c\u3092\u8ffd\u52a0",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-a597b7ffc2c0-RGS-7372f688802f",
+      "created_at": "2026-06-12 21:13:04",
+      "event_id": 81,
+      "finding_id": "RGF-0053",
+      "from_state": "untriaged",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "\u4fee\u6b63\u6e08\u307f: findings --mark\u306ehyphen/underscore\u5bfe\u5fdc\u3092\u8ffd\u52a0",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-a597b7ffc2c0-RGS-7372f688802f",
+      "created_at": "2026-06-12 21:13:04",
+      "event_id": 82,
+      "finding_id": "RGF-0054",
+      "from_state": "untriaged",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "\u4fee\u6b63\u6e08\u307f: schema_version\u691c\u8a3c\u3068\u56de\u5e30\u30c6\u30b9\u30c8\u3092\u8ffd\u52a0",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-a597b7ffc2c0-RGS-7372f688802f",
+      "created_at": "2026-06-12 21:14:30",
+      "event_id": 83,
+      "finding_id": "RGF-0050",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-a597b7ffc2c0-RGS-7372f688802f",
+      "created_at": "2026-06-12 21:14:30",
+      "event_id": 84,
+      "finding_id": "RGF-0052",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-a597b7ffc2c0-RGS-7372f688802f",
+      "created_at": "2026-06-12 21:14:30",
+      "event_id": 85,
+      "finding_id": "RGF-0054",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-a597b7ffc2c0-RGS-7372f688802f",
+      "created_at": "2026-06-12 21:14:30",
+      "event_id": 86,
+      "finding_id": "RGF-0053",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-a597b7ffc2c0-RGS-7372f688802f",
+      "created_at": "2026-06-12 21:14:30",
+      "event_id": 87,
+      "finding_id": "RGF-0051",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-a597b7ffc2c0-RGS-7372f688802f",
+      "created_at": "2026-06-12 21:16:46",
+      "event_id": 88,
+      "finding_id": "RGF-0055",
+      "from_state": "untriaged",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "\u4fee\u6b63\u6e08\u307f: checkpoint_id\u306e\u578b\u691c\u8a3c\u3092\u8ffd\u52a0",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-a597b7ffc2c0-RGS-7372f688802f",
+      "created_at": "2026-06-12 21:19:14",
+      "event_id": 89,
+      "finding_id": "RGF-0055",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-a597b7ffc2c0-RGS-7372f688802f",
+      "created_at": "2026-06-12 21:21:00",
+      "event_id": 90,
+      "finding_id": "RGF-0056",
+      "from_state": "untriaged",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "\u4fee\u6b63\u6e08\u307f: findings/events\u306epayload list\u691c\u8a3c\u3092\u8ffd\u52a0",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-a597b7ffc2c0-RGS-7372f688802f",
+      "created_at": "2026-06-12 21:22:32",
+      "event_id": 91,
+      "finding_id": "RGF-0056",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-a597b7ffc2c0-RGS-7372f688802f",
+      "created_at": "2026-06-12 21:47:55",
+      "event_id": 92,
+      "finding_id": "RGF-0057",
+      "from_state": "untriaged",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "\u4fee\u6b63\u6e08\u307f: argparse usage error\u306eexit code\u309264\u306b\u7d71\u4e00",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-a597b7ffc2c0-RGS-7372f688802f",
+      "created_at": "2026-06-12 21:55:30",
+      "event_id": 93,
+      "finding_id": "RGF-0057",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-a597b7ffc2c0-RGS-7372f688802f",
+      "created_at": "2026-06-12 22:00:32",
+      "event_id": 94,
+      "finding_id": "RGF-0058",
+      "from_state": "untriaged",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "\u4fee\u6b63\u6e08\u307f: latest\u7f6e\u63db\u5931\u6557\u6642\u306b\u65e7checkpoint\u3092\u5fa9\u5143",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-a597b7ffc2c0-RGS-7372f688802f",
+      "created_at": "2026-06-12 22:00:32",
+      "event_id": 95,
+      "finding_id": "RGF-0059",
+      "from_state": "untriaged",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "\u4fee\u6b63\u6e08\u307f: {output_file}\u3092\u89e3\u6c7a\u6e08\u307ffile-json output path\u306b\u5408\u308f\u305b\u305f",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-a597b7ffc2c0-RGS-7372f688802f",
+      "created_at": "2026-06-12 22:02:11",
+      "event_id": 96,
+      "finding_id": "RGF-0059",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-a597b7ffc2c0-RGS-7372f688802f",
+      "created_at": "2026-06-12 22:02:11",
+      "event_id": 97,
+      "finding_id": "RGF-0058",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-a597b7ffc2c0-RGS-7372f688802f",
+      "created_at": "2026-06-12 22:07:27",
+      "event_id": 98,
+      "finding_id": "RGF-0060",
+      "from_state": "untriaged",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "\u4fee\u6b63\u6e08\u307f: file-json verdict output\u306e\u30b5\u30a4\u30ba\u4e0a\u9650\u3092\u8ffd\u52a0",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-a597b7ffc2c0-RGS-7372f688802f",
+      "created_at": "2026-06-12 22:09:38",
+      "event_id": 99,
+      "finding_id": "RGF-0060",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-a597b7ffc2c0-RGS-7372f688802f",
+      "created_at": "2026-06-12 22:11:46",
+      "event_id": 100,
+      "finding_id": "RGF-0061",
+      "from_state": "untriaged",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "\u8aa4\u691c\u77e5: \u8ca0\u306ereturncode\u306ftruthy\u306a\u306e\u30670\u306b\u306f\u306a\u3089\u305a\u3001\u76f4\u524d\u306ecancelled\u5206\u5c90\u3067fail\u3059\u308b",
+      "to_state": "false_positive"
+    }
+  ]
+}
