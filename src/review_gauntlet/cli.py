@@ -12,6 +12,11 @@ from pathlib import Path
 from typing import Any, NoReturn, cast
 
 from review_gauntlet.__about__ import __version__
+from review_gauntlet.checkpoint import (
+    DirtyReviewUniverseError,
+    target_from_latest_checkpoint,
+    write_latest_checkpoint,
+)
 from review_gauntlet.config import ConfigError, load_config
 from review_gauntlet.findings import FindingState, normalize_ocr_comment
 from review_gauntlet.inventory import (
@@ -399,14 +404,27 @@ def _run_session_command(args: argparse.Namespace, root: Path) -> None:
 
 
 def _cmd_init(args: argparse.Namespace, root: Path, store: SessionStore) -> None:
-    target = resolve_target(
-        root=root,
-        base_ref=args.base_ref,
-        head_ref=args.head_ref,
-        worktree=bool(args.worktree),
-        commit=args.commit,
-        all_files=bool(args.all_files),
+    explicit_target = bool(
+        args.base_ref or args.head_ref or args.worktree or args.commit or args.all_files
     )
+    if explicit_target:
+        target = resolve_target(
+            root=root,
+            base_ref=args.base_ref,
+            head_ref=args.head_ref,
+            worktree=bool(args.worktree),
+            commit=args.commit,
+            all_files=bool(args.all_files),
+        )
+    else:
+        target = target_from_latest_checkpoint(root) or resolve_target(
+            root=root,
+            base_ref=None,
+            head_ref=None,
+            worktree=False,
+            commit=None,
+            all_files=True,
+        )
     ruleset = load_ruleset()
     plan = _build_target_plan(root, target)
     cells = cells_from_plan(plan, file_digests(root))
@@ -976,13 +994,33 @@ def _normalize_finding_path(path: str) -> str:
 
 def _finalize(store: SessionStore, root: Path) -> dict[str, object]:
     status = _status(store, root)
-    if status["can_finalize"]:
-        with store.connect() as conn:
-            conn.execute(
-                "update sessions set state = 'finalized' where session_id = ?",
-                (status["session_id"],),
-            )
-        status["session_state"] = "finalized"
+    if not status["can_finalize"]:
+        try:
+            from review_gauntlet.checkpoint import assert_review_universe_clean
+
+            assert_review_universe_clean(root)
+        except DirtyReviewUniverseError as exc:
+            blockers = cast(list[str], status["finalize_blockers"])
+            if str(exc) not in blockers:
+                status["finalize_blockers"] = [*blockers, str(exc)]
+        return status
+    try:
+        checkpoint = write_latest_checkpoint(store, root, str(status["session_id"]), status)
+    except DirtyReviewUniverseError as exc:
+        status["can_finalize"] = False
+        status["finalize_blockers"] = [*cast(list[str], status["finalize_blockers"]), str(exc)]
+        status["next_required_action"] = "resolve_finalize_blockers"
+        return status
+    with store.connect() as conn:
+        conn.execute(
+            "update sessions set state = 'finalized' where session_id = ?",
+            (status["session_id"],),
+        )
+    if store.active_path.exists():
+        store.active_path.unlink()
+    status.update(checkpoint)
+    status["session_state"] = "finalized"
+    status["can_finalize"] = True
     return status
 
 
