@@ -6,7 +6,7 @@
 - [x] Ensure session initialization omits package files from review cells for worktree/diff target planning. (verification: integration - `tests/test_init_targets.py` creates changed package files such as `uv.lock`, `package-lock.json`, and `Cargo.lock` alongside changed source and asserts only source paths appear in `SessionStore.list_cells()`)
 - [x] Ensure explicit full-repository review omits package files from review cells while preserving normal source files. (verification: integration - `tests/test_init_targets.py` extends the `--all` exclusion test or adds an equivalent case covering representative package files)
 - [x] Ensure review universe digest inputs omit package files by default. (verification: unit or integration - a test in `tests/test_init_targets.py` or a focused target test proves package-only changes do not add review cells or package paths to the current review universe)
-- [x] Update README default file filtering documentation to describe package manifest and lock file review exclusions while clarifying that inventory may still classify them. (verification: manual - repository evidence: `README.md:103-117` documents review-path package manifest and lock-file exclusions, inventory-vs-review distinction, and package-adjacent executable eligibility)
+- [x] Update README default file filtering documentation to describe package manifest and lock file review exclusions while clarifying that inventory may still classify them. (verification: repository evidence - `README.md:103-117`; runnable check: `uv run pytest tests/test_inventory.py tests/test_init_targets.py`)
 - [x] Run focused verification for filtering and target selection behavior. (verification: integration - `uv run pytest tests/test_inventory.py tests/test_init_targets.py` passes)
 - [x] Run the project quality gate after implementation. (verification: integration - `make check` passes)
 
@@ -19,3 +19,7 @@ Expected archive gate: `cflx openspec validate exclude-package-files-from-review
 ## Acceptance Notes
 
 Archive commitability was previously blocked by the real archive-gate validation step because `tasks.md:9` used a manual verification note. The task now cites repository-verifiable README path and line evidence instead of manual inspection.
+
+## Acceptance Notes
+
+The previous archive-gate failure was addressed by changing the README documentation task evidence from a manual verification note to repository-verifiable evidence plus a runnable focused test command. Focused verification passed via agent-exec job `a29dd9810fc5a7a0840bb6256e1c7a9f`.

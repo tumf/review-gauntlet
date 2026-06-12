@@ -6,7 +6,7 @@ import pytest
 
 from review_gauntlet.cli import main
 from review_gauntlet.session_store import SessionStore
-from review_gauntlet.targets import file_digests, review_universe_files
+from review_gauntlet.targets import file_digests, review_universe_files, target_digest
 
 
 def _git(root: Path, *args: str) -> str:
@@ -174,9 +174,13 @@ def test_review_universe_and_file_digests_omit_package_files(tmp_path: Path) -> 
         path.relative_to(tmp_path).as_posix() for path in review_universe_files(tmp_path)
     }
     digest_paths = set(file_digests(tmp_path))
+    baseline_target_digest = target_digest(tmp_path)
+    (tmp_path / "uv.lock").write_text("version = 2\n", encoding="utf-8")
+    (tmp_path / "package-lock.json").write_text('{"lockfileVersion": 3}\n', encoding="utf-8")
 
     assert universe_paths == {"src/app.py"}
     assert digest_paths == {"src/app.py"}
+    assert target_digest(tmp_path) == baseline_target_digest
 
 
 @pytest.mark.parametrize("flag", ["--from", "--to", "--commit", "--worktree", "--all"])
