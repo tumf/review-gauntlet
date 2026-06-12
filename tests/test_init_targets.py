@@ -6,6 +6,7 @@ import pytest
 
 from review_gauntlet.cli import main
 from review_gauntlet.session_store import SessionStore
+from review_gauntlet.targets import file_digests, review_universe_files
 
 
 def _git(root: Path, *args: str) -> str:
@@ -61,6 +62,9 @@ def test_explicit_worktree_matches_default_workspace_diff(
     )
     (tmp_path / "app.spec.ts").write_text("test('changed', () => {})\n", encoding="utf-8")
     (tmp_path / "foo_test.rs").write_text("#[test]\nfn it_works() {}\n", encoding="utf-8")
+    (tmp_path / "uv.lock").write_text("version = 1\n", encoding="utf-8")
+    (tmp_path / "package-lock.json").write_text("{}\n", encoding="utf-8")
+    (tmp_path / "Cargo.lock").write_text("# lock\n", encoding="utf-8")
 
     main(["init", str(tmp_path), "--worktree", "--format", "json"])
 
@@ -134,6 +138,9 @@ def test_all_init_uses_full_inventory_and_exclusions(
     (tmp_path / "openspec" / "specs" / "spec.md").write_text("# spec\n", encoding="utf-8")
     (tmp_path / "foo_test.go").write_text("package main\n", encoding="utf-8")
     (tmp_path / "foo_test.rs").write_text("#[test]\nfn it_works() {}\n", encoding="utf-8")
+    (tmp_path / "uv.lock").write_text("version = 1\n", encoding="utf-8")
+    (tmp_path / "package.json").write_text("{}\n", encoding="utf-8")
+    (tmp_path / "Cargo.lock").write_text("# lock\n", encoding="utf-8")
     state_dir = tmp_path / ".review-gauntlet"
     state_dir.mkdir()
     (state_dir / "ignored.py").write_text("print('ignored')\n", encoding="utf-8")
@@ -147,7 +154,25 @@ def test_all_init_uses_full_inventory_and_exclusions(
     assert "openspec/specs/spec.md" not in paths
     assert "foo_test.go" not in paths
     assert "foo_test.rs" not in paths
+    assert "uv.lock" not in paths
+    assert "package.json" not in paths
+    assert "Cargo.lock" not in paths
     assert ".review-gauntlet/ignored.py" not in paths
+
+
+def test_review_universe_and_file_digests_omit_package_files(tmp_path: Path) -> None:
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "app.py").write_text("print('ok')\n", encoding="utf-8")
+    (tmp_path / "uv.lock").write_text("version = 1\n", encoding="utf-8")
+    (tmp_path / "package-lock.json").write_text("{}\n", encoding="utf-8")
+
+    universe_paths = {
+        path.relative_to(tmp_path).as_posix() for path in review_universe_files(tmp_path)
+    }
+    digest_paths = set(file_digests(tmp_path))
+
+    assert universe_paths == {"src/app.py"}
+    assert digest_paths == {"src/app.py"}
 
 
 @pytest.mark.parametrize("flag", ["--from", "--to", "--commit", "--worktree", "--all"])

@@ -105,8 +105,16 @@ and digests. Files can remain classifiable in general inventory, but `init` omit
 `openspec/`, `tests/`, and `docs/` by default, as well as common OCR-style test or
 generated paths such as `__tests__/`, `*_test.go`, `*Test.java`, `*Test.kt`,
 `*.spec.ts`, `*.test.tsx`, `test_*.py`, `*_spec.rb`, `*.spec.ets`, and
-`*.test.ets`. Normal source files outside those directories and patterns remain
-eligible for review cells.
+`*.test.ets`. Review cells and target digests also omit common package manifests
+and lock files such as `uv.lock`, `poetry.lock`, `requirements*.txt`,
+`package.json`, `package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`, `Cargo.toml`,
+`Cargo.lock`, `go.mod`, `go.sum`, `pom.xml`, `Gemfile.lock`, `composer.lock`,
+`Package.resolved`, `pubspec.lock`, `mix.lock`, `vcpkg.json`, `flake.lock`,
+`stack.yaml.lock`, `Manifest.toml`, and `renv.lock`. These package files are not
+removed from general inventory unless another artifact or Git ignore rule excludes
+them. Normal source files and package-adjacent executable logic files such as
+`setup.py`, `build.gradle`, `mix.exs`, and `build.zig` remain eligible for review
+cells.
 
 `review` discovers configuration in this order: explicit `--config`,
 `.review-gauntlet/config.jsonc`, `.review-gauntlet/config.json`,

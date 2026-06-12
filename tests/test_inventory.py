@@ -1,6 +1,8 @@
 import subprocess
 from pathlib import Path
 
+import pytest
+
 from review_gauntlet.inventory import build_inventory, should_include_review_relative_path
 from review_gauntlet.models import FileCategory
 
@@ -108,6 +110,87 @@ def test_review_path_filter_excludes_default_review_noise() -> None:
 
     assert all(should_include_review_relative_path(path) for path in eligible)
     assert not any(should_include_review_relative_path(path) for path in excluded)
+
+
+PACKAGE_REVIEW_EXCLUDED_PATHS = [
+    "uv.lock",
+    "poetry.lock",
+    "Pipfile",
+    "Pipfile.lock",
+    "requirements.txt",
+    "requirements-dev.txt",
+    "constraints.txt",
+    "constraints-ci.txt",
+    "environment.yml",
+    "environment.yaml",
+    "package.json",
+    "package-lock.json",
+    "npm-shrinkwrap.json",
+    "yarn.lock",
+    "pnpm-lock.yaml",
+    "bun.lock",
+    "bun.lockb",
+    "deno.json",
+    "deno.jsonc",
+    "deno.lock",
+    "Cargo.toml",
+    "Cargo.lock",
+    "go.mod",
+    "go.sum",
+    "go.work",
+    "go.work.sum",
+    "pom.xml",
+    "gradle.lockfile",
+    "gradle/libs.versions.toml",
+    "Gemfile",
+    "Gemfile.lock",
+    "example.gemspec",
+    "composer.json",
+    "composer.lock",
+    "Package.swift",
+    "Package.resolved",
+    "pubspec.yaml",
+    "pubspec.lock",
+    "mix.lock",
+    "rebar.lock",
+    "vcpkg.json",
+    "vcpkg-lock.json",
+    "conanfile.txt",
+    "flake.lock",
+    "cabal.project.freeze",
+    "stack.yaml.lock",
+    "package.yaml",
+    "Manifest.toml",
+    "renv.lock",
+]
+
+
+@pytest.mark.parametrize("relative_path", PACKAGE_REVIEW_EXCLUDED_PATHS)
+def test_review_path_filter_excludes_package_files(relative_path: str) -> None:
+    assert not should_include_review_relative_path(relative_path)
+
+
+def test_package_files_remain_in_general_inventory(tmp_path: Path) -> None:
+    package_files = ["uv.lock", "package.json", "Cargo.lock"]
+    for relative in ["src/app.py", *package_files]:
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("content\n", encoding="utf-8")
+
+    inventory_paths = {file.path for file in build_inventory(tmp_path).files}
+
+    assert set(package_files) <= inventory_paths
+    assert "src/app.py" in inventory_paths
+
+
+@pytest.mark.parametrize(
+    "relative_path",
+    ["setup.py", "build.gradle", "build.gradle.kts", "mix.exs", "conanfile.py", "build.zig"],
+)
+def test_review_path_filter_keeps_package_adjacent_executable_logic(
+    relative_path: str,
+) -> None:
+    assert should_include_review_relative_path(relative_path)
 
 
 def test_git_inventory_excludes_review_gauntlet_state(tmp_path: Path) -> None:
