@@ -106,7 +106,7 @@ def test_markdown_report_escapes_table_cell_pipes_and_newlines() -> None:
             MatrixRow(
                 slice_id="docs|api",
                 check_id="docs|accuracy",
-                evidence="finding RGF|0001\nline two",
+                evidence="finding RGF|0001\r\nline two\npath C:\\tmp",
             ),
         ),
     )
@@ -115,7 +115,7 @@ def test_markdown_report_escapes_table_cell_pipes_and_newlines() -> None:
 
     assert "`docs\\|api`" in output
     assert "docs\\|accuracy" in output
-    assert "finding RGF\\|0001<br>line two" in output
+    assert "finding RGF\\|0001<br>line two<br>path C:\\\\tmp" in output
 
 
 @pytest.mark.parametrize(
