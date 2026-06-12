@@ -53,6 +53,7 @@ finding decisions, and finalize only when both coverage and findings are closed:
 uv run review-gauntlet status
 uv run review-gauntlet findings
 uv run review-gauntlet mark <finding-id> fixed --reason "fixed in follow-up"
+uv run review-gauntlet verify-fixes --config review-gauntlet.jsonc
 uv run review-gauntlet finalize
 ```
 

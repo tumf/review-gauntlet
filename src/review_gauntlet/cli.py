@@ -136,6 +136,17 @@ def build_parser() -> argparse.ArgumentParser:
     _output_format_arg(review)
     review.add_argument("--audience", choices=("human", "agent"), default="human")
 
+    verify_fixes = subparsers.add_parser("verify-fixes")
+    verify_fixes.add_argument("root", nargs="?", default=".")
+    verify_fixes.add_argument("--budget", type=int, default=50)
+    verify_fixes.add_argument("--concurrency", type=int, default=8)
+    verify_fixes.add_argument("--fixture", type=Path)
+    verify_fixes.add_argument("--config", type=Path)
+    _output_format_arg(verify_fixes)
+    verify_fixes.add_argument("--audience", choices=("human", "agent"), default="human")
+    verify_fixes.add_argument("--finding", action="append", default=[])
+    verify_fixes.add_argument("--path", action="append", default=[])
+
     status = subparsers.add_parser("status")
     status.add_argument("root", nargs="?", default=".")
     _output_format_arg(status)
@@ -243,6 +254,8 @@ def _run_session_command(args: argparse.Namespace, root: Path) -> None:
         _cmd_init(args, root, store)
     elif args.command == "review":
         _cmd_review(args, root, store)
+    elif args.command == "verify-fixes":
+        _cmd_verify_fixes(args, root, store)
     elif args.command == "status":
         _emit(_status(store, root), args.format)
     elif args.command == "findings":
@@ -414,6 +427,209 @@ def _cmd_review(args: argparse.Namespace, root: Path, store: SessionStore) -> No
         {"run_id": run_id, "reviewed_cells": reviewed, "finding_ids": finding_ids, **status},
         args.format,
     )
+
+
+def _cmd_verify_fixes(args: argparse.Namespace, root: Path, store: SessionStore) -> None:
+    if args.concurrency < 1:
+        fail("verify-fixes --concurrency must be a positive integer")
+    session_id = store.active_session_id()
+    metadata = store.session_metadata(session_id)
+    target = TargetSpec.model_validate(metadata["target"])
+    _reconcile_cells(store, root, target)
+    target_rows = _fixed_pending_targets(
+        store,
+        session_id,
+        finding_filters=tuple(args.finding),
+        path_filters=tuple(args.path),
+    )
+    result_base = _verify_fixes_result_base(
+        store=store,
+        root=root,
+        session_id=session_id,
+        run_id=None,
+        reviewed=0,
+        finding_ids=[],
+        targeted_rows=target_rows,
+        fixed_verified_ids=[],
+        reopened_ids=[],
+        unverifiable_ids=[str(row["finding_id"]) for row in target_rows],
+    )
+    if args.budget <= 0 or not target_rows:
+        _emit(result_base, args.format)
+        return
+
+    selected_cells = _select_verify_fix_cells(
+        current_cells=cells_from_plan(_build_target_plan(root, target), file_digests(root)),
+        target_pairs={(str(row["path"]), str(row["rule_id"])) for row in target_rows},
+        budget=args.budget,
+    )
+    if not selected_cells:
+        _emit(result_base, args.format)
+        raise SystemExit(1)
+
+    ruleset = load_ruleset()
+    digest = target_digest(root)
+    adapter_config = load_config(root, args.config) if args.fixture is None else None
+    run_id = store.create_run(session_id, digest)
+    if args.fixture is not None:
+        adapter: ReviewAdapter = FakeReviewAdapter(args.fixture)
+    elif adapter_config is not None:
+        _config_path, config = adapter_config
+        adapter = CommandReviewAdapter(
+            config=config.adapter,
+            root=root,
+            state_dir=store.state_dir,
+            run_id=run_id,
+            ruleset=ruleset,
+        )
+    else:
+        raise ValueError("verify-fixes requires --fixture or a command adapter config")
+    reporter = ReviewProgressReporter(enabled=args.audience == "human")
+    reporter.run_start(
+        session_id=session_id,
+        run_id=run_id,
+        selected_count=len(selected_cells),
+        budget=args.budget,
+        concurrency=args.concurrency,
+        adapter_identity=_adapter_identity(adapter),
+        timeout_seconds=_adapter_timeout_seconds(adapter),
+        artifact_dir=store.state_dir / "runs" / str(run_id),
+    )
+    results = review_cells_concurrently(
+        adapter, selected_cells, concurrency=args.concurrency, reporter=reporter
+    )
+    reviewed = 0
+    finding_ids: list[str] = []
+    seen_fingerprints: set[str] = set()
+    evaluated_paths: set[str] = set()
+    first_failure: tuple[ReviewCell, ReviewAdapterError] | None = None
+    for selected in selected_cells:
+        outcome = results[selected.id]
+        if isinstance(outcome, ReviewAdapterError):
+            if first_failure is None:
+                first_failure = (selected, outcome)
+            continue
+        evaluated_paths.add(selected.file_path)
+        for comment in outcome.comments:
+            finding = normalize_ocr_comment(
+                comment,
+                repository_id=str(root.resolve()),
+                base_target=json.dumps(metadata["target"], sort_keys=True),
+                rule_id=selected.rule_id,
+                ruleset_digest=ruleset.digest,
+            )
+            seen_fingerprints.add(finding.fingerprint)
+            finding_ids.append(store.upsert_finding(session_id, run_id, selected.id, finding))
+        store.mark_cell_reviewed(session_id, selected)
+        reviewed += 1
+
+    target_ids = {str(row["finding_id"]) for row in target_rows}
+    store.verify_fixed_findings(session_id, seen_fingerprints, evaluated_paths, target_ids)
+    states = _finding_states(store, session_id, target_ids)
+    fixed_verified_ids = sorted(
+        finding_id for finding_id, state in states.items() if state == FindingState.FIXED_VERIFIED
+    )
+    reopened_ids = sorted(
+        finding_id for finding_id, state in states.items() if state == FindingState.REOPENED
+    )
+    unverifiable_ids = sorted(
+        finding_id
+        for finding_id, state in states.items()
+        if state == FindingState.FIXED_PENDING_VERIFICATION
+    )
+    result = _verify_fixes_result_base(
+        store=store,
+        root=root,
+        session_id=session_id,
+        run_id=run_id,
+        reviewed=reviewed,
+        finding_ids=finding_ids,
+        targeted_rows=target_rows,
+        fixed_verified_ids=fixed_verified_ids,
+        reopened_ids=reopened_ids,
+        unverifiable_ids=unverifiable_ids,
+    )
+    if first_failure is not None:
+        failed_cell, error = first_failure
+        result.update(
+            {"failed_cell_id": failed_cell.id, "error": str(error), "failure": error.failure}
+        )
+    _emit(result, args.format)
+    if first_failure is not None or reopened_ids or unverifiable_ids:
+        raise SystemExit(1)
+
+
+def _fixed_pending_targets(
+    store: SessionStore,
+    session_id: str,
+    *,
+    finding_filters: tuple[str, ...],
+    path_filters: tuple[str, ...],
+) -> list[Any]:
+    normalized_path_filters = tuple(_normalize_finding_path(path) for path in path_filters)
+    requested_ids = set(finding_filters)
+    rows = store.list_fixed_pending_findings(session_id)
+    return [
+        row
+        for row in rows
+        if (not requested_ids or str(row["finding_id"]) in requested_ids)
+        and _matches_finding_path_filters(str(row["path"]), normalized_path_filters)
+    ]
+
+
+def _select_verify_fix_cells(
+    *, current_cells: tuple[ReviewCell, ...], target_pairs: set[tuple[str, str]], budget: int
+) -> list[ReviewCell]:
+    selected: list[ReviewCell] = []
+    seen_pairs: set[tuple[str, str]] = set()
+    for cell in current_cells:
+        if len(selected) >= budget:
+            break
+        pair = (cell.file_path, cell.rule_id)
+        if pair in target_pairs and pair not in seen_pairs:
+            selected.append(cell)
+            seen_pairs.add(pair)
+    return selected
+
+
+def _finding_states(
+    store: SessionStore, session_id: str, finding_ids: set[str]
+) -> dict[str, FindingState]:
+    if not finding_ids:
+        return {}
+    placeholders = ",".join("?" for _ in finding_ids)
+    query = (
+        "select finding_id, state from findings "
+        f"where session_id = ? and finding_id in ({placeholders})"
+    )
+    with store.connect() as conn:
+        rows = conn.execute(query, (session_id, *sorted(finding_ids))).fetchall()
+    return {str(row["finding_id"]): FindingState(str(row["state"])) for row in rows}
+
+
+def _verify_fixes_result_base(
+    *,
+    store: SessionStore,
+    root: Path,
+    session_id: str,
+    run_id: int | None,
+    reviewed: int,
+    finding_ids: list[str],
+    targeted_rows: list[Any],
+    fixed_verified_ids: list[str],
+    reopened_ids: list[str],
+    unverifiable_ids: list[str],
+) -> dict[str, object]:
+    return {
+        "run_id": run_id,
+        "reviewed_cells": reviewed,
+        "targeted_finding_ids": [str(row["finding_id"]) for row in targeted_rows],
+        "fixed_verified_ids": fixed_verified_ids,
+        "reopened_ids": reopened_ids,
+        "unverifiable_ids": unverifiable_ids,
+        "finding_ids": finding_ids,
+        **_status(store, root),
+    }
 
 
 def _select_review_cells(
@@ -711,7 +927,7 @@ def _next_action(
     ):
         return "triage_findings"
     if finding_counts.get("fixed_pending_verification", 0):
-        return "run_review_to_verify_fixes"
+        return "run_verify_fixes"
     if cell_counts.get("pending", 0) or cell_counts.get("stale", 0):
         return "run_review"
     if reasons:
