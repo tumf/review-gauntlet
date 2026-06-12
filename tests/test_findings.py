@@ -58,6 +58,46 @@ def test_repeated_findings_reuse_session_id_and_add_occurrences(tmp_path: Path) 
     assert occurrence_rows == [("RGF-0001", 3), ("RGF-0001", 42)]
 
 
+def test_new_finding_id_uses_max_existing_numeric_id_not_row_count(tmp_path: Path) -> None:
+    store = SessionStore(tmp_path)
+    cell = ReviewCell(id="RGC-1", file_path="app.py", rule_id="security", slice_id="src")
+    store.create_session(
+        {"session_id": "RGS-test", "target_digest": "digest", "target": {}},
+        (cell,),
+    )
+    with sqlite3.connect(store.ledger_path) as conn:
+        conn.execute(
+            """
+            insert into findings(
+              session_id, finding_id, fingerprint, state, path, rule_id, content, metadata
+            ) values (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "RGS-test",
+                "RGF-0042",
+                "migrated-fingerprint",
+                FindingState.UNTRIAGED,
+                "legacy.py",
+                "security",
+                "Migrated issue",
+                "{}",
+            ),
+        )
+    finding = normalize_ocr_comment(
+        OCRComment(path="app.py", content="New auth issue", existing_code="guard()"),
+        repository_id="repo",
+        base_target="target",
+        rule_id="security",
+        ruleset_digest="rules",
+    )
+
+    finding_id = store.upsert_finding(
+        "RGS-test", store.create_run("RGS-test", "d1"), cell.id, finding
+    )
+
+    assert finding_id == "RGF-0043"
+
+
 def test_finding_occurrence_preserves_imprecise_zero_line_comments(tmp_path: Path) -> None:
     store = SessionStore(tmp_path)
     cell = ReviewCell(id="RGC-1", file_path="app.py", rule_id="security", slice_id="src")

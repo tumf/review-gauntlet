@@ -438,6 +438,38 @@ def test_legacy_command_adapter_config_fails_clearly(
     assert _run_count(tmp_path) <= before_runs + 1
 
 
+def test_review_with_no_selected_cells_does_not_create_run(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_session(tmp_path, capsys)
+    empty_fixture = tmp_path / "empty-fixture.json"
+    empty_fixture.write_text("{}", encoding="utf-8")
+    main(["review", str(tmp_path), "--fixture", str(empty_fixture), "--format", "json"])
+    capsys.readouterr()
+    before_runs = _run_count(tmp_path)
+
+    main(["review", str(tmp_path), "--fixture", str(empty_fixture), "--format", "json"])
+
+    data = json.loads(capsys.readouterr().out)
+    assert data["run_id"] is None
+    assert data["reviewed_cells"] == 0
+    assert _run_count(tmp_path) == before_runs
+
+
+def test_review_budget_zero_does_not_create_finalization_evidence(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_session(tmp_path, capsys)
+    before_runs = _run_count(tmp_path)
+
+    main(["review", str(tmp_path), "--budget", "0", "--format", "json"])
+
+    data = json.loads(capsys.readouterr().out)
+    assert data["run_id"] is None
+    assert data["reviewed_cells"] == 0
+    assert _run_count(tmp_path) == before_runs
+
+
 def test_review_without_fixture_or_config_fails(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
