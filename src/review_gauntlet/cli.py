@@ -364,22 +364,13 @@ def _cmd_review(args: argparse.Namespace, root: Path, store: SessionStore) -> No
     finding_ids: list[str] = []
     seen_fingerprints: set[str] = set()
     evaluated_paths: set[str] = set()
+    first_failure: tuple[ReviewCell, ReviewAdapterError] | None = None
     for selected in selected_cells:
         outcome = results[selected.id]
         if isinstance(outcome, ReviewAdapterError):
-            status = _status(store, root)
-            _emit(
-                {
-                    "run_id": run_id,
-                    "reviewed_cells": reviewed,
-                    "failed_cell_id": selected.id,
-                    "error": str(outcome),
-                    "failure": outcome.failure,
-                    **status,
-                },
-                args.format,
-            )
-            raise SystemExit(1) from outcome
+            if first_failure is None:
+                first_failure = (selected, outcome)
+            continue
         evaluated_paths.add(selected.file_path)
         for comment in outcome.comments:
             finding = normalize_ocr_comment(
@@ -395,6 +386,21 @@ def _cmd_review(args: argparse.Namespace, root: Path, store: SessionStore) -> No
         reviewed += 1
     store.verify_fixed_findings(session_id, seen_fingerprints, evaluated_paths)
     status = _status(store, root)
+    if first_failure is not None:
+        failed_cell, error = first_failure
+        _emit(
+            {
+                "run_id": run_id,
+                "reviewed_cells": reviewed,
+                "finding_ids": finding_ids,
+                "failed_cell_id": failed_cell.id,
+                "error": str(error),
+                "failure": error.failure,
+                **status,
+            },
+            args.format,
+        )
+        raise SystemExit(1) from error
     _emit(
         {"run_id": run_id, "reviewed_cells": reviewed, "finding_ids": finding_ids, **status},
         args.format,
