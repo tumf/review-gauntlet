@@ -151,15 +151,20 @@ class SessionStore:
             raise LookupError(f"unknown review cell: session_id={session_id} cell_id={cell.id}")
 
     def fixed_pending_paths(self, session_id: str) -> set[str]:
+        return {str(row["path"]) for row in self.list_fixed_pending_findings(session_id)}
+
+    def list_fixed_pending_findings(self, session_id: str) -> list[sqlite3.Row]:
         with self.connect() as conn:
-            rows = conn.execute(
-                """
-                select distinct path from findings
-                where session_id = ? and state = ?
-                """,
-                (session_id, FindingState.FIXED_PENDING_VERIFICATION),
-            ).fetchall()
-        return {str(row["path"]) for row in rows}
+            return list(
+                conn.execute(
+                    """
+                    select * from findings
+                    where session_id = ? and state = ?
+                    order by finding_id
+                    """,
+                    (session_id, FindingState.FIXED_PENDING_VERIFICATION),
+                )
+            )
 
     def last_run_target_digest(self, session_id: str) -> str | None:
         with self.connect() as conn:
@@ -234,7 +239,11 @@ class SessionStore:
             self._transition(conn, finding_id, state, reason, metadata)
 
     def verify_fixed_findings(
-        self, session_id: str, seen_fingerprints: set[str], evaluated_paths: set[str]
+        self,
+        session_id: str,
+        seen_fingerprints: set[str],
+        evaluated_paths: set[str],
+        finding_ids: set[str] | None = None,
     ) -> None:
         if not evaluated_paths:
             return
@@ -248,6 +257,9 @@ class SessionStore:
                 (session_id, FindingState.FIXED_PENDING_VERIFICATION),
             ).fetchall()
             for row in rows:
+                finding_id = str(row["finding_id"])
+                if finding_ids is not None and finding_id not in finding_ids:
+                    continue
                 if str(row["path"]) not in evaluated_paths:
                     continue
                 state = (
@@ -255,7 +267,7 @@ class SessionStore:
                     if row["fingerprint"] in seen_fingerprints
                     else FindingState.FIXED_VERIFIED
                 )
-                self._transition(conn, str(row["finding_id"]), state, "review_verification", {})
+                self._transition(conn, finding_id, state, "review_verification", {})
 
     def _transition(
         self,
