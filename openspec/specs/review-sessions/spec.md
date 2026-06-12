@@ -76,6 +76,8 @@ If one or more selected cells fail after other selected cells have completed suc
 
 The default review logic SHALL derive its bundled prompts, path-based rules, and line-level review comment contract from Alibaba `open-code-review` commit `c323c6b40c72aa95d7cb801bedcb957b52ff9807`. The ported corpus SHALL include OCR's system rule map and all built-in rule documents, SHALL be usable without network access, and SHALL be included in the ruleset digest for stale-coverage detection. Review execution adapters SHALL use this OCR-derived prompt and verdict contract when asking external tools to review cells.
 
+Generated review prompts SHALL identify the target file by repository root, repository-relative file path, content digest, file size in bytes, and line count. Generated prompts SHALL NOT embed the target file body directly. External review tools that need source content SHALL read the target file from the repository path identified in the prompt.
+
 #### Scenario: OCR rule corpus is bundled and traceable
 
 **Given**: the installed `review-gauntlet` package
@@ -107,11 +109,14 @@ The default review logic SHALL derive its bundled prompts, path-based rules, and
 
 #### Scenario: External command receives OCR-derived review prompt
 
-**Given**: a selected review cell with a file path, content digest, and rule id
+**Given**: a selected review cell with a file path, content digest, byte size, line count, and rule id
 **And**: the session is configured to use an external command adapter
 **When**: `review-gauntlet review` invokes the adapter
 **Then**: the generated prompt includes the selected OCR-derived rule guidance
 **And**: the prompt identifies the file and review cell being evaluated
+**And**: the prompt includes the target file path, content digest, byte size, and line count
+**And**: the prompt does not embed the target file body
+**And**: the prompt instructs the external command to read the target file from the repository path when content is needed
 **And**: the prompt instructs the external command to return the OCR-style verdict JSON contract
 
 ### Requirement: Review cells SHALL model coverage independently from finding state
@@ -476,7 +481,7 @@ The session workflow SHALL preserve the existing `inventory`, `plan`, and `repor
 
 ### Requirement: Command adapter SHALL invoke external tools safely and preserve artifacts
 
-The command adapter SHALL invoke configured tools without a shell, SHALL expose generated prompts through `{prompt}` argv/env template expansion, SHALL collect verdicts from stdout JSON when explicitly configured or from file JSON by default, and SHALL preserve per-cell artifacts for auditability. In file-json mode, stdout and stderr SHALL be preserved as logs but SHALL NOT be parsed or trusted as verdict input.
+The command adapter SHALL invoke configured tools without a shell, SHALL expose generated prompts through `{prompt}` argv/env template expansion, SHALL collect verdicts from stdout JSON when explicitly configured or from file JSON by default, and SHALL preserve per-cell artifacts for auditability. In file-json mode, stdout and stderr SHALL be preserved as logs but SHALL NOT be parsed or trusted as verdict input. The generated prompt exposed through `{prompt}` SHALL describe the target file with metadata rather than embedding the target file body.
 
 #### Scenario: Command adapter executes without shell
 
@@ -491,6 +496,7 @@ The command adapter SHALL invoke configured tools without a shell, SHALL expose 
 **Given**: a command adapter configuration whose args include `{prompt}`
 **When**: a review cell is evaluated
 **Then**: `review-gauntlet` expands `{prompt}` to the generated OCR-derived prompt as one argv element
+**And**: the expanded prompt identifies the target file using path, digest, byte size, and line count rather than file body text
 **And**: the command adapter does not send the prompt through stdin as a transport side effect
 **And**: the command adapter does not pass a prompt file as a transport side effect
 
@@ -500,43 +506,6 @@ The command adapter SHALL invoke configured tools without a shell, SHALL expose 
 **When**: a review cell is evaluated
 **Then**: `review-gauntlet` validates the JSON verdict emitted to stdout
 **And**: non-JSON stdout text remains invalid verdict output
-
-#### Scenario: Command adapter defaults to file-json output
-
-**Given**: a command adapter configuration without an output mode
-**When**: a review cell is evaluated
-**Then**: `review-gauntlet` validates the JSON verdict written to the default per-cell output file
-**And**: stdout content is preserved but ignored for verdict parsing
-
-#### Scenario: Command adapter supports explicit file-json output paths
-
-**Given**: a command adapter configuration using output mode `file-json`
-**And**: the configured output path includes `{output_file}` or another safe artifact-local path
-**When**: a review cell is evaluated
-**Then**: `review-gauntlet` validates the JSON verdict written to the output file
-
-#### Scenario: File-json ignores noisy stdout
-
-**Given**: a command adapter configuration using file-json output
-**And**: the external command writes valid verdict JSON to the output file
-**And**: the external command writes progress text, reasoning text, or other non-JSON text to stdout
-**When**: a review cell is evaluated
-**Then**: the adapter validates the output file verdict
-**And**: stdout noise does not cause an invalid verdict failure
-
-#### Scenario: Review artifacts are persisted per evaluated cell
-
-**Given**: a review run evaluates a cell through the command adapter
-**When**: command execution finishes or fails
-**Then**: `review-gauntlet` preserves the generated prompt, command metadata, stdout, stderr, and verdict or failure details under a deterministic run/cell artifact path
-**And**: the artifact path is associated with the review run evidence
-
-#### Scenario: Unsafe output paths are rejected
-
-**Given**: a command adapter configuration with file-json output
-**When**: the configured output path would escape the intended run or cell artifact area through traversal, absolute unsafe paths, or unsupported template expansion
-**Then**: the review command rejects the configuration or run before trusting the output
-**And**: the cell is not marked reviewed
 
 ### Requirement: Command verdicts SHALL normalize through OCR comments only
 
