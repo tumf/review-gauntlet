@@ -10,11 +10,10 @@ from typing import NoReturn, Protocol, cast
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
-from review_gauntlet.config import CommandAdapterConfig, OutputMode
+from review_gauntlet.config import TEMPLATE_PATTERN, CommandAdapterConfig, OutputMode
 from review_gauntlet.ocr_rules import OCRComment, RuleDocument, Ruleset
 from review_gauntlet.review_cells import ReviewCell
 
-TEMPLATE_PATTERN = re.compile(r"\{([A-Za-z_][A-Za-z0-9_]*)\}")
 RAW_SNIPPET_LIMIT = 500
 STRICT_JSON_HINT = (
     "External adapters must write strict JSON with double-quoted strings and no markdown fences."
@@ -378,6 +377,9 @@ class CommandReviewAdapter:
         return [self._expand(value, variables) for value in values]
 
     def _expand(self, value: str, variables: dict[str, str]) -> str:
+        placeholder = "\x00REVIEW_GAUNTLET_LITERAL_BRACE\x00"
+        protected = value.replace("{{", placeholder + "OPEN").replace("}}", placeholder + "CLOSE")
+
         def replace(match: re.Match[str]) -> str:
             name = match.group(1)
             try:
@@ -385,7 +387,8 @@ class CommandReviewAdapter:
             except KeyError as exc:
                 raise ReviewAdapterError(f"unknown template variable: {name}") from exc
 
-        return TEMPLATE_PATTERN.sub(replace, value)
+        expanded = TEMPLATE_PATTERN.sub(replace, protected)
+        return expanded.replace(placeholder + "OPEN", "{").replace(placeholder + "CLOSE", "}")
 
     def _resolve_cwd(self, variables: dict[str, str]) -> Path | None:
         if self._config.cwd is None:

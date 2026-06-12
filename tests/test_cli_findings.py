@@ -20,8 +20,13 @@ def test_findings_suppresses_terminal_findings_by_default(
         "RGF-config",
         "RGF-cli",
         "RGF-test",
+        "RGF-pending",
     }
-    assert {finding["state"] for finding in data["findings"]} == {"confirmed", "reopened"}
+    assert {finding["state"] for finding in data["findings"]} == {
+        "confirmed",
+        "fixed_pending_verification",
+        "reopened",
+    }
 
 
 def test_findings_all_includes_terminal_findings(
@@ -41,6 +46,7 @@ def test_findings_all_includes_terminal_findings(
         "RGF-false",
         "RGF-waived",
         "RGF-risk",
+        "RGF-pending",
     }
 
 
@@ -198,6 +204,40 @@ def test_findings_applies_terminal_suppression_before_mark_filter(
     assert [finding["finding_id"] for finding in all_data["findings"]] == ["RGF-false"]
 
 
+def test_findings_matches_hyphenated_public_marks_to_persisted_states(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _create_session_with_findings(tmp_path, capsys)
+
+    main(
+        [
+            "findings",
+            str(tmp_path),
+            "--all",
+            "--mark",
+            "false-positive",
+            "--mark",
+            "accepted-risk",
+            "--mark",
+            "fixed-pending-verification",
+            "--format",
+            "json",
+        ]
+    )
+
+    data = json.loads(capsys.readouterr().out)
+    assert {finding["finding_id"] for finding in data["findings"]} == {
+        "RGF-false",
+        "RGF-risk",
+        "RGF-pending",
+    }
+    assert {finding["state"] for finding in data["findings"]} == {
+        "false_positive",
+        "accepted_risk",
+        "fixed_pending_verification",
+    }
+
+
 def test_findings_rejects_invalid_mark_value() -> None:
     with pytest.raises(SystemExit) as exc_info:
         main(["findings", ".", "--mark", "not-a-mark"])
@@ -262,6 +302,7 @@ def _create_session_with_findings(tmp_path: Path, capsys: pytest.CaptureFixture[
         ("RGF-false", "fp-false", "false_positive", "README.md"),
         ("RGF-waived", "fp-waived", "waived", "README.md"),
         ("RGF-risk", "fp-risk", "accepted_risk", "README.md"),
+        ("RGF-pending", "fp-pending", "fixed_pending_verification", "README.md"),
     ]
     with sqlite3.connect(tmp_path / ".review-gauntlet" / "ledger.sqlite") as conn:
         conn.executemany(

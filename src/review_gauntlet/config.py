@@ -9,6 +9,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 TEMPLATE_PATTERN = re.compile(r"\{([A-Za-z_][A-Za-z0-9_]*)\}")
+ENV_NAME_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 CONFIG_DISCOVERY_NAMES = (
     ".review-gauntlet/config.jsonc",
@@ -100,8 +101,11 @@ class CommandAdapterConfig(BaseModel):
     @classmethod
     def validate_env(cls, value: dict[str, str]) -> dict[str, str]:
         for key, item in value.items():
-            if not key or "=" in key:
-                raise ValueError("adapter.env keys must be non-empty environment variable names")
+            if not ENV_NAME_PATTERN.fullmatch(key):
+                raise ValueError(
+                    "adapter.env keys must be portable environment variable names "
+                    "matching [A-Za-z_][A-Za-z0-9_]*"
+                )
             _validate_template_string(item)
         return value
 
@@ -145,10 +149,16 @@ def load_config(
 
 
 def _validate_template_string(value: str) -> None:
-    for match in TEMPLATE_PATTERN.finditer(value):
+    literal_removed = value.replace("{{", "").replace("}}", "")
+    for match in TEMPLATE_PATTERN.finditer(literal_removed):
         name = match.group(1)
         if name not in SUPPORTED_TEMPLATE_VARIABLES:
             raise ValueError(f"unsupported template variable {{{name}}}")
+    if literal_removed.count("{") != literal_removed.count("}"):
+        raise ValueError(
+            "unsupported template literal brace; literal braces must be balanced or escaped "
+            "as '{{' and '}}'"
+        )
 
 
 def _strip_jsonc(text: str) -> str:

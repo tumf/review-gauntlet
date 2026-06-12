@@ -148,89 +148,14 @@ When the same finding is detected while it is `fixed_pending_verification`, the 
 
 ### Requirement: Status and findings commands SHALL expose actionable session state
 
-The CLI SHALL expose current session state without modifying review coverage. `status` SHALL report coverage, finding counts, target freshness, finalization readiness, and the next required action. `findings` SHALL list open findings by default, support showing all findings, and support read-only filtering by finding path and triage mark.
+`findings --mark` SHALL map public CLI mark names to the persisted finding state values before filtering. Hyphenated public names such as `false-positive`, `accepted-risk`, and `fixed-pending-verification` SHALL match their underscore persisted states subject to the existing default terminal suppression and `--all` visibility rules.
 
-Session commands that emit summaries SHALL use `--format text` for human-readable output and `--format json` for structured output where supported, with `text` as the default. Commands that support decorative progress or audience-specific progress output SHALL support `--audience human|agent` for progress control. Commands that only emit a final result and no intermediate progress UI SHALL NOT expose an `--audience` option.
+#### Scenario: Findings mark filter matches hyphenated public state
 
-<!-- Expected canonical result after archive: findings documents repeatable `--path` and `--mark` filters while preserving default terminal suppression, `--all`, `--format text|json`, and rejection of `--audience`. -->
-
-#### Scenario: Status reports next action
-
-**Given**: an active session with reviewed cells and untriaged findings
-**When**: the developer runs `review-gauntlet status --format json`
-**Then**: the JSON output includes `session_id`, `session_state`, coverage counts, finding state counts, `can_finalize`, and `next_required_action`
-**And**: `next_required_action` is `triage_findings`
-
-#### Scenario: Non-progress status rejects audience option
-
-**Given**: an active session
-**When**: the developer runs `review-gauntlet status --audience agent`
-**Then**: the command fails with a usage error
-
-#### Scenario: Status rejects obsolete human format option
-
-**Given**: an active session
-**When**: the developer runs `review-gauntlet status --format human`
-**Then**: the command fails with a usage error
-
-#### Scenario: Findings hides terminal findings by default
-
-**Given**: an active session with open and terminal findings
-**When**: the developer runs `review-gauntlet findings`
-**Then**: the output includes open findings
-**And**: terminal findings are omitted unless `--all` is provided
-
-#### Scenario: Findings uses text output by default
-
-**Given**: an active session
-**When**: the developer runs `review-gauntlet findings --help`
-**Then**: the help output lists `--format {text,json}`
-**And**: the help output lists `--path`
-**And**: the help output lists `--mark`
-**And**: the help output does not list `--audience`
-
-#### Scenario: Findings emits structured JSON on request
-
-**Given**: an active session with findings
-**When**: the developer runs `review-gauntlet findings --format json`
-**Then**: stdout contains parseable JSON for the final findings result
-
-#### Scenario: Findings filters by mark
-
-**Given**: an active session with confirmed, reopened, and false-positive findings
-**When**: the developer runs `review-gauntlet findings --mark confirmed --format json`
-**Then**: stdout contains parseable JSON whose `findings` list contains only confirmed findings
-**And**: no finding state is modified
-
-#### Scenario: Findings filters by path
-
-**Given**: an active session with findings in multiple repository paths
-**When**: the developer runs `review-gauntlet findings --path src/review_gauntlet/config.py --format json`
-**Then**: stdout contains parseable JSON whose `findings` list contains only findings for that path
-**When**: the developer runs `review-gauntlet findings --path src/review_gauntlet/ --format json`
-**Then**: stdout contains parseable JSON whose `findings` list contains only findings under that path prefix
-
-#### Scenario: Findings combines path and mark filters
-
-**Given**: an active session with confirmed and reopened findings across multiple paths
-**When**: the developer runs `review-gauntlet findings --path src/review_gauntlet/ --mark confirmed --mark reopened --format json`
-**Then**: stdout contains parseable JSON whose `findings` list contains only confirmed or reopened findings under `src/review_gauntlet/`
-
-#### Scenario: Findings filter respects terminal visibility
-
-**Given**: an active session with a false-positive finding
-**When**: the developer runs `review-gauntlet findings --mark false-positive --format json`
-**Then**: stdout contains parseable JSON whose `findings` list omits the false-positive finding
+**Given**: an active session with a `false_positive` finding
 **When**: the developer runs `review-gauntlet findings --all --mark false-positive --format json`
-**Then**: stdout contains parseable JSON whose `findings` list includes the false-positive finding
-
-#### Scenario: Findings rejects obsolete audience and human format options
-
-**Given**: an active session
-**When**: the developer runs `review-gauntlet findings --audience agent`
-**Then**: the command fails with a usage error
-**When**: the developer runs `review-gauntlet findings --format human`
-**Then**: the command fails with a usage error
+**Then**: stdout contains parseable JSON whose `findings` list includes that false-positive finding
+**And**: no finding state is modified
 
 ### Requirement: Finalize SHALL validate completion without running review work
 
@@ -313,69 +238,21 @@ The session workflow SHALL preserve the existing `inventory`, `plan`, and `repor
 
 ### Requirement: Review execution SHALL support JSON and JSONC command adapter configuration
 
-`review-gauntlet` SHALL support external review execution through a JSON or JSONC command adapter configuration. The configuration SHALL identify the command, argv arguments, optional output mode, and optional timeout/cwd/env settings without requiring in-process LLM SDK dependencies. The generated OCR-derived prompt SHALL be available as the `{prompt}` template variable for argv/env expansion. Command adapter configuration SHALL NOT include an `input` section or prompt-file transport mode. When output configuration is omitted, the adapter SHALL default to file-backed verdict output using the per-cell output artifact path.
+Command adapter configuration validation SHALL reject invalid environment variable names and SHALL define how literal braces are represented in template-bearing strings. Configuration errors SHALL be reported before adapter execution.
 
-#### Scenario: Review loads explicit adapter config
+#### Scenario: Adapter env keys are validated
 
-**Given**: an active review session
-**And**: a valid command adapter configuration file at `/tmp/review-gauntlet.jsonc`
-**When**: the developer runs `review-gauntlet review --config /tmp/review-gauntlet.jsonc`
-**Then**: the review command uses that configuration for external command execution
-**And**: no repository default config path overrides it
-
-#### Scenario: Review discovers repository adapter config
-
-**Given**: an active review session
-**And**: no `--config` argument
-**And**: config files may exist at `.review-gauntlet/config.jsonc`, `.review-gauntlet/config.json`, `review-gauntlet.jsonc`, and `review-gauntlet.json`
-**When**: the developer runs `review-gauntlet review`
-**Then**: the review command selects the first existing valid config in that precedence order
-
-#### Scenario: JSONC config is accepted
-
-**Given**: a command adapter config containing `//` line comments, `/* */` block comments, and trailing commas
+**Given**: a command adapter config whose `env` contains an invalid key such as `BAD-NAME` or an empty string
 **When**: the review command loads the config
-**Then**: the config is parsed as JSONC
-**And**: comment-like text inside JSON strings remains unchanged
+**Then**: the config is rejected with an actionable validation error
+**And**: no external adapter command is executed
 
-#### Scenario: Missing command config does not implicitly execute a tool
+#### Scenario: Template literal brace behavior is explicit
 
-**Given**: an active review session
-**And**: no `--fixture` argument
-**And**: no command adapter configuration is available
-**When**: the developer runs `review-gauntlet review`
-**Then**: the command fails with an actionable configuration error
-**And**: it does not implicitly execute `opencode`, `claude`, `codex`, or any other default external tool
-
-#### Scenario: Prompt template is accepted in argv
-
-**Given**: a valid command adapter configuration whose `args` include `{prompt}`
-**When**: the review command loads the config
-**Then**: `{prompt}` is accepted as a supported template variable
-**And**: `{prompt_file}` is rejected as an unsupported template variable
-**And**: no `input` or `input.mode` field is accepted in the config
-
-#### Scenario: Timeout defaults to 600 seconds
-
-**Given**: a valid command adapter configuration without `timeout_seconds`
-**When**: the review command loads the config
-**Then**: the command adapter timeout defaults to 600 seconds
-**And**: explicitly configured non-positive timeout values remain invalid
-
-#### Scenario: Process context controls are optional
-
-**Given**: a valid command adapter configuration without `cwd` or `env`
-**When**: the review command invokes the command adapter
-**Then**: the external process inherits the parent process cwd
-**And**: the external process inherits the parent process environment without automatic fixed env injection
-**And**: explicit `cwd` and `env` values remain supported when configured
-
-#### Scenario: Output config defaults to file-json
-
-**Given**: a valid command adapter configuration without an `output` section
-**When**: the review command evaluates a cell
-**Then**: the adapter treats the effective output mode as `file-json`
-**And**: the effective verdict path is the deterministic per-cell output artifact path
+**Given**: a command adapter config string containing a literal brace sequence
+**When**: the config is loaded
+**Then**: review-gauntlet either accepts the documented literal escaping form or rejects the string with an actionable unsupported-template error
+**And**: supported variables such as `{prompt}` continue to validate successfully
 
 ### Requirement: Command adapter SHALL invoke external tools safely and preserve artifacts
 
@@ -441,3 +318,14 @@ External command adapter verdicts SHALL be JSON objects containing a `comments` 
 **Then**: no finding occurrence is created from that result
 **And**: the selected cell is not marked reviewed
 **And**: the review command exits non-zero with failure artifacts preserved
+
+### Requirement: CI runtime SHALL be pinned to the project Python version
+
+Repository CI SHALL install the Python runtime declared by project guidance rather than the latest interpreter available to the package manager.
+
+#### Scenario: CI installs Python 3.11
+
+**Given**: the GitHub Actions workflow for repository checks
+**When**: CI sets up Python with `uv`
+**Then**: the workflow installs Python 3.11 explicitly
+**And**: dependency resolution, linting, type checking, and tests run against that runtime
