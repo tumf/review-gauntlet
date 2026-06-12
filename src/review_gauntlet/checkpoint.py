@@ -165,6 +165,7 @@ def write_latest_checkpoint(
     if tmp_dir.exists():
         shutil.rmtree(tmp_dir)
     tmp_dir.mkdir(parents=True)
+    old_dir: Path | None = None
     try:
         for filename, data in files.items():
             (tmp_dir / filename).write_text(
@@ -185,6 +186,8 @@ def write_latest_checkpoint(
     except Exception:
         if tmp_dir.exists():
             shutil.rmtree(tmp_dir)
+        if old_dir is not None and old_dir.exists() and not checkpoint_dir.exists():
+            old_dir.rename(checkpoint_dir)
         raise
     generated_files = [
         str((checkpoint_dir / name).relative_to(root))

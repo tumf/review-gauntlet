@@ -15,6 +15,7 @@ from review_gauntlet.ocr_rules import OCRComment, RuleDocument, Ruleset
 from review_gauntlet.review_cells import ReviewCell
 
 RAW_SNIPPET_LIMIT = 500
+VERDICT_OUTPUT_SIZE_LIMIT_BYTES = 1_000_000
 STRICT_JSON_HINT = (
     "External adapters must write strict JSON with double-quoted strings and no markdown fences."
 )
@@ -236,7 +237,7 @@ class CommandReviewAdapter:
             )
         )
         prompt_file.write_text(prompt, encoding="utf-8")
-        variables = self._variables(cell, cell_dir, output_file, prompt)
+        variables = self._variables(cell, cell_dir, output_path, prompt)
         output_path = self._resolve_output_path(variables, cell_dir)
         argv = [
             self._expand(self._config.command, variables),
@@ -448,6 +449,18 @@ class CommandReviewAdapter:
                 f"missing verdict output file: {output_path}",
                 failure_file,
                 {"output_path": str(output_path)},
+            )
+        output_size = output_path.stat().st_size
+        if output_size > VERDICT_OUTPUT_SIZE_LIMIT_BYTES:
+            self._fail(
+                "verdict output file exceeds "
+                f"{VERDICT_OUTPUT_SIZE_LIMIT_BYTES} bytes: {output_path}",
+                failure_file,
+                {
+                    "output_path": str(output_path),
+                    "output_size_bytes": output_size,
+                    "size_limit_bytes": VERDICT_OUTPUT_SIZE_LIMIT_BYTES,
+                },
             )
         return output_path.read_text(encoding="utf-8")
 

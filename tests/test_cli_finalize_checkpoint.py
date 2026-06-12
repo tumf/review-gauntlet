@@ -87,6 +87,30 @@ def test_finalize_blocks_dirty_review_universe_without_writing_checkpoint(
     assert (tmp_path / ".review-gauntlet" / "active-session.json").exists()
 
 
+def test_finalize_restores_previous_checkpoint_when_replacement_fails(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _init_repo(tmp_path)
+    _complete_session(tmp_path, capsys)
+    checkpoint_dir = tmp_path / ".review-gauntlet" / "checkpoints" / "latest"
+    checkpoint_dir.mkdir(parents=True)
+    (checkpoint_dir / "marker.txt").write_text("previous\n", encoding="utf-8")
+    original_rename = Path.rename
+
+    def fail_tmp_install(self: Path, target: Path) -> Path:
+        if self.name.startswith(".latest.tmp-") and target.name == "latest":
+            raise OSError("simulated install failure")
+        return original_rename(self, target)
+
+    monkeypatch.setattr(Path, "rename", fail_tmp_install)
+
+    with pytest.raises(OSError, match="simulated install failure"):
+        main(["finalize", str(tmp_path), "--format", "json"])
+
+    assert (checkpoint_dir / "marker.txt").read_text(encoding="utf-8") == "previous\n"
+    assert (tmp_path / ".review-gauntlet" / "active-session.json").exists()
+
+
 def test_finalize_includes_terminal_findings_and_malformed_nonterminal_event_metadata(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

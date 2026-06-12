@@ -6,7 +6,11 @@ import pytest
 
 from review_gauntlet.config import CommandAdapterConfig
 from review_gauntlet.ocr_rules import load_ruleset
-from review_gauntlet.review_adapter import CommandReviewAdapter, ReviewAdapterError
+from review_gauntlet.review_adapter import (
+    VERDICT_OUTPUT_SIZE_LIMIT_BYTES,
+    CommandReviewAdapter,
+    ReviewAdapterError,
+)
 from review_gauntlet.review_cells import ReviewCell
 
 
@@ -268,6 +272,26 @@ def test_command_adapter_default_file_json_fails_when_output_file_missing(
 
     cell_dir = tmp_path / ".review-gauntlet" / "runs" / "1" / "cells" / "RGC-test"
     assert (cell_dir / "stdout.txt").read_text(encoding="utf-8").strip() == '{"comments": []}'
+
+
+def test_command_adapter_rejects_oversized_file_json_output(tmp_path: Path) -> None:
+    script = "import pathlib, sys; pathlib.Path(sys.argv[1]).write_text('x' * int(sys.argv[2]))"
+    config = CommandAdapterConfig.model_validate(
+        {
+            "type": "command",
+            "command": sys.executable,
+            "args": ["-c", script, "{output_file}", str(VERDICT_OUTPUT_SIZE_LIMIT_BYTES + 1)],
+        }
+    )
+
+    with pytest.raises(ReviewAdapterError, match="verdict output file exceeds") as excinfo:
+        _adapter(tmp_path, config).review(_cell(tmp_path))
+
+    cell_dir = tmp_path / ".review-gauntlet" / "runs" / "1" / "cells" / "RGC-test"
+    failure = json.loads((cell_dir / "failure.json").read_text(encoding="utf-8"))
+    assert failure["output_size_bytes"] == VERDICT_OUTPUT_SIZE_LIMIT_BYTES + 1
+    assert failure["size_limit_bytes"] == VERDICT_OUTPUT_SIZE_LIMIT_BYTES
+    assert excinfo.value.failure == failure
 
 
 @pytest.mark.parametrize(
@@ -618,3 +642,28 @@ def test_file_json_output_path_creates_nested_parent_directory(tmp_path: Path) -
     assert (cell_dir / "out" / "verdict.json").is_file()
     command = json.loads((cell_dir / "command.json").read_text(encoding="utf-8"))
     assert command["output_path"] == str(cell_dir / "out" / "verdict.json")
+
+
+def test_file_json_output_file_variable_matches_custom_output_path(tmp_path: Path) -> None:
+    script = (
+        "import json, pathlib, sys; "
+        "pathlib.Path(sys.argv[1]).write_text(json.dumps({'comments':[]}))"
+    )
+    config = CommandAdapterConfig.model_validate(
+        {
+            "type": "command",
+            "command": sys.executable,
+            "args": ["-c", script, "{output_file}"],
+            "output": {"mode": "file-json", "path": "out/verdict.json"},
+        }
+    )
+
+    result = _adapter(tmp_path, config).review(_cell(tmp_path))
+
+    cell_dir = tmp_path / ".review-gauntlet" / "runs" / "1" / "cells" / "RGC-test"
+    custom_output = cell_dir / "out" / "verdict.json"
+    assert result.comments == ()
+    assert custom_output.is_file()
+    command = json.loads((cell_dir / "command.json").read_text(encoding="utf-8"))
+    assert command["argv"][-1] == str(custom_output)
+    assert command["output_path"] == str(custom_output)
