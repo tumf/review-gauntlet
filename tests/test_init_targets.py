@@ -78,7 +78,9 @@ def test_branch_range_init_scopes_to_changed_files(
     _init_repo(tmp_path)
     base = _git(tmp_path, "rev-parse", "HEAD")
     (tmp_path / "feature.py").write_text("print('feature')\n", encoding="utf-8")
-    _git(tmp_path, "add", "feature.py")
+    (tmp_path / "package.json").write_text('{"dependencies": {}}\n', encoding="utf-8")
+    (tmp_path / "go.sum").write_text("example.com/mod v1.0.0 h1:abc\n", encoding="utf-8")
+    _git(tmp_path, "add", "feature.py", "package.json", "go.sum")
     _git(tmp_path, "commit", "-m", "feature")
     head = _git(tmp_path, "rev-parse", "HEAD")
 
@@ -93,7 +95,9 @@ def test_commit_init_scopes_to_commit_files_and_records_fixed_head(
 ) -> None:
     _init_repo(tmp_path)
     (tmp_path / "commit_only.py").write_text("print('commit')\n", encoding="utf-8")
-    _git(tmp_path, "add", "commit_only.py")
+    (tmp_path / "Cargo.toml").write_text("[package]\nname = 'demo'\n", encoding="utf-8")
+    (tmp_path / "pom.xml").write_text("<project />\n", encoding="utf-8")
+    _git(tmp_path, "add", "commit_only.py", "Cargo.toml", "pom.xml")
     _git(tmp_path, "commit", "-m", "commit only")
     commit = _git(tmp_path, "rev-parse", "HEAD")
 
