@@ -22,6 +22,31 @@ make install
 review-gauntlet --help
 ```
 
+### Shell completion
+
+The installed `review-gauntlet` command can generate completion scripts for common
+interactive shells. Evaluate the script for the current session, or write it to the
+location your shell startup files load.
+
+Bash:
+
+```bash
+source <(review-gauntlet completion bash)
+```
+
+Zsh:
+
+```zsh
+review-gauntlet completion zsh > "${fpath[1]}/_review-gauntlet"
+autoload -Uz compinit && compinit
+```
+
+Fish:
+
+```fish
+review-gauntlet completion fish > ~/.config/fish/completions/review-gauntlet.fish
+```
+
 Start normal use by initializing a review session, then run exactly one review step
 with a configured external CLI adapter:
 

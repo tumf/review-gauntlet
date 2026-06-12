@@ -24,6 +24,68 @@ def test_cli_inventory_outputs_json(tmp_path: Path, capsys: pytest.CaptureFixtur
     assert data["files"][0]["path"] == "README.md"
 
 
+@pytest.mark.parametrize("shell", ["bash", "zsh", "fish"])
+def test_cli_completion_outputs_script_for_supported_shells(
+    shell: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    main(["completion", shell])
+
+    output = capsys.readouterr().out
+    assert output
+    assert "review-gauntlet" in output
+    for command in (
+        "inventory",
+        "plan",
+        "report",
+        "init",
+        "review",
+        "verify-fixes",
+        "status",
+        "findings",
+        "mark",
+        "finalize",
+        "completion",
+    ):
+        assert command in output
+    for option in (
+        "--format",
+        "--budget",
+        "--concurrency",
+        "--fixture",
+        "--config",
+        "--audience",
+        "--finding",
+        "--path",
+        "--mark",
+        "--reason",
+        "--owner",
+        "--until",
+    ):
+        assert option in output or option.removeprefix("--") in output
+    assert not (tmp_path / ".review-gauntlet").exists()
+
+
+@pytest.mark.parametrize(
+    "argv", [["completion", "powershell"], ["completion", "bash", "--format", "json"]]
+)
+def test_cli_completion_preserves_argparse_usage_errors(argv: list[str]) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        main(argv)
+
+    assert exc_info.value.code == 2
+
+
+def test_readme_documents_canonical_shell_completion_commands() -> None:
+    readme = Path("README.md").read_text(encoding="utf-8")
+
+    assert "review-gauntlet completion bash" in readme
+    assert "review-gauntlet completion zsh" in readme
+    assert "review-gauntlet completion fish" in readme
+    assert "review-guantlet" not in readme
+
+
 def test_cli_plan_outputs_json(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     (tmp_path / "README.md").write_text("# docs\n", encoding="utf-8")
 
