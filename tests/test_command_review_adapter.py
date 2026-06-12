@@ -37,6 +37,9 @@ def test_command_adapter_stdout_json_success_and_artifacts(tmp_path: Path) -> No
         "prompt=sys.argv[1]; "
         "assert sys.stdin.read() == ''; "
         "assert 'README.md' in prompt; "
+        "assert 'file_size_bytes: 7' in prompt; "
+        "assert 'line_count: 1' in prompt; "
+        "assert '# docs' not in prompt; "
         "print(json.dumps({'comments':[{'path':'README.md','content':'Issue','start_line':1,'end_line':1}]}))"
     )
     config = CommandAdapterConfig.model_validate(
@@ -323,12 +326,15 @@ def test_command_adapter_rejects_invalid_cwd(tmp_path: Path) -> None:
         _adapter(tmp_path, config).review(_cell(tmp_path))
 
 
-def test_command_adapter_rejects_cell_paths_outside_repo(tmp_path: Path) -> None:
+def test_command_adapter_rejects_cell_paths_outside_repo_without_invoking_command(
+    tmp_path: Path,
+) -> None:
+    marker = tmp_path / "invoked.txt"
     config = CommandAdapterConfig.model_validate(
         {
             "type": "command",
             "command": sys.executable,
-            "args": ["-c", "print('ok')"],
+            "args": ["-c", f"import pathlib; pathlib.Path({str(marker)!r}).write_text('yes')"],
         }
     )
     cell = ReviewCell(
@@ -341,6 +347,31 @@ def test_command_adapter_rejects_cell_paths_outside_repo(tmp_path: Path) -> None
 
     with pytest.raises(ReviewAdapterError, match="outside repository"):
         _adapter(tmp_path, config).review(cell)
+
+    assert not marker.exists()
+
+
+def test_command_adapter_rejects_missing_cell_file_without_invoking_command(tmp_path: Path) -> None:
+    marker = tmp_path / "invoked.txt"
+    config = CommandAdapterConfig.model_validate(
+        {
+            "type": "command",
+            "command": sys.executable,
+            "args": ["-c", f"import pathlib; pathlib.Path({str(marker)!r}).write_text('yes')"],
+        }
+    )
+    cell = ReviewCell(
+        id="RGC-test",
+        file_path="missing.md",
+        rule_id="docs",
+        slice_id="docs",
+        content_digest="digest",
+    )
+
+    with pytest.raises(ReviewAdapterError, match="not a file"):
+        _adapter(tmp_path, config).review(cell)
+
+    assert not marker.exists()
 
 
 def test_command_adapter_inherits_and_configures_cwd(

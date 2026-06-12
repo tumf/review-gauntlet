@@ -1,6 +1,8 @@
 from review_gauntlet.ocr_rules import RuleDocument
-from review_gauntlet.review_adapter import PromptContext, build_review_prompt
+from review_gauntlet.review_adapter import FileMetadata, PromptContext, build_review_prompt
 from review_gauntlet.review_cells import ReviewCell
+
+UNIQUE_FILE_BODY_TEXT = "def handler():\n    return 'secret-body-marker'\n"
 
 
 def test_review_prompt_contains_cell_rule_context_and_verdict_contract() -> None:
@@ -19,7 +21,10 @@ def test_review_prompt_contains_cell_rule_context_and_verdict_contract() -> None
             cell=cell,
             rule=rule,
             ruleset_digest="rules-digest",
-            file_content="def handler():\n    pass\n",
+            file_metadata=FileMetadata(
+                file_size_bytes=len(UNIQUE_FILE_BODY_TEXT.encode()),
+                line_count=UNIQUE_FILE_BODY_TEXT.count("\n"),
+            ),
         )
     )
 
@@ -28,9 +33,16 @@ def test_review_prompt_contains_cell_rule_context_and_verdict_contract() -> None
     assert "file_path: src/app.py" in prompt
     assert "rule_id: security" in prompt
     assert "content_digest: abc123" in prompt
+    assert f"file_size_bytes: {len(UNIQUE_FILE_BODY_TEXT.encode())}" in prompt
+    assert f"line_count: {UNIQUE_FILE_BODY_TEXT.count(chr(10))}" in prompt
+    assert "Source file contents are not embedded in this prompt" in prompt
+    assert "repository_root plus file_path" in prompt
     assert "Check auth boundaries" in prompt
     assert '"comments"' in prompt
     assert '"suggestion_code"' in prompt
     assert '"existing_code"' in prompt
-    assert "def handler" in prompt
+    assert "## File Content" not in prompt
+    assert "```text path=src/app.py" not in prompt
+    assert "secret-body-marker" not in prompt
+    assert "def handler" not in prompt
     assert "API_KEY" not in prompt

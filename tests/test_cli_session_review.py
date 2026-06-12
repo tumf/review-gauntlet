@@ -317,10 +317,12 @@ def test_command_adapter_review_with_explicit_config_creates_finding(
 ) -> None:
     _init_session(tmp_path, capsys)
     script = (
-        "import json, sys; "
-        "assert 'README.md' in sys.argv[1]; "
-        "print(json.dumps({'comments':[{'path':'README.md','content':'Command issue',"
-        "'existing_code':'# docs','start_line':1,'end_line':1}]}))"
+        "import json, re, sys; "
+        "prompt=sys.argv[1]; "
+        "match = re.search(r'file_path: (\\S+)', prompt); "
+        "path = match.group(1) if match else 'custom.json'; "
+        "print(json.dumps({'comments':[{'path':path,'content':'Command issue',"
+        "'existing_code':'source omitted from prompt','start_line':1,'end_line':1}]}))"
     )
     config = _command_config(tmp_path, script, name="custom.json")
 
