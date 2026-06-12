@@ -24,7 +24,7 @@ hooks:
 	uv run prek run --all-files
 
 install:
-	uv tool install .
+	uv tool install --reinstall .
 
 install-hooks:
 	uv run prek install --install-hooks --hook-type pre-commit --hook-type pre-push
