@@ -1,6 +1,8 @@
 import sqlite3
 from pathlib import Path
 
+import pytest
+
 from review_gauntlet.review_cells import CellState, ReviewCell
 from review_gauntlet.session_store import SessionStore
 
@@ -46,6 +48,15 @@ def test_session_store_updates_cell_state_for_one_session(tmp_path: Path) -> Non
 
     assert store.list_cells("RGS-one")[0]["state"] == "reviewed"
     assert store.list_cells("RGS-two")[0]["state"] == "pending"
+
+
+def test_session_store_update_cell_state_rejects_unknown_cell(tmp_path: Path) -> None:
+    store = SessionStore(tmp_path)
+    cell = ReviewCell(id="RGC-1", file_path="README.md", rule_id="docs", slice_id="docs")
+    store.create_session({"session_id": "RGS-one", "target_digest": "abc", "target": {}}, (cell,))
+
+    with pytest.raises(LookupError, match="unknown review cell"):
+        store.update_cell_state("RGS-one", "RGC-missing", CellState.REVIEWED)
 
 
 def test_session_store_marks_reviewed_and_refreshes_digest_for_one_session(

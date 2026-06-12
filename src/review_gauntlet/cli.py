@@ -315,15 +315,30 @@ def _cmd_review(args: argparse.Namespace, root: Path, store: SessionStore) -> No
     digest = target_digest(root)
     target = TargetSpec.model_validate(metadata["target"])
     _reconcile_cells(store, root, target)
-    run_id = store.create_run(session_id, digest)
     if args.budget <= 0:
         status = _status(store, root)
         _emit(
-            {"run_id": run_id, "reviewed_cells": 0, "finding_ids": [], **status},
+            {"run_id": None, "reviewed_cells": 0, "finding_ids": [], **status},
             args.format,
         )
         return
     adapter_config = load_config(root, args.config) if args.fixture is None else None
+    current_cells = cells_from_plan(_build_target_plan(root, target), file_digests(root))
+    selected_cells = _select_review_cells(
+        store=store,
+        session_id=session_id,
+        current_cells=current_cells,
+        budget=args.budget,
+    )
+    if not selected_cells:
+        status = _status(store, root)
+        _emit(
+            {"run_id": None, "reviewed_cells": 0, "finding_ids": [], **status},
+            args.format,
+        )
+        return
+
+    run_id = store.create_run(session_id, digest)
     if args.fixture is not None:
         adapter: ReviewAdapter = FakeReviewAdapter(args.fixture)
     elif adapter_config is not None:
@@ -337,14 +352,6 @@ def _cmd_review(args: argparse.Namespace, root: Path, store: SessionStore) -> No
         )
     else:
         raise ValueError("review requires --fixture or a command adapter config")
-
-    current_cells = cells_from_plan(_build_target_plan(root, target), file_digests(root))
-    selected_cells = _select_review_cells(
-        store=store,
-        session_id=session_id,
-        current_cells=current_cells,
-        budget=args.budget,
-    )
     reporter = ReviewProgressReporter(enabled=args.audience == "human")
     reporter.run_start(
         session_id=session_id,
@@ -503,6 +510,11 @@ def _reconcile_cells(store: SessionStore, root: Path, target: TargetSpec) -> Non
 
 
 def _cmd_mark(args: argparse.Namespace, store: SessionStore) -> None:
+    if args.until:
+        try:
+            date.fromisoformat(str(args.until))
+        except ValueError as exc:
+            raise ValueError("mark --until must be an ISO date (YYYY-MM-DD)") from exc
     mapping = {
         "confirmed": FindingState.CONFIRMED,
         "false-positive": FindingState.FALSE_POSITIVE,
@@ -672,14 +684,17 @@ def _expired_terminal_decision_count(store: SessionStore, session_id: str) -> in
 
 
 def _is_expired(metadata_json: str, today: date) -> bool:
-    raw_metadata = json.loads(metadata_json)
-    if not isinstance(raw_metadata, dict):
-        raise ValueError("finding event metadata must be a JSON object")
-    metadata = cast(dict[str, Any], raw_metadata)
-    until = metadata.get("until")
-    if not until:
-        return False
-    return date.fromisoformat(str(until)) < today
+    try:
+        raw_metadata = json.loads(metadata_json)
+        if not isinstance(raw_metadata, dict):
+            return True
+        metadata = cast(dict[str, Any], raw_metadata)
+        until = metadata.get("until")
+        if not until:
+            return False
+        return date.fromisoformat(str(until)) < today
+    except (json.JSONDecodeError, ValueError, TypeError):
+        return True
 
 
 def _next_action(

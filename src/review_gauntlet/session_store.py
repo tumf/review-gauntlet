@@ -126,7 +126,7 @@ class SessionStore:
 
     def update_cell_state(self, session_id: str, cell_id: str, state: CellState) -> None:
         with self.connect() as conn:
-            conn.execute(
+            cur = conn.execute(
                 """
                 update review_cells
                 set state = ?
@@ -134,6 +134,8 @@ class SessionStore:
                 """,
                 (state, session_id, cell_id),
             )
+        if cur.rowcount != 1:
+            raise LookupError(f"unknown review cell: session_id={session_id} cell_id={cell_id}")
 
     def mark_cell_reviewed(self, session_id: str, cell: ReviewCell) -> None:
         with self.connect() as conn:
@@ -183,10 +185,7 @@ class SessionStore:
                 (session_id, finding.fingerprint),
             ).fetchone()
             if row is None:
-                count = conn.execute(
-                    "select count(*) as count from findings where session_id = ?", (session_id,)
-                ).fetchone()["count"]
-                finding_id = f"RGF-{int(count) + 1:04d}"
+                finding_id = _next_finding_id(conn, session_id)
                 conn.execute(
                     """
                     insert into findings(
@@ -284,6 +283,19 @@ class SessionStore:
             """,
             (finding_id, current, state, reason, json.dumps(metadata, sort_keys=True)),
         )
+
+
+def _next_finding_id(conn: sqlite3.Connection, session_id: str) -> str:
+    rows = conn.execute(
+        "select finding_id from findings where session_id = ? and finding_id glob 'RGF-[0-9]*'",
+        (session_id,),
+    ).fetchall()
+    max_numeric_id = 0
+    for row in rows:
+        suffix = str(row["finding_id"]).removeprefix("RGF-")
+        if suffix.isdigit():
+            max_numeric_id = max(max_numeric_id, int(suffix))
+    return f"RGF-{max_numeric_id + 1:04d}"
 
 
 def _create_schema(conn: sqlite3.Connection) -> None:
