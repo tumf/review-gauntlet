@@ -11,6 +11,7 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any, NoReturn, cast
 
+from review_gauntlet.__about__ import __version__
 from review_gauntlet.config import ConfigError, load_config
 from review_gauntlet.findings import FindingState, normalize_ocr_comment
 from review_gauntlet.inventory import (
@@ -185,6 +186,10 @@ def _output_format_arg(parser: argparse.ArgumentParser) -> None:
 
 
 def main(argv: list[str] | None = None) -> None:
+    if argv == ["--version"] or (argv is None and sys.argv[1:] == ["--version"]):
+        print(f"review-gauntlet {__version__}")
+        return
+
     args = build_parser().parse_args(argv)
     root = Path(args.root)
     if not root.is_dir():

@@ -3,9 +3,16 @@ from pathlib import Path
 
 import pytest
 
+from review_gauntlet.__about__ import __version__
 from review_gauntlet.cli import main
 from review_gauntlet.models import MatrixRow, ReviewCheck, ReviewMatrix, ReviewPlan, ReviewSlice
 from review_gauntlet.report import render_markdown_report
+
+
+def test_cli_version_flag_outputs_package_version(capsys: pytest.CaptureFixture[str]) -> None:
+    main(["--version"])
+
+    assert capsys.readouterr().out == f"review-gauntlet {__version__}\n"
 
 
 def test_cli_inventory_outputs_json(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
