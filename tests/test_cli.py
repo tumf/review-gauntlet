@@ -96,6 +96,52 @@ def test_cli_plan_outputs_json(tmp_path: Path, capsys: pytest.CaptureFixture[str
     assert data["slices"][0]["checks"][0]["id"] == "docs-accuracy"
 
 
+def test_cli_plan_applies_review_exclusions(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    included = ["src/app.py", "README.md"]
+    excluded = [
+        "docs/usage.md",
+        "openspec/specs/review-sessions/spec.md",
+        "tests/test_app.py",
+        "app.test.ts",
+        "package.json",
+        "uv.lock",
+    ]
+    for relative in [*included, *excluded]:
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("content\n", encoding="utf-8")
+
+    main(["plan", str(tmp_path), "--format", "json"])
+
+    data = json.loads(capsys.readouterr().out)
+    planned_paths = {
+        file_path for review_slice in data["slices"] for file_path in review_slice["files"]
+    }
+    assert set(included) <= planned_paths
+    assert not (set(excluded) & planned_paths)
+
+
+def test_cli_report_applies_review_exclusions(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    for relative in ["src/app.py", "docs/usage.md", "openspec/specs/app/spec.md", "package.json"]:
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("content\n", encoding="utf-8")
+
+    main(["report", str(tmp_path)])
+
+    output = capsys.readouterr().out
+    assert "python-runtime" in output
+    assert "docs-accuracy" not in output
+    assert "dependency-audit" not in output
+    assert "docs/usage.md" not in output
+    assert "openspec/specs/app/spec.md" not in output
+    assert "package.json" not in output
+
+
 def test_cli_inventory_defaults_to_text(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     (tmp_path / "README.md").write_text("# docs\n", encoding="utf-8")
 
