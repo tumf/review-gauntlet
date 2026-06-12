@@ -82,6 +82,13 @@ class VerdictPayload(BaseModel):
     comments: tuple[OCRComment, ...] = ()
 
 
+class FileMetadata(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    file_size_bytes: int
+    line_count: int
+
+
 class PromptContext(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -89,7 +96,7 @@ class PromptContext(BaseModel):
     cell: ReviewCell
     rule: RuleDocument
     ruleset_digest: str
-    file_content: str
+    file_metadata: FileMetadata
     output_mode: OutputMode = OutputMode.STDOUT_JSON
     verdict_output_file: str | None = None
 
@@ -129,6 +136,11 @@ def build_review_prompt(context: PromptContext) -> str:
             f"slice_id: {context.cell.slice_id}",
             f"rule_id: {context.cell.rule_id}",
             f"content_digest: {context.cell.content_digest}",
+            f"file_size_bytes: {context.file_metadata.file_size_bytes}",
+            f"line_count: {context.file_metadata.line_count}",
+            "",
+            "Source file contents are not embedded in this prompt. When source inspection is "
+            "needed, read the target file from repository_root plus file_path.",
             "",
             "## Selected Rule",
             f"rule_document: {context.rule.filename}",
@@ -136,11 +148,6 @@ def build_review_prompt(context: PromptContext) -> str:
             "",
             "## Verdict JSON Contract",
             json.dumps(contract, indent=2, sort_keys=True),
-            "",
-            "## File Content",
-            f"```text path={context.cell.file_path}",
-            context.file_content,
-            "```",
             "",
         ]
     )
@@ -210,7 +217,7 @@ class CommandReviewAdapter:
                 cell=cell,
                 rule=self._ruleset.select_rule_doc(cell.file_path),
                 ruleset_digest=self._ruleset.digest,
-                file_content=self._read_cell_file(cell),
+                file_metadata=self._read_cell_file_metadata(cell),
                 output_mode=self._config.output.mode,
                 verdict_output_file=str(output_path),
             )
@@ -335,7 +342,7 @@ class CommandReviewAdapter:
             with self._process_lock:
                 self._active_processes.discard(process)
 
-    def _read_cell_file(self, cell: ReviewCell) -> str:
+    def _read_cell_file_metadata(self, cell: ReviewCell) -> FileMetadata:
         file_path = (self._root / cell.file_path).resolve()
         try:
             file_path.relative_to(self._root)
@@ -345,7 +352,11 @@ class CommandReviewAdapter:
             ) from exc
         if not file_path.is_file():
             raise ReviewAdapterError(f"review cell path is not a file: {cell.file_path}")
-        return file_path.read_text(encoding="utf-8")
+        content = file_path.read_bytes()
+        return FileMetadata(
+            file_size_bytes=len(content),
+            line_count=content.count(b"\n") + (0 if content.endswith(b"\n") or not content else 1),
+        )
 
     def _variables(
         self, cell: ReviewCell, cell_dir: Path, output_file: Path, prompt: str
