@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import fnmatch
 import os
 import subprocess
 from pathlib import Path
@@ -56,6 +57,62 @@ REVIEW_EXCLUDED_SUFFIXES = {
     ".test.ets",
 }
 REVIEW_EXCLUDED_PREFIXES = {"test_"}
+REVIEW_EXCLUDED_PACKAGE_FILE_NAMES = {
+    "bun.lock",
+    "bun.lockb",
+    "cabal.project.freeze",
+    "Cargo.lock",
+    "Cargo.toml",
+    "composer.json",
+    "composer.lock",
+    "conanfile.txt",
+    "constraints.txt",
+    "deno.json",
+    "deno.jsonc",
+    "deno.lock",
+    "environment.yaml",
+    "environment.yml",
+    "flake.lock",
+    "Gemfile",
+    "Gemfile.lock",
+    "go.mod",
+    "go.sum",
+    "go.work",
+    "go.work.sum",
+    "gradle.lockfile",
+    "Manifest.toml",
+    "mix.lock",
+    "npm-shrinkwrap.json",
+    "package-lock.json",
+    "package.json",
+    "Package.resolved",
+    "Package.swift",
+    "package.yaml",
+    "Pipfile",
+    "Pipfile.lock",
+    "pnpm-lock.yaml",
+    "poetry.lock",
+    "pom.xml",
+    "pubspec.lock",
+    "pubspec.yaml",
+    "rebar.lock",
+    "renv.lock",
+    "requirements.txt",
+    "stack.yaml.lock",
+    "uv.lock",
+    "vcpkg-lock.json",
+    "vcpkg.json",
+    "yarn.lock",
+}
+REVIEW_EXCLUDED_PACKAGE_FILE_NAME_PATTERNS = {
+    "*.gemspec",
+    "constraints-*.txt",
+    "requirements-*.txt",
+}
+REVIEW_EXCLUDED_PACKAGE_RELATIVE_PATH_PATTERNS = {
+    "gradle/libs.versions.toml",
+    "*/gradle/libs.versions.toml",
+}
 EXCLUDED_DIR_NAMES = ARTIFACT_EXCLUDED_DIR_NAMES
 EXCLUDED_FILE_NAMES = ARTIFACT_EXCLUDED_FILE_NAMES
 EXCLUDED_DIR_SUFFIXES = ARTIFACT_EXCLUDED_DIR_SUFFIXES
@@ -133,10 +190,33 @@ def should_include_review_relative_path(relative: str | Path) -> bool:
         return False
     if any(part in REVIEW_EXCLUDED_PATH_PARTS for part in parts):
         return False
+    if is_review_excluded_package_file(path):
+        return False
     name = path.name
     if name.startswith(tuple(REVIEW_EXCLUDED_PREFIXES)):
         return False
     return not name.endswith(tuple(REVIEW_EXCLUDED_SUFFIXES))
+
+
+def is_review_excluded_package_file(path: Path) -> bool:
+    return (
+        path.name in REVIEW_EXCLUDED_PACKAGE_FILE_NAMES
+        or matches_review_excluded_package_file_name_pattern(path.name)
+        or matches_review_excluded_package_relative_path_pattern(path.as_posix())
+    )
+
+
+def matches_review_excluded_package_file_name_pattern(name: str) -> bool:
+    return any(
+        fnmatch.fnmatchcase(name, pattern) for pattern in REVIEW_EXCLUDED_PACKAGE_FILE_NAME_PATTERNS
+    )
+
+
+def matches_review_excluded_package_relative_path_pattern(relative: str) -> bool:
+    return any(
+        fnmatch.fnmatchcase(relative, pattern)
+        for pattern in REVIEW_EXCLUDED_PACKAGE_RELATIVE_PATH_PATTERNS
+    )
 
 
 def should_include_path(path: Path, root: Path) -> bool:

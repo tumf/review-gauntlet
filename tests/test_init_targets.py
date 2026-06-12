@@ -6,6 +6,7 @@ import pytest
 
 from review_gauntlet.cli import main
 from review_gauntlet.session_store import SessionStore
+from review_gauntlet.targets import file_digests, review_universe_files, target_digest
 
 
 def _git(root: Path, *args: str) -> str:
@@ -61,11 +62,28 @@ def test_explicit_worktree_matches_default_workspace_diff(
     )
     (tmp_path / "app.spec.ts").write_text("test('changed', () => {})\n", encoding="utf-8")
     (tmp_path / "foo_test.rs").write_text("#[test]\nfn it_works() {}\n", encoding="utf-8")
+    (tmp_path / "uv.lock").write_text("version = 1\n", encoding="utf-8")
+    (tmp_path / "package-lock.json").write_text("{}\n", encoding="utf-8")
+    (tmp_path / "Cargo.lock").write_text("# lock\n", encoding="utf-8")
 
     main(["init", str(tmp_path), "--worktree", "--format", "json"])
 
     assert json.loads(capsys.readouterr().out)["cell_count"] > 0
     assert _cell_paths(tmp_path) == {"changed.py"}
+
+
+def test_package_only_worktree_changes_create_no_review_cells(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_repo(tmp_path)
+    (tmp_path / "uv.lock").write_text("version = 1\n", encoding="utf-8")
+    (tmp_path / "package-lock.json").write_text("{}\n", encoding="utf-8")
+    (tmp_path / "Cargo.lock").write_text("# lock\n", encoding="utf-8")
+
+    main(["init", str(tmp_path), "--worktree", "--format", "json"])
+
+    assert json.loads(capsys.readouterr().out)["cell_count"] == 0
+    assert _cell_paths(tmp_path) == set()
 
 
 def test_branch_range_init_scopes_to_changed_files(
@@ -74,7 +92,9 @@ def test_branch_range_init_scopes_to_changed_files(
     _init_repo(tmp_path)
     base = _git(tmp_path, "rev-parse", "HEAD")
     (tmp_path / "feature.py").write_text("print('feature')\n", encoding="utf-8")
-    _git(tmp_path, "add", "feature.py")
+    (tmp_path / "package.json").write_text('{"dependencies": {}}\n', encoding="utf-8")
+    (tmp_path / "go.sum").write_text("example.com/mod v1.0.0 h1:abc\n", encoding="utf-8")
+    _git(tmp_path, "add", "feature.py", "package.json", "go.sum")
     _git(tmp_path, "commit", "-m", "feature")
     head = _git(tmp_path, "rev-parse", "HEAD")
 
@@ -89,7 +109,9 @@ def test_commit_init_scopes_to_commit_files_and_records_fixed_head(
 ) -> None:
     _init_repo(tmp_path)
     (tmp_path / "commit_only.py").write_text("print('commit')\n", encoding="utf-8")
-    _git(tmp_path, "add", "commit_only.py")
+    (tmp_path / "Cargo.toml").write_text("[package]\nname = 'demo'\n", encoding="utf-8")
+    (tmp_path / "pom.xml").write_text("<project />\n", encoding="utf-8")
+    _git(tmp_path, "add", "commit_only.py", "Cargo.toml", "pom.xml")
     _git(tmp_path, "commit", "-m", "commit only")
     commit = _git(tmp_path, "rev-parse", "HEAD")
 
@@ -134,6 +156,9 @@ def test_all_init_uses_full_inventory_and_exclusions(
     (tmp_path / "openspec" / "specs" / "spec.md").write_text("# spec\n", encoding="utf-8")
     (tmp_path / "foo_test.go").write_text("package main\n", encoding="utf-8")
     (tmp_path / "foo_test.rs").write_text("#[test]\nfn it_works() {}\n", encoding="utf-8")
+    (tmp_path / "uv.lock").write_text("version = 1\n", encoding="utf-8")
+    (tmp_path / "package.json").write_text("{}\n", encoding="utf-8")
+    (tmp_path / "Cargo.lock").write_text("# lock\n", encoding="utf-8")
     state_dir = tmp_path / ".review-gauntlet"
     state_dir.mkdir()
     (state_dir / "ignored.py").write_text("print('ignored')\n", encoding="utf-8")
@@ -147,7 +172,29 @@ def test_all_init_uses_full_inventory_and_exclusions(
     assert "openspec/specs/spec.md" not in paths
     assert "foo_test.go" not in paths
     assert "foo_test.rs" not in paths
+    assert "uv.lock" not in paths
+    assert "package.json" not in paths
+    assert "Cargo.lock" not in paths
     assert ".review-gauntlet/ignored.py" not in paths
+
+
+def test_review_universe_and_file_digests_omit_package_files(tmp_path: Path) -> None:
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "app.py").write_text("print('ok')\n", encoding="utf-8")
+    (tmp_path / "uv.lock").write_text("version = 1\n", encoding="utf-8")
+    (tmp_path / "package-lock.json").write_text("{}\n", encoding="utf-8")
+
+    universe_paths = {
+        path.relative_to(tmp_path).as_posix() for path in review_universe_files(tmp_path)
+    }
+    digest_paths = set(file_digests(tmp_path))
+    baseline_target_digest = target_digest(tmp_path)
+    (tmp_path / "uv.lock").write_text("version = 2\n", encoding="utf-8")
+    (tmp_path / "package-lock.json").write_text('{"lockfileVersion": 3}\n', encoding="utf-8")
+
+    assert universe_paths == {"src/app.py"}
+    assert digest_paths == {"src/app.py"}
+    assert target_digest(tmp_path) == baseline_target_digest
 
 
 @pytest.mark.parametrize("flag", ["--from", "--to", "--commit", "--worktree", "--all"])
