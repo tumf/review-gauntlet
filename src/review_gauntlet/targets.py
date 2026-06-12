@@ -117,9 +117,10 @@ def review_universe_files(root: Path) -> tuple[Path, ...]:
 
 
 def target_digest(root: Path) -> str:
+    repo_root = root.resolve()
     digest = hashlib.sha256()
-    for path in review_universe_files(root):
-        rel = path.relative_to(root).as_posix()
+    for path in review_universe_files(repo_root):
+        rel = path.relative_to(repo_root).as_posix()
         digest.update(rel.encode())
         digest.update(b"\0")
         digest.update(path.read_bytes())
@@ -128,9 +129,12 @@ def target_digest(root: Path) -> str:
 
 
 def file_digests(root: Path) -> dict[str, str]:
+    repo_root = root.resolve()
     result: dict[str, str] = {}
-    for path in review_universe_files(root):
-        result[path.relative_to(root).as_posix()] = hashlib.sha256(path.read_bytes()).hexdigest()
+    for path in review_universe_files(repo_root):
+        result[path.relative_to(repo_root).as_posix()] = hashlib.sha256(
+            path.read_bytes()
+        ).hexdigest()
     return result
 
 

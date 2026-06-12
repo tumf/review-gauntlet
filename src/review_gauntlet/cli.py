@@ -469,6 +469,10 @@ def review_cells_concurrently(
                     progress.cell_timeout(cell, exc)
                 else:
                     progress.cell_failure(cell, exc)
+            except Exception as exc:
+                error = _unexpected_adapter_error(cell, exc)
+                results[cell.id] = error
+                progress.cell_failure(cell, error)
     except KeyboardInterrupt:
         cancel_adapter(adapter)
         for future, cell in futures.items():
@@ -484,6 +488,18 @@ def review_cells_concurrently(
 
 def _is_timeout_failure(error: ReviewAdapterError) -> bool:
     return "timeout_seconds" in error.failure or "timed out" in str(error)
+
+
+def _unexpected_adapter_error(cell: ReviewCell, exc: Exception) -> ReviewAdapterError:
+    failure: dict[str, object] = {
+        "error": "unexpected adapter exception",
+        "exception_type": exc.__class__.__name__,
+        "message": str(exc),
+        "cell_id": cell.id,
+    }
+    return ReviewAdapterError(
+        f"unexpected adapter exception for cell {cell.id}: {exc}", failure=failure
+    )
 
 
 def _adapter_identity(adapter: ReviewAdapter) -> str:

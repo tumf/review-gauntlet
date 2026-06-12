@@ -149,3 +149,18 @@ def test_target_digest_and_file_digests_ignore_default_review_exclusions(tmp_pat
 
     assert target_digest(tmp_path) != original_digest
     assert file_digests(tmp_path)["src/app.py"] != original_file_digests["src/app.py"]
+
+
+def test_target_digest_and_file_digests_match_relative_and_absolute_roots(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "app.py").write_text("print('ok')\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    assert target_digest(Path(".")) == target_digest(tmp_path.resolve())
+    assert (
+        file_digests(Path("."))
+        == file_digests(tmp_path.resolve())
+        == {"src/app.py": file_digests(tmp_path)["src/app.py"]}
+    )

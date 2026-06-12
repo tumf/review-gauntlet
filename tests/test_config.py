@@ -157,3 +157,28 @@ def test_command_adapter_config_rejects_non_positive_timeout() -> None:
         CommandAdapterConfig.model_validate(
             {"type": "command", "command": "tool", "timeout_seconds": 0}
         )
+
+
+def test_command_adapter_config_rejects_prompt_in_output_path_but_not_args_or_env() -> None:
+    with pytest.raises(ValueError, match="adapter.output.path must not use .*prompt"):
+        CommandAdapterConfig.model_validate(
+            {
+                "type": "command",
+                "command": "tool",
+                "args": ["{prompt}"],
+                "env": {"PROMPT": "{prompt}"},
+                "output": {"mode": "file-json", "path": "{prompt}.json"},
+            }
+        )
+
+    config = CommandAdapterConfig.model_validate(
+        {
+            "type": "command",
+            "command": "tool",
+            "args": ["{prompt}"],
+            "env": {"PROMPT": "{prompt}"},
+            "output": {"mode": "file-json", "path": "{output_file}"},
+        }
+    )
+    assert config.args == ("{prompt}",)
+    assert config.env == {"PROMPT": "{prompt}"}
