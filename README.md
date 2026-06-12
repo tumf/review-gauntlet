@@ -14,6 +14,14 @@ uv sync
 make check
 ```
 
+Install the local CLI as the canonical `review-gauntlet` command when you want to
+run it outside `uv run`:
+
+```bash
+make install
+review-gauntlet --help
+```
+
 Start normal use by initializing a review session, then run exactly one review step
 with a configured external CLI adapter:
 
