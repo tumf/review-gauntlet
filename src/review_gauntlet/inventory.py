@@ -104,11 +104,14 @@ REVIEW_EXCLUDED_PACKAGE_FILE_NAMES = {
     "vcpkg.json",
     "yarn.lock",
 }
-REVIEW_EXCLUDED_PACKAGE_FILE_PATTERNS = {
+REVIEW_EXCLUDED_PACKAGE_FILE_NAME_PATTERNS = {
     "*.gemspec",
     "constraints-*.txt",
-    "gradle/libs.versions.toml",
     "requirements-*.txt",
+}
+REVIEW_EXCLUDED_PACKAGE_RELATIVE_PATH_PATTERNS = {
+    "gradle/libs.versions.toml",
+    "*/gradle/libs.versions.toml",
 }
 EXCLUDED_DIR_NAMES = ARTIFACT_EXCLUDED_DIR_NAMES
 EXCLUDED_FILE_NAMES = ARTIFACT_EXCLUDED_FILE_NAMES
@@ -197,8 +200,16 @@ def should_include_review_relative_path(relative: str | Path) -> bool:
 
 def is_review_excluded_package_file(path: Path) -> bool:
     relative = path.as_posix()
-    return path.name in REVIEW_EXCLUDED_PACKAGE_FILE_NAMES or any(
-        fnmatch.fnmatchcase(relative, pattern) for pattern in REVIEW_EXCLUDED_PACKAGE_FILE_PATTERNS
+    return (
+        path.name in REVIEW_EXCLUDED_PACKAGE_FILE_NAMES
+        or any(
+            fnmatch.fnmatchcase(path.name, pattern)
+            for pattern in REVIEW_EXCLUDED_PACKAGE_FILE_NAME_PATTERNS
+        )
+        or any(
+            fnmatch.fnmatchcase(relative, pattern)
+            for pattern in REVIEW_EXCLUDED_PACKAGE_RELATIVE_PATH_PATTERNS
+        )
     )
 
 
