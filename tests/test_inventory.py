@@ -3,7 +3,12 @@ from pathlib import Path
 
 import pytest
 
-from review_gauntlet.inventory import build_inventory, should_include_review_relative_path
+from review_gauntlet.inventory import (
+    build_inventory,
+    matches_review_excluded_package_file_name_pattern,
+    matches_review_excluded_package_relative_path_pattern,
+    should_include_review_relative_path,
+)
 from review_gauntlet.models import FileCategory
 
 
@@ -171,6 +176,24 @@ PACKAGE_REVIEW_EXCLUDED_PATHS = [
 @pytest.mark.parametrize("relative_path", PACKAGE_REVIEW_EXCLUDED_PATHS)
 def test_review_path_filter_excludes_package_files(relative_path: str) -> None:
     assert not should_include_review_relative_path(relative_path)
+
+
+@pytest.mark.parametrize(
+    "file_name",
+    ["requirements-dev.txt", "constraints-ci.txt", "example.gemspec"],
+)
+def test_package_file_name_patterns_match_basename_only(file_name: str) -> None:
+    assert matches_review_excluded_package_file_name_pattern(file_name)
+
+
+@pytest.mark.parametrize(
+    "relative_path",
+    ["gradle/libs.versions.toml", "services/api/gradle/libs.versions.toml"],
+)
+def test_package_relative_path_patterns_match_nested_gradle_versions(
+    relative_path: str,
+) -> None:
+    assert matches_review_excluded_package_relative_path_pattern(relative_path)
 
 
 def test_package_files_remain_in_general_inventory(tmp_path: Path) -> None:

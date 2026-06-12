@@ -199,17 +199,23 @@ def should_include_review_relative_path(relative: str | Path) -> bool:
 
 
 def is_review_excluded_package_file(path: Path) -> bool:
-    relative = path.as_posix()
     return (
         path.name in REVIEW_EXCLUDED_PACKAGE_FILE_NAMES
-        or any(
-            fnmatch.fnmatchcase(path.name, pattern)
-            for pattern in REVIEW_EXCLUDED_PACKAGE_FILE_NAME_PATTERNS
-        )
-        or any(
-            fnmatch.fnmatchcase(relative, pattern)
-            for pattern in REVIEW_EXCLUDED_PACKAGE_RELATIVE_PATH_PATTERNS
-        )
+        or matches_review_excluded_package_file_name_pattern(path.name)
+        or matches_review_excluded_package_relative_path_pattern(path.as_posix())
+    )
+
+
+def matches_review_excluded_package_file_name_pattern(name: str) -> bool:
+    return any(
+        fnmatch.fnmatchcase(name, pattern) for pattern in REVIEW_EXCLUDED_PACKAGE_FILE_NAME_PATTERNS
+    )
+
+
+def matches_review_excluded_package_relative_path_pattern(relative: str) -> bool:
+    return any(
+        fnmatch.fnmatchcase(relative, pattern)
+        for pattern in REVIEW_EXCLUDED_PACKAGE_RELATIVE_PATH_PATTERNS
     )
 
 
