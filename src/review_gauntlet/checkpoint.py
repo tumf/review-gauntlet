@@ -26,6 +26,16 @@ class DirtyReviewUniverseError(ValueError):
         return "review-universe files are dirty relative to HEAD: " + ", ".join(self.paths)
 
 
+@dataclass(frozen=True)
+class DirtyWorkingTree:
+    review_paths: tuple[str, ...]
+    non_review_paths: tuple[str, ...]
+
+    @property
+    def is_dirty(self) -> bool:
+        return bool(self.review_paths or self.non_review_paths)
+
+
 def latest_checkpoint_dir(root: Path) -> Path:
     return root / ".review-gauntlet" / "checkpoints" / "latest"
 
@@ -121,6 +131,29 @@ def _dirty_review_universe_paths(root: Path) -> tuple[str, ...]:
     from review_gauntlet.inventory import should_include_review_relative_path
 
     return tuple(sorted({name for name in names if should_include_review_relative_path(name)}))
+
+
+def _get_all_uncommitted_paths(root: Path) -> tuple[str, ...]:
+    if not (root / ".git").exists():
+        return ()
+    names = _split(_git(root, "diff", "--name-only", "--cached"))
+    names += _split(_git(root, "diff", "--name-only"))
+    names += _split(_git(root, "ls-files", "--others", "--exclude-standard"))
+    return tuple(sorted({name for name in names}))
+
+
+def classify_working_tree_dirty(root: Path) -> DirtyWorkingTree:
+    from review_gauntlet.inventory import should_include_review_relative_path
+
+    all_paths = tuple(
+        p for p in _get_all_uncommitted_paths(root) if not p.startswith(".review-gauntlet/")
+    )
+    review_paths = tuple(p for p in all_paths if should_include_review_relative_path(p))
+    non_review_paths = tuple(p for p in all_paths if not should_include_review_relative_path(p))
+    return DirtyWorkingTree(
+        review_paths=review_paths,
+        non_review_paths=non_review_paths,
+    )
 
 
 def write_latest_checkpoint(

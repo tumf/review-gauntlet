@@ -45,7 +45,7 @@ def test_finalize_writes_checkpoint_files_and_cleans_active_session(
     _init_repo(tmp_path)
     _complete_session(tmp_path, capsys)
 
-    main(["finalize", str(tmp_path), "--format", "json"])
+    main(["finalize", str(tmp_path), "--allow-non-review-dirty", "--format", "json"])
 
     data = json.loads(capsys.readouterr().out)
     checkpoint_dir = tmp_path / data["checkpoint_dir"]
@@ -70,6 +70,53 @@ def test_finalize_writes_checkpoint_files_and_cleans_active_session(
     assert "review-gauntlet init" in capsys.readouterr().err
 
 
+def test_status_blocks_dirty_review_universe(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_repo(tmp_path)
+    _complete_session(tmp_path, capsys)
+    (tmp_path / "dirty.py").write_text("print('dirty')\n", encoding="utf-8")
+
+    main(["status", str(tmp_path), "--format", "json"])
+
+    data = json.loads(capsys.readouterr().out)
+    assert data["can_finalize"] is False
+    assert any(
+        "review-universe files are dirty" in blocker for blocker in data["finalize_blockers"]
+    )
+    assert any("dirty.py" in blocker for blocker in data["finalize_blockers"])
+
+
+def test_status_blocks_non_review_dirty_by_default(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_repo(tmp_path)
+    _complete_session(tmp_path, capsys)
+    (tmp_path / "package.json").write_text("{}\n", encoding="utf-8")
+
+    main(["status", str(tmp_path), "--format", "json"])
+
+    data = json.loads(capsys.readouterr().out)
+    assert data["can_finalize"] is False
+    assert any("uncommitted non-review files" in blocker for blocker in data["finalize_blockers"])
+    assert any("package.json" in blocker for blocker in data["finalize_blockers"])
+
+
+def test_finalize_allows_non_review_dirty_with_explicit_flag(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_repo(tmp_path)
+    _complete_session(tmp_path, capsys)
+    (tmp_path / "package.json").write_text("{}\n", encoding="utf-8")
+
+    main(["finalize", str(tmp_path), "--allow-non-review-dirty", "--format", "json"])
+
+    data = json.loads(capsys.readouterr().out)
+    assert data["can_finalize"] is True
+    assert data["session_state"] == "finalized"
+    assert (tmp_path / "package.json").exists()
+
+
 def test_finalize_blocks_dirty_review_universe_without_writing_checkpoint(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -78,7 +125,7 @@ def test_finalize_blocks_dirty_review_universe_without_writing_checkpoint(
     (tmp_path / "dirty.py").write_text("print('dirty')\n", encoding="utf-8")
 
     with pytest.raises(SystemExit) as excinfo:
-        main(["finalize", str(tmp_path), "--format", "json"])
+        main(["finalize", str(tmp_path), "--allow-non-review-dirty", "--format", "json"])
 
     data = json.loads(capsys.readouterr().out)
     assert excinfo.value.code == 1
@@ -105,7 +152,7 @@ def test_finalize_restores_previous_checkpoint_when_replacement_fails(
     monkeypatch.setattr(Path, "rename", fail_tmp_install)
 
     with pytest.raises(OSError, match="simulated install failure"):
-        main(["finalize", str(tmp_path), "--format", "json"])
+        main(["finalize", str(tmp_path), "--allow-non-review-dirty", "--format", "json"])
 
     assert (checkpoint_dir / "marker.txt").read_text(encoding="utf-8") == "previous\n"
     assert (tmp_path / ".review-gauntlet" / "active-session.json").exists()
@@ -152,7 +199,7 @@ def test_finalize_includes_terminal_findings_and_malformed_nonterminal_event_met
         )
     _git(tmp_path, "status", "--short")
 
-    main(["finalize", str(tmp_path), "--format", "json"])
+    main(["finalize", str(tmp_path), "--allow-non-review-dirty", "--format", "json"])
 
     data = json.loads(capsys.readouterr().out)
     checkpoint_dir = tmp_path / data["checkpoint_dir"]

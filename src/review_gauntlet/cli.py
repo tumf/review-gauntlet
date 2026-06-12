@@ -14,6 +14,7 @@ from typing import Any, NoReturn, cast
 from review_gauntlet.__about__ import __version__
 from review_gauntlet.checkpoint import (
     DirtyReviewUniverseError,
+    classify_working_tree_dirty,
     target_from_latest_checkpoint,
     write_latest_checkpoint,
 )
@@ -166,7 +167,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     status = subparsers.add_parser("status")
     status.add_argument("root", nargs="?", default=".")
-    _output_format_arg(status)
+    status.add_argument("--format", choices=("text", "json"), default="text")
+    status.add_argument(
+        "--allow-non-review-dirty",
+        action="store_true",
+        help="Allow uncommitted non-review files in the working tree",
+    )
 
     findings = subparsers.add_parser("findings")
     findings.add_argument("root", nargs="?", default=".")
@@ -193,7 +199,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     finalize = subparsers.add_parser("finalize")
     finalize.add_argument("root", nargs="?", default=".")
-    _output_format_arg(finalize)
+    finalize.add_argument("--format", choices=("text", "json"), default="text")
+    finalize.add_argument(
+        "--allow-non-review-dirty",
+        action="store_true",
+        help="Allow uncommitted non-review files in the working tree",
+    )
 
     completion = subparsers.add_parser("completion")
     completion.add_argument("shell", choices=("bash", "zsh", "fish"))
@@ -394,7 +405,8 @@ def _run_session_command(args: argparse.Namespace, root: Path) -> None:
     elif args.command == "verify-fixes":
         _cmd_verify_fixes(args, root, store)
     elif args.command == "status":
-        _emit(_status(store, root), args.format)
+        allow = bool(getattr(args, "allow_non_review_dirty", False))
+        _emit(_status(store, root, allow_non_review_dirty=allow), args.format)
     elif args.command == "findings":
         _emit(
             _findings(
@@ -408,7 +420,8 @@ def _run_session_command(args: argparse.Namespace, root: Path) -> None:
     elif args.command == "mark":
         _cmd_mark(args, store)
     elif args.command == "finalize":
-        result = _finalize(store, root)
+        allow = bool(getattr(args, "allow_non_review_dirty", False))
+        result = _finalize(store, root, allow_non_review_dirty=allow)
         _emit(result, args.format)
         if not result["can_finalize"]:
             raise SystemExit(1)
@@ -911,7 +924,12 @@ def _cmd_mark(args: argparse.Namespace, store: SessionStore) -> None:
     _emit({"finding_id": args.finding_id, "state": mapping[args.state]}, args.format)
 
 
-def _status(store: SessionStore, root: Path) -> dict[str, object]:
+def _status(
+    store: SessionStore,
+    root: Path,
+    *,
+    allow_non_review_dirty: bool = False,
+) -> dict[str, object]:
     session_id = store.active_session_id()
     with store.connect() as conn:
         cell_counts = dict(
@@ -934,7 +952,9 @@ def _status(store: SessionStore, root: Path) -> dict[str, object]:
         run_count = conn.execute(
             "select count(*) as count from runs where session_id = ?", (session_id,)
         ).fetchone()["count"]
-    reasons = _finalize_reasons(cell_counts, finding_counts, store, session_id, root)
+    reasons = _finalize_reasons(
+        cell_counts, finding_counts, store, session_id, root, allow_non_review_dirty
+    )
     return {
         "session_id": session_id,
         "session_state": "active",
@@ -1003,8 +1023,13 @@ def _normalize_finding_path(path: str) -> str:
     return posixpath.normpath(normalized) + suffix
 
 
-def _finalize(store: SessionStore, root: Path) -> dict[str, object]:
-    status = _status(store, root)
+def _finalize(
+    store: SessionStore,
+    root: Path,
+    *,
+    allow_non_review_dirty: bool = False,
+) -> dict[str, object]:
+    status = _status(store, root, allow_non_review_dirty=allow_non_review_dirty)
     if not status["can_finalize"]:
         try:
             from review_gauntlet.checkpoint import assert_review_universe_clean
@@ -1041,6 +1066,7 @@ def _finalize_reasons(
     store: SessionStore,
     session_id: str,
     root: Path,
+    allow_non_review_dirty: bool = False,
 ) -> list[str]:
     reasons: list[str] = []
     if cell_counts.get("pending", 0):
@@ -1054,6 +1080,18 @@ def _finalize_reasons(
         reasons.append("fixed findings require verification")
     if _expired_terminal_decision_count(store, session_id):
         reasons.append("waived or accepted-risk findings have expired")
+    try:
+        from review_gauntlet.checkpoint import assert_review_universe_clean
+
+        assert_review_universe_clean(root)
+    except DirtyReviewUniverseError as exc:
+        reasons.append(str(exc))
+    if not allow_non_review_dirty:
+        wtd = classify_working_tree_dirty(root)
+        if wtd.non_review_paths:
+            reasons.append(
+                "working tree has uncommitted non-review files: " + ", ".join(wtd.non_review_paths)
+            )
     last_reviewed_digest = store.last_run_target_digest(session_id)
     if last_reviewed_digest is None:
         reasons.append("no review run has been completed")
