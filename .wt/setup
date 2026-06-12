@@ -2,8 +2,6 @@
 
 set -eu
 
-PREK_INSTALLER_URL="https://github.com/j178/prek/releases/latest/download/prek-installer.sh"
-
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 
 resolve_worktree_root() {
@@ -33,27 +31,10 @@ ensure_prek() {
     return 0
   fi
 
-  if ! command -v curl >/dev/null 2>&1; then
-    echo "error: curl is required to install prek" 1>&2
-    return 1
-  fi
-
-  echo "installing prek"
-  curl -LsSf "${PREK_INSTALLER_URL}" | sh
-
-  if [ -d "${HOME}/.local/bin" ]; then
-    case ":${PATH}:" in
-      *":${HOME}/.local/bin:"*) ;;
-      *) PATH="${HOME}/.local/bin:${PATH}" ;;
-    esac
-    export PATH
-  fi
-
-  if ! command -v prek >/dev/null 2>&1; then
-    echo "error: prek install finished but 'prek' is still not on PATH" 1>&2
-    echo "hint: ensure the installer target directory is on PATH (often \$HOME/.local/bin)" 1>&2
-    return 1
-  fi
+  echo "error: prek is required but was not found on PATH" 1>&2
+  echo "hint: install prek from a trusted package source, then rerun .wt/setup" 1>&2
+  echo "hint: this bootstrap intentionally does not execute remote installers" 1>&2
+  return 1
 }
 
 ensure_prek

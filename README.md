@@ -165,13 +165,16 @@ make coverage
 
 ## Design
 
-Review Gauntlet treats review as a coverage matrix:
+Review Gauntlet treats review as a stateful coverage workflow:
 
-- inventory the project files
-- classify files into review slices
-- attach risk-specific checks to each slice
-- require evidence for each matrix row before final pass
+- initialize a session from an explicit target set
+- classify eligible files into review slices and coverage cells
+- run exactly one review step at a time through an external command adapter
+- record prompts, outputs, findings, and coverage state as audit evidence
+- finalize only after required coverage and live findings are closed
 
-The first version is intentionally small: it creates the inventory, review plan,
-and matrix. Review runners for Codex, Claude, static analyzers, and custom tools
-can plug into the same matrix later.
+External review tools are integrated through the command adapter rather than
+hard-coded runners. The adapter accepts argv arrays, expands review artifacts into
+safe template variables, and supports JSON verdicts written to stdout or files so
+CLIs such as opencode, Codex-style tools, static analyzers, or custom wrappers can
+participate without review-gauntlet owning provider login or secret management.

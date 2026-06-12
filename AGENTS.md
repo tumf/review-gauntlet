@@ -14,7 +14,7 @@
 - Individual checks: `make format`, `make lint`, `make typecheck`, `make test`, `make coverage`.
 - Hook parity: `make hooks`; install hooks with `make install-hooks` (`prek` pre-commit runs format+lint, pre-push runs typecheck+test).
 - Focused tests: `uv run pytest tests/test_cli.py` or `uv run pytest tests/test_cli.py::test_cli_inventory_outputs_json`.
-- CLI smoke commands: `uv run review-gauntlet inventory /path/to/repo --json`, `uv run review-gauntlet plan /path/to/repo --json`, `uv run review-gauntlet report /path/to/repo`.
+- CLI smoke commands: `uv run review-gauntlet inventory /path/to/repo --format json`, `uv run review-gauntlet plan /path/to/repo --format json`, `uv run review-gauntlet report /path/to/repo`.
 
 ## Tooling constraints
 
