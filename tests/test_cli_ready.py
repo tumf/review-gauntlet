@@ -169,7 +169,13 @@ def test_ready_priority_order_is_deterministic(
 
     prompt = _ready_json(tmp_path, capsys)["prompt"]
     assert prompt is not None
-    assert "Re-triage reopened findings" in prompt
+    assert "Review stale review cells" in prompt
+
+    _set_all_cells(tmp_path, CellState.PENDING)
+    assert "Review pending review cells" in _ready_prompt(tmp_path, capsys)
+
+    _set_all_cells(tmp_path, CellState.REVIEWED)
+    assert "Re-triage reopened findings" in _ready_prompt(tmp_path, capsys)
 
     with SessionStore(tmp_path).connect() as conn:
         conn.execute("delete from findings where state = ?", (FindingState.REOPENED.value,))
@@ -188,10 +194,6 @@ def test_ready_priority_order_is_deterministic(
             "delete from findings where state = ?",
             (FindingState.FIXED_PENDING_VERIFICATION.value,),
         )
-    assert "Review stale review cells" in _ready_prompt(tmp_path, capsys)
-
-    _set_all_cells(tmp_path, CellState.PENDING)
-    assert "Review pending review cells" in _ready_prompt(tmp_path, capsys)
 
     _mark_finalize_ready(tmp_path)
     finalize_prompt = _ready_json(tmp_path, capsys)["prompt"]
@@ -248,6 +250,25 @@ def test_ready_outputs_no_ready_task_when_only_non_commit_blockers_remain(
     assert _ready_json_exits(tmp_path, capsys, expected_code=1) == {"prompt": None}
 
 
+def test_status_prioritizes_pending_review_cells_before_untriaged_findings(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_session(tmp_path, capsys)
+    _insert_finding(tmp_path, FindingState.UNTRIAGED, 1)
+
+    main(["status", str(tmp_path), "--format", "json"])
+
+    data = json.loads(capsys.readouterr().out)
+    assert data["coverage"] == {CellState.PENDING.value: 1}
+    assert data["finding_state_counts"] == {FindingState.UNTRIAGED.value: 1}
+    assert data["next_required_action"] == "run_review"
+    assert data["finalize_blockers"] == [
+        "review cells are still pending",
+        "findings remain untriaged",
+        "no review run has been completed",
+    ]
+
+
 def test_status_treats_target_digest_drift_as_review_action(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -291,6 +312,11 @@ def test_ready_prompts_are_skill_directed_and_avoid_coordination_metadata(
     _assert_skill_directed_short_prompt(prompt, "Review pending review cells")
 
     _insert_finding(tmp_path, FindingState.UNTRIAGED, 1)
+    prompt = _ready_json(tmp_path, capsys)["prompt"]
+    assert prompt is not None
+    _assert_skill_directed_short_prompt(prompt, "Review pending review cells")
+
+    _set_all_cells(tmp_path, CellState.REVIEWED)
     prompt = _ready_json(tmp_path, capsys)["prompt"]
     assert prompt is not None
     _assert_skill_directed_short_prompt(prompt, "Triage untriaged findings")
