@@ -1057,6 +1057,11 @@ def _ready_prompt(store: SessionStore, root: Path) -> str | None:
         return _READY_PROMPTS["stale_review_cell"]
     if cell_counts.get(CellState.PENDING.value, 0):
         return _READY_PROMPTS["pending_review_cell"]
+    finalize_reasons = _finalize_reasons(
+        cell_counts, finding_counts, store, session_id, root, allow_non_review_dirty=False
+    )
+    if _finalize_blockers_include_target_digest_drift(finalize_reasons):
+        return _READY_PROMPTS["target_digest_drift"]
     if finding_counts.get(FindingState.REOPENED.value, 0):
         return _READY_PROMPTS["reopened"]
     if finding_counts.get(FindingState.UNTRIAGED.value, 0):
@@ -1065,11 +1070,6 @@ def _ready_prompt(store: SessionStore, root: Path) -> str | None:
         return _READY_PROMPTS["confirmed"]
     if finding_counts.get(FindingState.FIXED_PENDING_VERIFICATION.value, 0):
         return _READY_PROMPTS["fixed_pending_verification"]
-    finalize_reasons = _finalize_reasons(
-        cell_counts, finding_counts, store, session_id, root, allow_non_review_dirty=False
-    )
-    if _finalize_blockers_are_target_digest_drift(finalize_reasons):
-        return _READY_PROMPTS["target_digest_drift"]
     if not finalize_reasons or _finalize_blockers_are_commit_resolvable(finalize_reasons):
         return _READY_PROMPTS["finalize"]
     return None
@@ -1080,8 +1080,8 @@ _DIRTY_REVIEW_UNIVERSE_PREFIX = "review-universe files are dirty relative to HEA
 _DIRTY_NON_REVIEW_PREFIX = "working tree has uncommitted non-review files: "
 
 
-def _finalize_blockers_are_target_digest_drift(reasons: list[str]) -> bool:
-    return reasons == [_TARGET_DIGEST_DRIFT_REASON]
+def _finalize_blockers_include_target_digest_drift(reasons: list[str]) -> bool:
+    return _TARGET_DIGEST_DRIFT_REASON in reasons
 
 
 def _finalize_blockers_are_commit_resolvable(reasons: list[str]) -> bool:
@@ -1343,7 +1343,7 @@ def _next_action(
 ) -> str:
     if cell_counts.get("pending", 0) or cell_counts.get("stale", 0):
         return "run_review"
-    if _finalize_blockers_are_target_digest_drift(reasons):
+    if _finalize_blockers_include_target_digest_drift(reasons):
         return "run_review"
     if finding_counts.get("untriaged", 0) or finding_counts.get("reopened", 0):
         return "triage_findings"
