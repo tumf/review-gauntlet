@@ -96,6 +96,26 @@ def _ready_prompt(root: Path, capsys: pytest.CaptureFixture[str]) -> str:
     return prompt
 
 
+def _ledger_snapshot(root: Path) -> dict[str, object]:
+    ledger = root / ".review-gauntlet" / "ledger.sqlite"
+    with sqlite3.connect(ledger) as conn:
+        return {
+            "counts": {
+                table: conn.execute(f"select count(*) from {table}").fetchone()[0]
+                for table in ("runs", "finding_events", "findings", "review_cells")
+            },
+            "runs": conn.execute(
+                "select run_id, session_id, target_digest from runs order by run_id"
+            ).fetchall(),
+            "findings": conn.execute(
+                "select finding_id, state from findings order by finding_id"
+            ).fetchall(),
+            "cells": conn.execute(
+                "select cell_id, state, content_digest from review_cells order by cell_id"
+            ).fetchall(),
+        }
+
+
 def _assert_skill_directed_short_prompt(prompt: str, expected_phrase: str) -> None:
     assert prompt.startswith(READY_PREFIX)
     assert expected_phrase in prompt
@@ -226,6 +246,40 @@ def test_ready_outputs_no_ready_task_when_only_non_commit_blockers_remain(
     _set_all_cells(tmp_path, CellState.REVIEWED)
 
     assert _ready_json_exits(tmp_path, capsys, expected_code=1) == {"prompt": None}
+
+
+def test_status_treats_target_digest_drift_as_review_action(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_session(tmp_path, capsys)
+    _mark_finalize_ready(tmp_path)
+    (tmp_path / "README.md").write_text("# docs\n\nchanged\n", encoding="utf-8")
+    before = _ledger_snapshot(tmp_path)
+
+    main(["status", str(tmp_path), "--format", "json"])
+
+    data = json.loads(capsys.readouterr().out)
+    assert data["coverage"] == {CellState.REVIEWED.value: 1}
+    assert data["finalize_blockers"] == ["target digest has changed since the last review run"]
+    assert data["next_required_action"] == "run_review"
+    assert _ledger_snapshot(tmp_path) == before
+    assert not (tmp_path / ".review-gauntlet" / "checkpoints" / "latest").exists()
+
+
+def test_ready_prompts_review_for_target_digest_drift_without_mutating_state(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_session(tmp_path, capsys)
+    _mark_finalize_ready(tmp_path)
+    (tmp_path / "README.md").write_text("# docs\n\nchanged\n", encoding="utf-8")
+    before = _ledger_snapshot(tmp_path)
+
+    prompt = _ready_json(tmp_path, capsys)["prompt"]
+
+    assert prompt is not None
+    _assert_skill_directed_short_prompt(prompt, "Review target changes")
+    assert _ledger_snapshot(tmp_path) == before
+    assert not (tmp_path / ".review-gauntlet" / "checkpoints" / "latest").exists()
 
 
 def test_ready_prompts_are_skill_directed_and_avoid_coordination_metadata(
