@@ -11,6 +11,8 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any, NoReturn, cast
 
+from pydantic import ValidationError
+
 from review_gauntlet.__about__ import __version__
 from review_gauntlet.checkpoint import (
     DirtyReviewUniverseError,
@@ -38,6 +40,7 @@ from review_gauntlet.review_adapter import (
     ReviewAdapterError,
     ReviewAdapterResult,
     cancel_adapter,
+    validate_verdict_json,
 )
 from review_gauntlet.review_cells import CellState, ReviewCell, cells_from_plan
 from review_gauntlet.session_store import SessionStore
@@ -206,6 +209,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="Allow uncommitted non-review files in the working tree",
     )
 
+    validate_verdict = subparsers.add_parser("validate-verdict")
+    validate_verdict.add_argument("path", type=Path)
+    validate_verdict.add_argument("--format", choices=("text", "json"), default="text")
+
     completion = subparsers.add_parser("completion")
     completion.add_argument("shell", choices=("bash", "zsh", "fish"))
     return parser
@@ -333,6 +340,9 @@ def main(argv: list[str] | None = None) -> None:
     if args.command == "completion":
         print(_completion_script(parser, args.shell), end="")
         return
+    if args.command == "validate-verdict":
+        _cmd_validate_verdict(args)
+        return
 
     root = Path(args.root)
     if not root.is_dir():
@@ -349,6 +359,19 @@ def main(argv: list[str] | None = None) -> None:
         fail(str(exc))
     except LookupError as exc:
         fail(str(exc), code=1)
+
+
+def _cmd_validate_verdict(args: argparse.Namespace) -> None:
+    path = Path(args.path)
+    if not path.is_file():
+        fail(f"verdict file does not exist: {path}")
+    try:
+        payload = validate_verdict_json(path.read_text(encoding="utf-8"))
+    except (ValueError, ValidationError) as exc:
+        result: dict[str, object] = {"valid": False, "error": str(exc), "path": str(path)}
+        _emit(result, args.format)
+        raise SystemExit(1) from exc
+    _emit({"valid": True, "path": str(path), "comment_count": len(payload.comments)}, args.format)
 
 
 def _run_legacy_command(args: argparse.Namespace, root: Path) -> None:
@@ -493,7 +516,9 @@ def _cmd_review(args: argparse.Namespace, root: Path, store: SessionStore) -> No
     digest = target_digest(root)
     target = TargetSpec.model_validate(metadata["target"])
     _reconcile_cells(store, root, target)
-    if args.budget <= 0:
+    if args.budget < 0:
+        fail("review --budget must be a non-negative integer")
+    if args.budget == 0:
         status = _status(store, root)
         _emit(
             {"run_id": None, "reviewed_cells": 0, "finding_ids": [], **status},
@@ -569,7 +594,6 @@ def _cmd_review(args: argparse.Namespace, root: Path, store: SessionStore) -> No
             finding_ids.append(store.upsert_finding(session_id, run_id, selected.id, finding))
         store.mark_cell_reviewed(session_id, selected)
         reviewed += 1
-    store.verify_fixed_findings(session_id, seen_fingerprints, evaluated_paths)
     status = _status(store, root)
     if first_failure is not None:
         failed_cell, error = first_failure
@@ -617,7 +641,9 @@ def _cmd_verify_fixes(args: argparse.Namespace, root: Path, store: SessionStore)
         reopened_ids=[],
         unverifiable_ids=[str(row["finding_id"]) for row in target_rows],
     )
-    if args.budget <= 0 or not target_rows:
+    if args.budget < 0:
+        fail("verify-fixes --budget must be a non-negative integer")
+    if args.budget == 0 or not target_rows:
         _emit(result_base, args.format)
         return
 
@@ -802,20 +828,31 @@ def _select_review_cells(
     current_cells: tuple[ReviewCell, ...],
     budget: int,
 ) -> list[ReviewCell]:
-    cell_map = {cell.id: cell for cell in current_cells}
+    cells_by_path: dict[str, list[ReviewCell]] = {}
+    for cell in current_cells:
+        cells_by_path.setdefault(cell.file_path, []).append(cell)
     fixed_pending_paths = store.fixed_pending_paths(session_id)
     selected: list[ReviewCell] = []
+    selected_ids: set[str] = set()
+    selected_paths: set[str] = set()
     for row in store.list_cells(session_id):
-        if len(selected) >= budget:
+        if len(selected_paths) >= budget:
             break
+        file_path = str(row["file_path"])
+        if file_path in selected_paths:
+            continue
         if (
             row["state"] not in {CellState.PENDING, CellState.STALE}
-            and row["file_path"] not in fixed_pending_paths
+            and file_path not in fixed_pending_paths
         ):
             continue
-        cell = cell_map.get(str(row["cell_id"]))
-        if cell is not None:
-            selected.append(cell)
+        for cell in cells_by_path.get(file_path, []):
+            if len(selected) >= budget:
+                break
+            if cell.id not in selected_ids:
+                selected.append(cell)
+                selected_ids.add(cell.id)
+        selected_paths.add(file_path)
     return selected
 
 
@@ -1144,12 +1181,10 @@ def _is_expired(metadata_json: str, today: date) -> bool:
 def _next_action(
     cell_counts: dict[str, int], finding_counts: dict[str, int], reasons: list[str]
 ) -> str:
-    if (
-        finding_counts.get("untriaged", 0)
-        or finding_counts.get("confirmed", 0)
-        or finding_counts.get("reopened", 0)
-    ):
+    if finding_counts.get("untriaged", 0) or finding_counts.get("reopened", 0):
         return "triage_findings"
+    if finding_counts.get("confirmed", 0):
+        return "fix_confirmed_findings"
     if finding_counts.get("fixed_pending_verification", 0):
         return "run_verify_fixes"
     if cell_counts.get("pending", 0) or cell_counts.get("stale", 0):

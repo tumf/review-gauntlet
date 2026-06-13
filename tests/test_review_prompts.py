@@ -1,3 +1,4 @@
+from review_gauntlet.config import OutputMode
 from review_gauntlet.ocr_rules import RuleDocument
 from review_gauntlet.review_adapter import FileMetadata, PromptContext, build_review_prompt
 from review_gauntlet.review_cells import ReviewCell
@@ -25,6 +26,8 @@ def test_review_prompt_contains_cell_rule_context_and_verdict_contract() -> None
                 file_size_bytes=len(UNIQUE_FILE_BODY_TEXT.encode()),
                 line_count=UNIQUE_FILE_BODY_TEXT.count("\n"),
             ),
+            output_mode=OutputMode.FILE_JSON,
+            verdict_output_file="/repo/.review-gauntlet/runs/1/cells/RGC-test/verdict.json",
         )
     )
 
@@ -40,6 +43,10 @@ def test_review_prompt_contains_cell_rule_context_and_verdict_contract() -> None
     assert "Only report issues whose JSON path exactly equals" in prompt
     assert "If the only issue you find is in a different file" in prompt
     assert "Every comment.path MUST equal: src/app.py" in prompt
+    assert "must contain exactly one top-level key: comments" in prompt
+    assert "Do not include rule_id" in prompt
+    assert "path, content, suggestion_code" in prompt
+    assert "review-gauntlet validate-verdict" in prompt
     assert "Check auth boundaries" in prompt
     assert '"comments"' in prompt
     assert '"suggestion_code"' in prompt

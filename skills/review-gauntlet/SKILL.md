@@ -41,6 +41,22 @@ Use this sequence when the user asks you to perform a review:
 
 Run one `review` step at a time. Wait for human action between steps.
 
+## Acting on `next_required_action`
+
+Always read `review-gauntlet status` before deciding the next command. Treat `next_required_action` as the primary instruction for what to do next, and inspect `finalize_blockers`, `coverage`, and `finding_state_counts` for the details.
+
+When it says to run review, run exactly one `review-gauntlet review ...` step with the configured adapter, then stop and inspect `status` again. Do not loop automatically to completion.
+
+When `next_required_action` is `triage_findings`, treat it as a literal status action, not a function name or code symbol. Do not search the codebase for `triage_findings`. Run `review-gauntlet findings` and classify each `untriaged` or `reopened` finding ID explicitly. Confirm real issues, mark false positives with a reason, or mark fixed only after the code change exists. Do not say triage is complete while any finding remains `untriaged` or `reopened`.
+
+When `next_required_action` is `fix_confirmed_findings`, treat it as the implementation step after triage. `confirmed` is not a terminal triage state; it means the finding has already been accepted as real and now needs fixing, waiving, or accepting risk. Prefer fixing confirmed findings, then mark them `fixed` only after the code change exists. Do not call this triage complete until confirmed findings have moved to `fixed_pending_verification`, `waived`, or `accepted_risk`.
+
+When it says to run verify-fixes, run `review-gauntlet verify-fixes ...` against the fixed-pending findings. If verification reopens a finding, return to triage. If verification passes, inspect status again before finalizing.
+
+When it says to resolve finalize blockers, read every blocker and resolve the concrete cause before retrying. Common blockers include stale review cells, target digest changes after the last review run, expired waivers or accepted risks, and dirty working tree files. For dirty files, commit or revert review-target changes before finalize; non-review dirty files may be allowed only when the user explicitly wants `--allow-non-review-dirty`.
+
+When it says to finalize, run `review-gauntlet finalize` only after confirming the working tree and blocker policy are acceptable. Finalize creates the checkpoint used as the next review base, so do not finalize over ambiguous local state.
+
 ## Review target options
 
 - Default (workspace diff): review staged, unstaged, and untracked files.

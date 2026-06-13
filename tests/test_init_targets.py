@@ -185,8 +185,10 @@ def test_default_init_rejects_missing_payload_array(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _init_repo(tmp_path)
-    checkpoint_dir = tmp_path / ".review-gauntlet" / "checkpoints" / "latest"
+    checkpoint_dir = tmp_path / ".review-gauntlet" / "checkpoints" / "RGC-test"
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
+    latest_pointer = tmp_path / ".review-gauntlet" / "checkpoints" / "latest"
+    latest_pointer.write_text("RGC-test", encoding="utf-8")
     status = {
         "schema_version": 1,
         "checkpoint_id": "RGC-test",
@@ -208,6 +210,66 @@ def test_default_init_rejects_missing_payload_array(
 
     assert excinfo.value.code == 64
     assert "internally inconsistent" in capsys.readouterr().err
+
+
+def test_default_init_rejects_checkpoint_payload_entries_without_matching_id(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_repo(tmp_path)
+    _write_checkpoint(tmp_path, _git(tmp_path, "rev-parse", "HEAD"))
+    checkpoint_dir = tmp_path / ".review-gauntlet" / "checkpoints" / "RGC-test"
+    (checkpoint_dir / "findings.json").write_text(
+        json.dumps({"checkpoint_id": "RGC-test", "findings": [None]}), encoding="utf-8"
+    )
+
+    with pytest.raises(SystemExit) as excinfo:
+        main(["init", str(tmp_path), "--format", "json"])
+
+    assert excinfo.value.code == 64
+    assert "internally inconsistent" in capsys.readouterr().err
+
+
+def test_default_init_rejects_unresolvable_checkpoint_base(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_repo(tmp_path)
+    _write_checkpoint(tmp_path, "deadbeef")
+
+    with pytest.raises(SystemExit) as excinfo:
+        main(["init", str(tmp_path), "--format", "json"])
+
+    assert excinfo.value.code == 64
+    assert "does not resolve" in capsys.readouterr().err
+
+
+def test_default_init_rejects_mutable_checkpoint_base(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_repo(tmp_path)
+    _write_checkpoint(tmp_path, "HEAD")
+
+    with pytest.raises(SystemExit) as excinfo:
+        main(["init", str(tmp_path), "--format", "json"])
+
+    assert excinfo.value.code == 64
+    assert "resolved commit SHA" in capsys.readouterr().err
+
+
+def test_default_init_ignores_unsafe_latest_checkpoint_pointer(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_repo(tmp_path)
+    checkpoint_root = tmp_path / ".review-gauntlet" / "checkpoints"
+    checkpoint_root.mkdir(parents=True)
+    (checkpoint_root / "latest").write_text("../outside\n", encoding="utf-8")
+    (tmp_path / ".review-gauntlet" / "outside").mkdir()
+    ((tmp_path / ".review-gauntlet" / "outside") / "status.json").write_text("{}", encoding="utf-8")
+
+    main(["init", str(tmp_path), "--format", "json"])
+
+    data = json.loads(capsys.readouterr().out)
+    assert data["cell_count"] > 0
+    assert SessionStore(tmp_path).session_metadata()["target"]["kind"] == "all"
 
 
 def test_default_init_rejects_non_ancestor_checkpoint(
@@ -345,7 +407,8 @@ def test_review_still_advances_one_initialized_session(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _init_repo(tmp_path)
-    fixture = tmp_path / "fixture.json"
+    fixture = tmp_path / ".review-gauntlet" / "fixtures" / "fixture.json"
+    fixture.parent.mkdir(parents=True, exist_ok=True)
     fixture.write_text("{}", encoding="utf-8")
     main(["init", str(tmp_path), "--all", "--format", "json"])
     capsys.readouterr()
@@ -366,8 +429,10 @@ def _write_checkpoint(
     checkpoint_id: object = "RGC-test",
     companion_checkpoint_id: object | None = None,
 ) -> None:
-    checkpoint_dir = root / ".review-gauntlet" / "checkpoints" / "latest"
+    checkpoint_dir = root / ".review-gauntlet" / "checkpoints" / str(checkpoint_id)
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
+    latest_pointer = root / ".review-gauntlet" / "checkpoints" / "latest"
+    latest_pointer.write_text(str(checkpoint_id), encoding="utf-8")
     status = {
         "schema_version": schema_version,
         "checkpoint_id": checkpoint_id,

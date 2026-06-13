@@ -6,7 +6,9 @@ from typing import Any
 
 import pytest
 
+from review_gauntlet.checkpoint import write_latest_checkpoint
 from review_gauntlet.cli import main
+from review_gauntlet.session_store import SessionStore
 
 
 def _git(root: Path, *args: str) -> str:
@@ -59,6 +61,9 @@ def test_finalize_writes_checkpoint_files_and_cleans_active_session(
         "events.json",
         "summary.md",
     }
+    pointer_path = tmp_path / ".review-gauntlet" / "checkpoints" / "latest"
+    assert pointer_path.is_file()
+    assert pointer_path.read_text(encoding="utf-8").strip() == data["checkpoint_id"]
     status = json.loads((checkpoint_dir / "status.json").read_text(encoding="utf-8"))
     assert status["checkpoint_id"] == data["checkpoint_id"]
     assert status["next_required_action"] == "init_next_session"
@@ -134,22 +139,42 @@ def test_finalize_blocks_dirty_review_universe_without_writing_checkpoint(
     assert (tmp_path / ".review-gauntlet" / "active-session.json").exists()
 
 
+def test_finalize_rejects_path_unsafe_session_id(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_repo(tmp_path)
+    _complete_session(tmp_path, capsys)
+    store = SessionStore(tmp_path)
+    with pytest.raises(ValueError, match="session_id must be a single path-safe segment"):
+        write_latest_checkpoint(
+            store,
+            tmp_path,
+            "../evil",
+            {"session_id": "../evil", "coverage": {}, "finding_state_counts": {}},
+        )
+
+
 def test_finalize_restores_previous_checkpoint_when_replacement_fails(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _init_repo(tmp_path)
     _complete_session(tmp_path, capsys)
     checkpoint_dir = tmp_path / ".review-gauntlet" / "checkpoints" / "latest"
-    checkpoint_dir.mkdir(parents=True)
+    checkpoint_dir.mkdir(parents=True, exist_ok=True)
     (checkpoint_dir / "marker.txt").write_text("previous\n", encoding="utf-8")
-    original_rename = Path.rename
+    original_replace = Path.replace
 
     def fail_tmp_install(self: Path, target: Path) -> Path:
-        if self.name.startswith(".latest.tmp-") and target.name == "latest":
-            raise OSError("simulated install failure")
-        return original_rename(self, target)
+        if target.name == "latest" and self.is_file():
+            try:
+                content = self.read_text(encoding="utf-8").strip()
+                if content:
+                    raise OSError("simulated install failure")
+            except OSError:
+                raise
+        return original_replace(self, target)
 
-    monkeypatch.setattr(Path, "rename", fail_tmp_install)
+    monkeypatch.setattr(Path, "replace", fail_tmp_install)
 
     with pytest.raises(OSError, match="simulated install failure"):
         main(["finalize", str(tmp_path), "--allow-non-review-dirty", "--format", "json"])

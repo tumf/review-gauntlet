@@ -61,7 +61,8 @@ def test_review_human_progress_goes_to_stderr(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _init_review_repo(tmp_path, capsys)
-    fixture = tmp_path / "fixture.json"
+    fixture = tmp_path / ".review-gauntlet" / "fixtures" / "fixture.json"
+    fixture.parent.mkdir(parents=True, exist_ok=True)
     fixture.write_text("{}", encoding="utf-8")
 
     main(["review", str(tmp_path), "--fixture", str(fixture), "--budget", "1", "--format", "json"])
@@ -80,7 +81,8 @@ def test_review_json_stdout_is_clean_when_progress_enabled(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _init_review_repo(tmp_path, capsys)
-    fixture = tmp_path / "fixture.json"
+    fixture = tmp_path / ".review-gauntlet" / "fixtures" / "fixture.json"
+    fixture.parent.mkdir(parents=True, exist_ok=True)
     fixture.write_text("{}", encoding="utf-8")
 
     main(["review", str(tmp_path), "--fixture", str(fixture), "--budget", "1", "--format", "json"])
@@ -95,7 +97,8 @@ def test_review_agent_audience_suppresses_progress(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _init_review_repo(tmp_path, capsys)
-    fixture = tmp_path / "fixture.json"
+    fixture = tmp_path / ".review-gauntlet" / "fixtures" / "fixture.json"
+    fixture.parent.mkdir(parents=True, exist_ok=True)
     fixture.write_text("{}", encoding="utf-8")
 
     main(

@@ -119,7 +119,7 @@ def test_successful_stale_rereview_refreshes_digest_and_advances_to_pending(
     reconciled_data = json.loads(capsys.readouterr().out)
     assert reconciled_data["coverage"].get("stale", 0) == 0
     assert _row_for_cell(tmp_path, cell_id)["content_digest"] == refreshed_digest
-    assert len(_reviewed_cell_ids(tmp_path)) > refreshed_data["reviewed_cells"]
+    assert len(_reviewed_cell_ids(tmp_path)) == refreshed_data["reviewed_cells"]
 
 
 def test_file_change_after_digest_refresh_still_marks_reviewed_cell_stale(

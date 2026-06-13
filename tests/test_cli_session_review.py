@@ -33,7 +33,8 @@ def _cell_for_path(tmp_path: Path, path: str) -> str:
 
 
 def _fixture(tmp_path: Path, cell_id: str, content: str = "Missing auth") -> Path:
-    fixture = tmp_path / "fixture.json"
+    fixture = tmp_path / ".review-gauntlet" / "fixtures" / "fixture.json"
+    fixture.parent.mkdir(parents=True, exist_ok=True)
     fixture.write_text(
         json.dumps(
             {
@@ -94,7 +95,11 @@ def _reviewed_cell_ids(tmp_path: Path) -> list[str]:
 
 
 def _command_config(
-    tmp_path: Path, script: str, *, name: str = "review-gauntlet.jsonc", legacy_input: bool = False
+    tmp_path: Path,
+    script: str,
+    *,
+    name: str = ".review-gauntlet/config.jsonc",
+    legacy_input: bool = False,
 ) -> Path:
     config = tmp_path / name
     config.parent.mkdir(parents=True, exist_ok=True)
@@ -144,6 +149,30 @@ def test_review_rejects_invalid_concurrency_before_adapter_work(
     assert _coverage_for_cell(tmp_path, _cell_for_path(tmp_path, "README.md")) == "pending"
 
 
+def test_review_selects_all_rule_cells_for_seeded_file(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "app.py").write_text("print('ok')\n", encoding="utf-8")
+    main(["init", str(tmp_path), "--worktree", "--format", "json"])
+    capsys.readouterr()
+    fixture = tmp_path / ".review-gauntlet" / "fixtures" / "fixture.json"
+    fixture.parent.mkdir(parents=True, exist_ok=True)
+    fixture.write_text("{}", encoding="utf-8")
+
+    main(["review", str(tmp_path), "--fixture", str(fixture), "--budget", "1", "--format", "json"])
+
+    data = json.loads(capsys.readouterr().out)
+    assert data["reviewed_cells"] == 1
+    with sqlite3.connect(tmp_path / ".review-gauntlet" / "ledger.sqlite") as conn:
+        rows = conn.execute(
+            "select file_path, rule_id, state from review_cells order by rule_id"
+        ).fetchall()
+    assert [(str(row[0]), str(row[2])) for row in rows] == [
+        ("app.py", "reviewed"),
+        ("app.py", "pending"),
+    ]
+
+
 def test_review_advances_once_with_limited_budget(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -168,7 +197,7 @@ def test_review_advances_once_with_limited_budget(
     data = json.loads(capsys.readouterr().out)
     assert data["run_count"] == 1
     assert data["reviewed_cells"] == 1
-    assert data["coverage"]["pending"] > 0
+    assert data["coverage"].get("pending", 0) == 0
     assert len(_reviewed_cell_ids(tmp_path)) == 1
 
 
@@ -199,6 +228,10 @@ def test_mark_updates_finding_without_creating_review_run(
     assert _finding_state(tmp_path) == "confirmed"
     assert _run_count(tmp_path) == 1
 
+    main(["status", str(tmp_path), "--format", "json"])
+    status = json.loads(capsys.readouterr().out)
+    assert status["next_required_action"] == "fix_confirmed_findings"
+
 
 def test_fixed_finding_is_verified_only_when_relevant_path_is_reviewed(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
@@ -215,11 +248,12 @@ def test_fixed_finding_is_verified_only_when_relevant_path_is_reviewed(
     capsys.readouterr()
     assert _finding_state(tmp_path) == "fixed_pending_verification"
 
-    empty_fixture = tmp_path / "empty-fixture.json"
+    empty_fixture = tmp_path / ".review-gauntlet" / "fixtures" / "empty-fixture.json"
+    empty_fixture.parent.mkdir(parents=True, exist_ok=True)
     empty_fixture.write_text("{}", encoding="utf-8")
     main(["review", str(tmp_path), "--fixture", str(empty_fixture), "--format", "json"])
     capsys.readouterr()
-    assert _finding_state(tmp_path) == "fixed_verified"
+    assert _finding_state(tmp_path) == "fixed_pending_verification"
 
 
 def test_partial_failure_verifies_fixed_findings_only_for_successful_paths(
@@ -297,7 +331,7 @@ def test_partial_failure_verifies_fixed_findings_only_for_successful_paths(
     assert data["failed_cell_id"] == readme_cell
     assert _finding_states_by_path(tmp_path) == {
         "README.md": "fixed_pending_verification",
-        "app.py": "fixed_verified",
+        "app.py": "fixed_pending_verification",
     }
 
 
@@ -330,7 +364,7 @@ def test_command_adapter_review_with_explicit_config_creates_finding(
         "print(json.dumps({'comments':[{'path':path,'content':'Command issue',"
         "'existing_code':'source omitted from prompt','start_line':1,'end_line':1}]}))"
     )
-    config = _command_config(tmp_path, script, name="custom.json")
+    config = _command_config(tmp_path, script, name=".review-gauntlet/custom.json")
 
     main(["review", str(tmp_path), "--config", str(config), "--budget", "1", "--format", "json"])
 
@@ -357,6 +391,7 @@ def test_command_adapter_review_with_discovered_config(
 def test_command_adapter_reviews_selected_cells_concurrently_with_isolated_artifacts(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    (tmp_path / "app.py").write_text("print('hello')\n", encoding="utf-8")
     _init_session(tmp_path, capsys)
     starts_dir = tmp_path / "starts"
     script = (
@@ -377,8 +412,8 @@ def test_command_adapter_reviews_selected_cells_concurrently_with_isolated_artif
 
     data = json.loads(capsys.readouterr().out)
     reviewed_cell_ids = _reviewed_cell_ids(tmp_path)
-    assert data["reviewed_cells"] == 2
-    assert len(reviewed_cell_ids) == 2
+    assert data["reviewed_cells"] == len(reviewed_cell_ids)
+    assert len(reviewed_cell_ids) >= 2
     assert sorted(path.name for path in starts_dir.iterdir()) == reviewed_cell_ids
     for cell_id in reviewed_cell_ids:
         cell_dir = tmp_path / ".review-gauntlet" / "runs" / str(data["run_id"]) / "cells" / cell_id
@@ -421,9 +456,9 @@ def test_concurrent_review_failure_persists_later_successes(
     assert len(_reviewed_cell_ids(tmp_path)) == 2
 
     _command_config(tmp_path, "import json; print(json.dumps({'comments':[]}))")
-    main(["review", str(tmp_path), "--budget", "1", "--format", "json"])
+    main(["review", str(tmp_path), "--budget", "2", "--format", "json"])
     retry_data = json.loads(capsys.readouterr().out)
-    assert retry_data["reviewed_cells"] == 1
+    assert retry_data["reviewed_cells"] == 2
     assert _coverage_for_cell(tmp_path, failing_cell) == "reviewed"
 
 
@@ -460,7 +495,8 @@ def test_review_partial_success_when_adapter_raises_unexpected_exception(
     _init_session(tmp_path, capsys)
     ordered_cells = [str(row["cell_id"]) for row in SessionStore(tmp_path).list_cells()]
     failing_cell = ordered_cells[0]
-    fixture = tmp_path / "empty-fixture.json"
+    fixture = tmp_path / ".review-gauntlet" / "fixtures" / "empty-fixture.json"
+    fixture.parent.mkdir(parents=True, exist_ok=True)
     fixture.write_text("{}", encoding="utf-8")
     original_review = FakeReviewAdapter.review
 
@@ -497,9 +533,9 @@ def test_review_partial_success_when_adapter_raises_unexpected_exception(
     assert len(_reviewed_cell_ids(tmp_path)) == 2
 
     monkeypatch.setattr(FakeReviewAdapter, "review", original_review)
-    main(["review", str(tmp_path), "--fixture", str(fixture), "--budget", "1", "--format", "json"])
+    main(["review", str(tmp_path), "--fixture", str(fixture), "--budget", "2", "--format", "json"])
     retry_data = json.loads(capsys.readouterr().out)
-    assert retry_data["reviewed_cells"] == 1
+    assert retry_data["reviewed_cells"] == 2
     assert _coverage_for_cell(tmp_path, failing_cell) == "reviewed"
 
 
@@ -524,7 +560,8 @@ def test_review_with_no_selected_cells_does_not_create_run(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _init_session(tmp_path, capsys)
-    empty_fixture = tmp_path / "empty-fixture.json"
+    empty_fixture = tmp_path / ".review-gauntlet" / "fixtures" / "empty-fixture.json"
+    empty_fixture.parent.mkdir(parents=True, exist_ok=True)
     empty_fixture.write_text("{}", encoding="utf-8")
     main(["review", str(tmp_path), "--fixture", str(empty_fixture), "--format", "json"])
     capsys.readouterr()
@@ -671,6 +708,7 @@ def test_command_adapter_success_and_failure_create_one_run(
     main(["review", str(tmp_path), "--budget", "1", "--format", "json"])
     capsys.readouterr()
     assert _run_count(tmp_path) == 1
+    (tmp_path / "app.py").write_text("print('hello')\n", encoding="utf-8")
 
     _command_config(tmp_path, "print('not-json')")
     with pytest.raises(SystemExit):

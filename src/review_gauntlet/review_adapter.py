@@ -82,6 +82,10 @@ class VerdictPayload(BaseModel):
     comments: tuple[OCRComment, ...] = ()
 
 
+def validate_verdict_json(verdict_text: str) -> VerdictPayload:
+    return VerdictPayload.model_validate_json(verdict_text)
+
+
 class FileMetadata(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -154,6 +158,11 @@ def build_review_prompt(context: PromptContext) -> str:
             context.rule.content,
             "",
             "## Verdict JSON Contract",
+            "The verdict object must contain exactly one top-level key: comments.",
+            "Each comment object may contain only these keys: path, content, suggestion_code, "
+            "existing_code, start_line, end_line, thinking.",
+            "Do not include rule_id, cell_id, severity, confidence, title, category, metadata, "
+            "or any other keys.",
             f"Every comment.path MUST equal: {context.cell.file_path}",
             json.dumps(contract, indent=2, sort_keys=True),
             "",
@@ -168,6 +177,9 @@ def _prompt_output_instructions(context: PromptContext) -> list[str]:
         return [
             "Write the final verdict JSON to this file:",
             context.verdict_output_file,
+            "Before finishing, validate the file with:",
+            f"review-gauntlet validate-verdict {context.verdict_output_file}",
+            "If validation fails, fix the JSON file and run the validator again.",
             "Stdout and stderr are audit/progress channels only; they are preserved but not "
             "parsed as verdict input.",
             "Do not rely on stdout or stderr to deliver the verdict when file-json output "
@@ -285,7 +297,7 @@ class CommandReviewAdapter:
         raw_verdict_file = cell_dir / "verdict.raw.json"
         raw_verdict_file.write_text(verdict_text, encoding="utf-8")
         try:
-            payload = VerdictPayload.model_validate_json(verdict_text)
+            payload = validate_verdict_json(verdict_text)
         except (ValueError, ValidationError) as exc:
             self._fail(
                 "invalid verdict JSON",

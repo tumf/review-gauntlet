@@ -37,6 +37,26 @@ class DirtyWorkingTree:
 
 
 def latest_checkpoint_dir(root: Path) -> Path:
+    pointer = root / ".review-gauntlet" / "checkpoints" / "latest"
+    if pointer.is_symlink():
+        return pointer.parent / "__invalid_latest_checkpoint_pointer__"
+    if pointer.is_file():
+        try:
+            checkpoint_id = pointer.read_text(encoding="utf-8").strip()
+        except OSError:
+            pass
+        else:
+            if checkpoint_id and (
+                not any(part in {"", ".", ".."} for part in Path(checkpoint_id).parts)
+                and Path(checkpoint_id).name == checkpoint_id
+            ):
+                candidate = pointer.parent / checkpoint_id
+                if candidate.is_dir() and not candidate.is_symlink():
+                    return candidate
+    return pointer
+
+
+def latest_checkpoint_pointer(root: Path) -> Path:
     return root / ".review-gauntlet" / "checkpoints" / "latest"
 
 
@@ -87,6 +107,8 @@ def _validate_latest_checkpoint(root: Path, checkpoint: dict[str, Any]) -> None:
     checkpoint_id = checkpoint["checkpoint_id"]
     if not isinstance(checkpoint_id, str):
         raise ValueError("latest checkpoint checkpoint_id must be a string")
+    if checkpoint_id != latest_checkpoint_dir(root).name:
+        raise ValueError("latest checkpoint checkpoint_id does not match checkpoint directory")
     for name in ("findings.json", "events.json"):
         path = latest_checkpoint_dir(root) / name
         if not path.exists():
@@ -101,8 +123,16 @@ def _validate_latest_checkpoint(root: Path, checkpoint: dict[str, Any]) -> None:
         if checkpoint_file.get("checkpoint_id") != checkpoint_id:
             raise ValueError(f"latest checkpoint is internally inconsistent: {name}")
         payload_key = "findings" if name == "findings.json" else "events"
-        if not isinstance(checkpoint_file.get(payload_key), list):
+        raw_payload = checkpoint_file.get(payload_key)
+        if not isinstance(raw_payload, list):
             raise ValueError(f"latest checkpoint is internally inconsistent: {name}")
+        payload = cast(list[Any], raw_payload)
+        for item in payload:
+            if not isinstance(item, dict):
+                raise ValueError(f"latest checkpoint is internally inconsistent: {name}")
+            entry = cast(dict[str, Any], item)
+            if entry.get("checkpoint_id") != checkpoint_id:
+                raise ValueError(f"latest checkpoint is internally inconsistent: {name}")
     summary = latest_checkpoint_dir(root) / "summary.md"
     if not summary.exists():
         raise ValueError("latest checkpoint is internally inconsistent: missing summary.md")
@@ -110,8 +140,17 @@ def _validate_latest_checkpoint(root: Path, checkpoint: dict[str, Any]) -> None:
     if not isinstance(base, str):
         raise ValueError("latest checkpoint review_base_commit must be a string")
     try:
-        _git(root, "rev-parse", "--verify", f"{base}^{{commit}}")
-        _git(root, "merge-base", "--is-ancestor", base, "HEAD")
+        resolved_base = _git(root, "rev-parse", "--verify", f"{base}^{{commit}}")
+    except subprocess.CalledProcessError as exc:
+        raise ValueError(
+            "latest checkpoint review_base_commit does not resolve to a commit"
+        ) from exc
+    if base != resolved_base:
+        raise ValueError(
+            "latest checkpoint review_base_commit must be a resolved commit SHA, not a mutable ref"
+        )
+    try:
+        _git(root, "merge-base", "--is-ancestor", resolved_base, "HEAD")
     except subprocess.CalledProcessError as exc:
         raise ValueError("latest checkpoint review_base_commit is not an ancestor of HEAD") from exc
 
@@ -161,6 +200,11 @@ def write_latest_checkpoint(
 ) -> dict[str, object]:
     assert_review_universe_clean(root)
     head = _head_commit(root)
+    if (
+        any(part in {"", ".", ".."} for part in Path(session_id).parts)
+        or Path(session_id).name != session_id
+    ):
+        raise ValueError("session_id must be a single path-safe segment")
     checkpoint_id = f"RGC-{head[:12]}-{session_id}"
     generated_at = datetime.now(UTC).isoformat().replace("+00:00", "Z")
     metadata = store.session_metadata(session_id)
@@ -193,12 +237,18 @@ def write_latest_checkpoint(
         "events.json": {"checkpoint_id": checkpoint_id, "events": events},
     }
     summary = _render_summary(base_status, findings, events)
-    checkpoint_dir = latest_checkpoint_dir(root)
-    tmp_dir = checkpoint_dir.parent / f".latest.tmp-{os.getpid()}-{checkpoint_id}"
+    pointer_path = latest_checkpoint_pointer(root)
+    checkpoints_dir = pointer_path.parent
+    checkpoint_dir = checkpoints_dir / checkpoint_id
+    checkpoints_dir.mkdir(parents=True, exist_ok=True)
+    tmp_dir = checkpoints_dir / f".{checkpoint_id}.tmp-{os.getpid()}"
+    backup_dir = checkpoints_dir / f".{checkpoint_id}.bak-{os.getpid()}"
     if tmp_dir.exists():
         shutil.rmtree(tmp_dir)
+    if backup_dir.exists():
+        shutil.rmtree(backup_dir)
     tmp_dir.mkdir(parents=True)
-    old_dir: Path | None = None
+    pointer_tmp = checkpoints_dir / f".latest.tmp-{os.getpid()}-{checkpoint_id}"
     try:
         for filename, data in files.items():
             (tmp_dir / filename).write_text(
@@ -206,22 +256,22 @@ def write_latest_checkpoint(
             )
         (tmp_dir / "summary.md").write_text(summary, encoding="utf-8")
         if checkpoint_dir.exists():
-            old_dir = checkpoint_dir.parent / f".latest.old-{os.getpid()}-{checkpoint_id}"
-            if old_dir.exists():
-                shutil.rmtree(old_dir)
-            checkpoint_dir.rename(old_dir)
-            tmp_dir.rename(checkpoint_dir)
-            with suppress(OSError):
-                shutil.rmtree(old_dir)
-        else:
-            checkpoint_dir.parent.mkdir(parents=True, exist_ok=True)
-            tmp_dir.rename(checkpoint_dir)
+            checkpoint_dir.rename(backup_dir)
+        tmp_dir.rename(checkpoint_dir)
+        pointer_tmp.write_text(checkpoint_id + "\n", encoding="utf-8")
+        pointer_tmp.replace(pointer_path)
     except Exception:
         if tmp_dir.exists():
             shutil.rmtree(tmp_dir)
-        if old_dir is not None and old_dir.exists() and not checkpoint_dir.exists():
-            old_dir.rename(checkpoint_dir)
+        if checkpoint_dir.exists() and backup_dir.exists():
+            shutil.rmtree(checkpoint_dir)
+        if backup_dir.exists():
+            backup_dir.rename(checkpoint_dir)
+        with suppress(OSError):
+            pointer_tmp.unlink()
         raise
+    if backup_dir.exists():
+        shutil.rmtree(backup_dir)
     generated_files = [
         str((checkpoint_dir / name).relative_to(root))
         for name in ("status.json", "findings.json", "events.json", "summary.md")

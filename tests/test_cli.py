@@ -46,6 +46,7 @@ def test_cli_completion_outputs_script_for_supported_shells(
         "findings",
         "mark",
         "finalize",
+        "validate-verdict",
         "completion",
     ):
         assert command in output
@@ -75,6 +76,36 @@ def test_cli_completion_uses_usage_error_code(argv: list[str]) -> None:
         main(argv)
 
     assert exc_info.value.code == 64
+
+
+def test_validate_verdict_accepts_valid_payload(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    verdict = tmp_path / "verdict.json"
+    verdict.write_text(json.dumps({"comments": []}), encoding="utf-8")
+
+    main(["validate-verdict", str(verdict), "--format", "json"])
+
+    data = json.loads(capsys.readouterr().out)
+    assert data == {"comment_count": 0, "path": str(verdict), "valid": True}
+
+
+def test_validate_verdict_rejects_extra_comment_keys(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    verdict = tmp_path / "verdict.json"
+    verdict.write_text(
+        json.dumps({"comments": [{"path": "app.py", "content": "x", "rule_id": "bad"}]}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(SystemExit) as excinfo:
+        main(["validate-verdict", str(verdict), "--format", "json"])
+
+    data = json.loads(capsys.readouterr().out)
+    assert excinfo.value.code == 1
+    assert data["valid"] is False
+    assert "Extra inputs are not permitted" in data["error"]
 
 
 def test_readme_documents_canonical_shell_completion_commands() -> None:
