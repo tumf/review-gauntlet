@@ -477,7 +477,10 @@ def _run_session_command(args: argparse.Namespace, root: Path) -> None:
         allow = bool(getattr(args, "allow_non_review_dirty", False))
         _emit(_status(store, root, allow_non_review_dirty=allow), args.format)
     elif args.command == "ready":
-        _emit_ready(_ready_prompt(store, root), args.format)
+        prompt = _ready_prompt(store, root)
+        _emit_ready(prompt, args.format)
+        if prompt is None:
+            raise SystemExit(1)
     elif args.command == "findings":
         _emit(
             _findings(

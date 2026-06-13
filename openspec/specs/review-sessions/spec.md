@@ -151,6 +151,8 @@ When the same finding is detected while it is `fixed_pending_verification`, the 
 
 Status and freshness computations SHALL use the same resolved repository root for review-universe traversal and relative digest paths. Invoking session status with the default root `.` SHALL be equivalent to invoking it with the absolute repository root.
 
+`review-gauntlet ready` SHALL expose whether a continuation task is available through both stdout and process exit status. When a ready prompt exists, the command SHALL emit the existing prompt output and exit `0`. When no continuation task exists, the command SHALL preserve the existing no-task output while exiting `1` so external orchestrators can distinguish no-op completion without parsing stdout.
+
 #### Scenario: Findings mark filter matches hyphenated public state
 
 **Given**: an active session with a `false_positive` finding
@@ -170,6 +172,27 @@ Status and freshness computations SHALL use the same resolved repository root fo
 **When**: the developer runs `review-gauntlet status --format json` from the repository root
 **Then**: stdout contains parseable JSON session status
 **And**: target digest computation does not fail due to relative and absolute path mixing
+
+#### Scenario: Ready exits zero when an actionable task exists
+
+**Given**: an active review session with at least one pending continuation task
+**When**: the developer runs `review-gauntlet ready --format json`
+**Then**: stdout contains parseable JSON with a string `prompt`
+**And**: the command exits `0`
+
+#### Scenario: Ready exits non-zero when no continuation task exists
+
+**Given**: an active review session where `ready` has no continuation task to return
+**When**: the developer runs `review-gauntlet ready --format text`
+**Then**: stdout is `no ready task`
+**And**: the command exits `1`
+
+#### Scenario: Ready JSON preserves null prompt when no continuation task exists
+
+**Given**: an active review session where `ready` has no continuation task to return
+**When**: the developer runs `review-gauntlet ready --format json`
+**Then**: stdout contains parseable JSON with `prompt` equal to `null`
+**And**: the command exits `1`
 
 ### Requirement: Finalize SHALL validate completion without running review work
 
