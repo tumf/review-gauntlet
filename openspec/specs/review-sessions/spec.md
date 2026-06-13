@@ -151,7 +151,7 @@ When the same finding is detected while it is `fixed_pending_verification`, the 
 
 Status and freshness computations SHALL use the same resolved repository root for review-universe traversal and relative digest paths. Invoking session status with the default root `.` SHALL be equivalent to invoking it with the absolute repository root.
 
-`review-gauntlet ready` SHALL expose whether a continuation task is available through both stdout and process exit status. When a ready prompt exists, the command SHALL emit the existing prompt output and exit `0`. When no continuation task exists, the command SHALL preserve the existing no-task output while exiting `1` so external orchestrators can distinguish no-op completion without parsing stdout.
+`review-gauntlet ready` SHALL expose whether a continuation task is available through both stdout and process exit status. When a ready prompt exists, the command SHALL emit the existing prompt output and exit `0`. When no continuation task exists, the command SHALL preserve the existing no-task output while exiting `1` so external orchestrators can distinguish no-op completion without parsing stdout. After review-cell and finding continuation work is exhausted, `ready` SHALL treat dirty working-tree finalize blockers as actionable by returning a prompt that instructs the agent to commit intended git changes before finalizing. Commit-resolvable dirty blockers include dirty review-universe files relative to `HEAD` and uncommitted non-review files. `ready` SHALL NOT treat non-dirty finalize blockers as commit-resolvable.
 
 #### Scenario: Findings mark filter matches hyphenated public state
 
@@ -190,6 +190,26 @@ Status and freshness computations SHALL use the same resolved repository root fo
 #### Scenario: Ready JSON preserves null prompt when no continuation task exists
 
 **Given**: an active review session where `ready` has no continuation task to return
+**When**: the developer runs `review-gauntlet ready --format json`
+**Then**: stdout contains parseable JSON with `prompt` equal to `null`
+**And**: the command exits `1`
+
+#### Scenario: Ready prompts commit before finalize for dirty git blockers
+
+**Given**: an active review session whose review cells are all reviewed
+**And**: all findings are terminal
+**And**: finalization is blocked only by dirty review-universe files and/or uncommitted non-review files
+**When**: the developer runs `review-gauntlet ready --format json`
+**Then**: stdout contains parseable JSON with a string `prompt`
+**And**: the prompt instructs the agent to commit intended git changes before finalizing
+**And**: the command exits `0`
+**And**: no checkpoint is written
+**And**: no ledger state is modified
+
+#### Scenario: Ready preserves no-task behavior for non-commit finalize blockers
+
+**Given**: an active review session whose review cells and findings have no pending continuation work
+**And**: finalization is blocked by at least one blocker that committing dirty files cannot resolve
 **When**: the developer runs `review-gauntlet ready --format json`
 **Then**: stdout contains parseable JSON with `prompt` equal to `null`
 **And**: the command exits `1`

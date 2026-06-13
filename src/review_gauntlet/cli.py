@@ -1061,11 +1061,28 @@ def _ready_prompt(store: SessionStore, root: Path) -> str | None:
         return _READY_PROMPTS["stale_review_cell"]
     if cell_counts.get(CellState.PENDING.value, 0):
         return _READY_PROMPTS["pending_review_cell"]
-    if not _finalize_reasons(
-        cell_counts, finding_counts, store, session_id, root, allow_non_review_dirty=True
-    ):
+    finalize_reasons = _finalize_reasons(
+        cell_counts, finding_counts, store, session_id, root, allow_non_review_dirty=False
+    )
+    if not finalize_reasons or _finalize_blockers_are_commit_resolvable(finalize_reasons):
         return _READY_PROMPTS["finalize"]
     return None
+
+
+_DIRTY_REVIEW_UNIVERSE_PREFIX = "review-universe files are dirty relative to HEAD: "
+_DIRTY_NON_REVIEW_PREFIX = "working tree has uncommitted non-review files: "
+
+
+def _finalize_blockers_are_commit_resolvable(reasons: list[str]) -> bool:
+    return bool(reasons) and all(
+        _finalize_blocker_is_commit_resolvable(reason) for reason in reasons
+    )
+
+
+def _finalize_blocker_is_commit_resolvable(reason: str) -> bool:
+    return reason.startswith(_DIRTY_REVIEW_UNIVERSE_PREFIX) or reason.startswith(
+        _DIRTY_NON_REVIEW_PREFIX
+    )
 
 
 def _emit_ready(prompt: str | None, output_format: str) -> None:
