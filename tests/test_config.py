@@ -9,6 +9,13 @@ from review_gauntlet.config import (
     load_config,
 )
 
+CONFIG_PAYLOAD = '{"adapter":{"type":"command","command":"tool"}}'
+
+
+@pytest.fixture(autouse=True)
+def isolate_global_config(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "isolated-xdg-config"))
+
 
 def test_config_discovery_precedence(tmp_path: Path) -> None:
     for name in (
@@ -19,9 +26,73 @@ def test_config_discovery_precedence(tmp_path: Path) -> None:
     ):
         path = tmp_path / name
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text('{"adapter":{"type":"command","command":"tool"}}', encoding="utf-8")
+        path.write_text(CONFIG_PAYLOAD, encoding="utf-8")
 
     assert discover_config_path(tmp_path) == tmp_path / ".review-gauntlet/config.jsonc"
+
+
+def test_global_xdg_config_is_discovered_when_repo_config_is_absent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    xdg_home = tmp_path / "xdg-config"
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg_home))
+    global_config = xdg_home / "review-gauntlet" / "config.jsonc"
+    global_config.parent.mkdir(parents=True)
+    global_config.write_text(
+        '{"adapter":{"type":"command","command":"global-tool"}}', encoding="utf-8"
+    )
+
+    loaded = load_config(tmp_path)
+
+    assert loaded is not None
+    path, config = loaded
+    assert path == global_config
+    assert config.adapter.command == "global-tool"
+    assert not (tmp_path / ".review-gauntlet").exists()
+
+
+def test_repo_local_config_takes_precedence_over_global_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    xdg_home = tmp_path / "xdg-config"
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg_home))
+    global_config = xdg_home / "review-gauntlet" / "config.jsonc"
+    global_config.parent.mkdir(parents=True)
+    global_config.write_text(
+        '{"adapter":{"type":"command","command":"global-tool"}}', encoding="utf-8"
+    )
+    local_config = tmp_path / ".review-gauntlet" / "config.jsonc"
+    local_config.parent.mkdir(parents=True)
+    local_config.write_text(
+        '{"adapter":{"type":"command","command":"local-tool"}}', encoding="utf-8"
+    )
+
+    loaded = load_config(tmp_path)
+
+    assert loaded is not None
+    path, config = loaded
+    assert path == local_config
+    assert config.adapter.command == "local-tool"
+
+
+def test_unset_xdg_config_home_falls_back_to_home_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    home = tmp_path / "home"
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    monkeypatch.setattr(Path, "home", lambda: home)
+    global_config = home / ".config" / "review-gauntlet" / "config.jsonc"
+    global_config.parent.mkdir(parents=True)
+    global_config.write_text(
+        '{"adapter":{"type":"command","command":"home-tool"}}', encoding="utf-8"
+    )
+
+    loaded = load_config(tmp_path)
+
+    assert loaded is not None
+    path, config = loaded
+    assert path == global_config
+    assert config.adapter.command == "home-tool"
 
 
 def test_explicit_config_rejects_out_of_repo_path(tmp_path: Path) -> None:
