@@ -7,6 +7,7 @@ from review_gauntlet.__about__ import __version__
 from review_gauntlet.cli import main
 from review_gauntlet.models import MatrixRow, ReviewCheck, ReviewMatrix, ReviewPlan, ReviewSlice
 from review_gauntlet.report import render_markdown_report
+from review_gauntlet.review_adapter import VERDICT_OUTPUT_SIZE_LIMIT_BYTES
 
 
 def test_cli_version_flag_outputs_package_version(capsys: pytest.CaptureFixture[str]) -> None:
@@ -89,6 +90,19 @@ def test_validate_verdict_accepts_valid_payload(
 
     data = json.loads(capsys.readouterr().out)
     assert data == {"comment_count": 0, "path": str(verdict), "valid": True}
+
+
+def test_validate_verdict_rejects_oversized_file(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    verdict = tmp_path / "verdict.json"
+    verdict.write_bytes(b"{" + b" " * VERDICT_OUTPUT_SIZE_LIMIT_BYTES + b"}")
+
+    with pytest.raises(SystemExit) as exc_info:
+        main(["validate-verdict", str(verdict), "--format", "json"])
+
+    assert exc_info.value.code == 64
+    assert "verdict file exceeds size limit" in capsys.readouterr().err
 
 
 def test_validate_verdict_rejects_extra_comment_keys(
@@ -418,6 +432,77 @@ def test_cli_init_creates_session_without_run(
     assert data["run_count"] == 0
     assert (tmp_path / ".review-gauntlet" / "active-session.json").exists()
     assert (tmp_path / ".review-gauntlet" / "ledger.sqlite").exists()
+
+
+def test_cli_mark_json_outputs_string_state(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from review_gauntlet.findings import FindingState
+    from review_gauntlet.session_store import SessionStore
+
+    (tmp_path / "README.md").write_text("# docs\n", encoding="utf-8")
+    main(["init", str(tmp_path), "--worktree", "--format", "json"])
+    capsys.readouterr()
+
+    store = SessionStore(tmp_path)
+    session_id = store.active_session_id()
+    with store.connect() as conn:
+        conn.execute(
+            """
+            insert into findings(
+              session_id, finding_id, fingerprint, state, path, rule_id, content, metadata
+            ) values (?, ?, ?, ?, 'README.md', 'docs-accuracy', 'finding', '{}')
+            """,
+            (session_id, "RGF-0001", "fp-1", FindingState.UNTRIAGED.value),
+        )
+
+    main(
+        [
+            "mark",
+            str(tmp_path),
+            "RGF-0001",
+            "confirmed",
+            "--format",
+            "json",
+            "--reason",
+            "true issue",
+        ]
+    )
+
+    data = json.loads(capsys.readouterr().out)
+    assert data["state"] == "confirmed"
+    assert data["finding_id"] == "RGF-0001"
+
+
+def test_review_enforces_budget_with_multiple_cells_per_file(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "app.py").write_text("print('hi')\n", encoding="utf-8")
+
+    fixture = tmp_path / "fixture.json"
+    fixture.write_text(json.dumps({}), encoding="utf-8")
+
+    main(["init", str(tmp_path), "--worktree"])
+
+    main(
+        [
+            "review",
+            str(tmp_path),
+            "--concurrency",
+            "1",
+            "--budget",
+            "1",
+            "--fixture",
+            str(fixture),
+        ]
+    )
+
+    assert capsys.readouterr().err
+    main(["status", str(tmp_path), "--format", "json"])
+    data = json.loads(capsys.readouterr().out)
+    assert data["coverage"]["reviewed"] == 1
 
 
 def test_cli_status_json_after_init(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

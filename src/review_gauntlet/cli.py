@@ -34,6 +34,7 @@ from review_gauntlet.ocr_rules import load_ruleset
 from review_gauntlet.planner import build_matrix, build_plan
 from review_gauntlet.report import render_markdown_report
 from review_gauntlet.review_adapter import (
+    VERDICT_OUTPUT_SIZE_LIMIT_BYTES,
     CommandReviewAdapter,
     FakeReviewAdapter,
     ReviewAdapter,
@@ -411,6 +412,8 @@ def _cmd_validate_verdict(args: argparse.Namespace) -> None:
     path = Path(args.path)
     if not path.is_file():
         fail(f"verdict file does not exist: {path}")
+    if path.stat().st_size > VERDICT_OUTPUT_SIZE_LIMIT_BYTES:
+        fail(f"verdict file exceeds size limit: {path}")
     try:
         payload = validate_verdict_json(path.read_text(encoding="utf-8"))
     except (ValueError, ValidationError) as exc:
@@ -887,7 +890,7 @@ def _select_review_cells(
     selected_ids: set[str] = set()
     selected_paths: set[str] = set()
     for row in store.list_cells(session_id):
-        if len(selected_paths) >= budget:
+        if len(selected) >= budget:
             break
         file_path = str(row["file_path"])
         if file_path in selected_paths:
@@ -1087,7 +1090,7 @@ def _cmd_mark(args: argparse.Namespace, store: SessionStore) -> None:
     }
     metadata = {"owner": args.owner, "until": args.until}
     store.mark_finding(args.finding_id, mapping[args.state], args.reason, metadata)
-    _emit({"finding_id": args.finding_id, "state": mapping[args.state]}, args.format)
+    _emit({"finding_id": args.finding_id, "state": mapping[args.state].value}, args.format)
 
 
 def _status(
