@@ -299,14 +299,106 @@ def test_cli_rejects_audience_on_non_review_commands(command: str) -> None:
     assert exc_info.value.code == 64
 
 
-def test_cli_review_help_exposes_audience(capsys: pytest.CaptureFixture[str]) -> None:
+def _help_output(argv: list[str], capsys: pytest.CaptureFixture[str]) -> str:
     with pytest.raises(SystemExit) as exc_info:
-        main(["review", "--help"])
+        main([*argv, "--help"])
 
-    output = capsys.readouterr().out
     assert exc_info.value.code == 0
+    return capsys.readouterr().out
+
+
+def test_cli_review_help_exposes_audience(capsys: pytest.CaptureFixture[str]) -> None:
+    output = _help_output(["review"], capsys)
+
     assert "--format {text,json}" in output
     assert "--audience {human,agent}" in output
+
+
+@pytest.mark.parametrize("command", ["inventory", "plan", "report", "status", "ready"])
+def test_cli_help_shows_optional_root_and_format_defaults(
+    command: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    output = _help_output([command], capsys)
+
+    assert "Repository root (default: .)" in output
+    assert "Output format (default: text)" in output
+
+
+def test_cli_review_help_shows_numeric_and_audience_defaults(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    output = _help_output(["review"], capsys)
+
+    assert "Maximum review budget (default: 50)" in output
+    assert "Review concurrency (default: 8)" in output
+    assert "Output format (default: text)" in output
+    assert "Progress output audience (default: human)" in output
+    assert "--fixture" in output
+    assert "default:" not in output.split("--fixture", maxsplit=1)[1].splitlines()[0]
+    assert "--config" in output
+    assert "default:" not in output.split("--config", maxsplit=1)[1].splitlines()[0]
+
+
+def test_cli_verify_fixes_help_shows_repeatable_filter_defaults(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    output = _help_output(["verify-fixes"], capsys)
+
+    assert "Filter by finding ID (default: none)" in output
+    assert "Filter by finding path (default: none)" in output
+    assert "Maximum review budget (default: 50)" in output
+    assert "Review concurrency (default: 8)" in output
+    assert "Progress output audience (default: human)" in output
+
+
+def test_cli_findings_help_shows_boolean_repeatable_and_mark_defaults(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    output = _help_output(["findings"], capsys)
+
+    assert "Include terminal findings (default: false)" in output
+    assert "Filter by finding path (default: none)" in output
+    assert "Filter by finding state marker (default: none)" in output
+
+
+def test_cli_mark_help_shows_metadata_string_defaults(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    output = _help_output(["mark"], capsys)
+
+    assert "Decision reason (default: none)" in output
+    assert "Decision owner (default: none)" in output
+    assert "Decision expiry date, YYYY-MM-DD (default: none)" in output
+    assert "finding_id" in output
+    finding_line = next(line for line in output.splitlines() if "finding_id" in line)
+    assert "default:" not in finding_line
+
+
+def test_cli_status_help_shows_boolean_default(capsys: pytest.CaptureFixture[str]) -> None:
+    output = _help_output(["status"], capsys)
+
+    assert "Allow uncommitted non-review files in the working tree" in output
+    assert "(default: false)" in output
+
+
+def test_cli_init_help_shows_boolean_defaults(capsys: pytest.CaptureFixture[str]) -> None:
+    output = _help_output(["init"], capsys)
+
+    assert "Review worktree changes (default: false)" in output
+    assert "Review all files (default: false)" in output
+    assert "--from" in output
+    assert "--to" in output
+    assert "--commit" in output
+
+
+def test_cli_validate_verdict_help_does_not_force_path_default(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    output = _help_output(["validate-verdict"], capsys)
+
+    path_line = next(line for line in output.splitlines() if "path" in line)
+    assert "default:" not in path_line
+    assert "Output format (default: text)" in output
 
 
 def test_cli_rejects_missing_root(tmp_path: Path) -> None:
