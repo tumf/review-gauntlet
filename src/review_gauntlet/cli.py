@@ -1017,6 +1017,10 @@ _READY_PROMPTS = {
     "stale_review_cell": (
         f"{READY_PROMPT_PREFIX} Review stale review cells; stop when no stale review cells remain."
     ),
+    "target_digest_drift": (
+        f"{READY_PROMPT_PREFIX} Review target changes because the target digest changed; "
+        "stop when the review run covers the current target digest."
+    ),
     "pending_review_cell": (
         f"{READY_PROMPT_PREFIX} Review pending review cells; stop when no pending review "
         "cells remain."
@@ -1064,13 +1068,20 @@ def _ready_prompt(store: SessionStore, root: Path) -> str | None:
     finalize_reasons = _finalize_reasons(
         cell_counts, finding_counts, store, session_id, root, allow_non_review_dirty=False
     )
+    if _finalize_blockers_are_target_digest_drift(finalize_reasons):
+        return _READY_PROMPTS["target_digest_drift"]
     if not finalize_reasons or _finalize_blockers_are_commit_resolvable(finalize_reasons):
         return _READY_PROMPTS["finalize"]
     return None
 
 
+_TARGET_DIGEST_DRIFT_REASON = "target digest has changed since the last review run"
 _DIRTY_REVIEW_UNIVERSE_PREFIX = "review-universe files are dirty relative to HEAD: "
 _DIRTY_NON_REVIEW_PREFIX = "working tree has uncommitted non-review files: "
+
+
+def _finalize_blockers_are_target_digest_drift(reasons: list[str]) -> bool:
+    return reasons == [_TARGET_DIGEST_DRIFT_REASON]
 
 
 def _finalize_blockers_are_commit_resolvable(reasons: list[str]) -> bool:
@@ -1282,7 +1293,7 @@ def _finalize_reasons(
     if last_reviewed_digest is None:
         reasons.append("no review run has been completed")
     elif last_reviewed_digest != target_digest(root):
-        reasons.append("target digest has changed since the last review run")
+        reasons.append(_TARGET_DIGEST_DRIFT_REASON)
     return reasons
 
 
@@ -1337,6 +1348,8 @@ def _next_action(
     if finding_counts.get("fixed_pending_verification", 0):
         return "run_verify_fixes"
     if cell_counts.get("pending", 0) or cell_counts.get("stale", 0):
+        return "run_review"
+    if _finalize_blockers_are_target_digest_drift(reasons):
         return "run_review"
     if reasons:
         return "resolve_finalize_blockers"
