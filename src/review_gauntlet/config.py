@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from enum import StrEnum
 from pathlib import Path
@@ -16,6 +17,10 @@ CONFIG_DISCOVERY_NAMES = (
     ".review-gauntlet/config.json",
     "review-gauntlet.jsonc",
     "review-gauntlet.json",
+)
+XDG_CONFIG_DISCOVERY_NAMES = (
+    "config.jsonc",
+    "config.json",
 )
 SUPPORTED_TEMPLATE_VARIABLES = frozenset(
     {
@@ -145,7 +150,19 @@ def discover_config_path(root: Path, explicit: Path | None = None) -> Path | Non
         candidate = repo_root / name
         if candidate.is_file():
             return candidate
+    xdg_config_dir = _xdg_config_home() / "review-gauntlet"
+    for name in XDG_CONFIG_DISCOVERY_NAMES:
+        candidate = xdg_config_dir / name
+        if candidate.is_file():
+            return candidate
     return None
+
+
+def _xdg_config_home() -> Path:
+    configured = os.environ.get("XDG_CONFIG_HOME")
+    if configured:
+        return Path(configured).expanduser()
+    return Path.home() / ".config"
 
 
 def load_config(

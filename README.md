@@ -167,8 +167,14 @@ cells.
 
 `review` discovers configuration in this order: explicit `--config`,
 `.review-gauntlet/config.jsonc`, `.review-gauntlet/config.json`,
-`review-gauntlet.jsonc`, then `review-gauntlet.json`. The command adapter uses
-argv arrays and never shell strings; provider login, model choice, and secrets stay
+`review-gauntlet.jsonc`, `review-gauntlet.json`,
+`$XDG_CONFIG_HOME/review-gauntlet/config.jsonc`, then
+`$XDG_CONFIG_HOME/review-gauntlet/config.json`. When `XDG_CONFIG_HOME` is unset
+or empty, the global fallback base is `~/.config`, so the JSONC fallback path is
+`~/.config/review-gauntlet/config.jsonc`. Repository-local configuration always
+wins over global XDG configuration, and discovery only reads existing files; it
+never creates global config directories or files. The command adapter uses argv
+arrays and never shell strings; provider login, model choice, and secrets stay
 inside the external CLI configuration.
 
 Minimal JSONC configuration for opencode file-json verdicts:

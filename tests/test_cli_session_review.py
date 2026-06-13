@@ -604,8 +604,9 @@ def test_status_default_root_json_succeeds_from_repository_root(
 
 
 def test_review_without_fixture_or_config_fails(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "missing-xdg-config"))
     _init_session(tmp_path, capsys)
 
     with pytest.raises(SystemExit) as excinfo:
