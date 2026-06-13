@@ -269,6 +269,45 @@ def test_status_prioritizes_pending_review_cells_before_untriaged_findings(
     ]
 
 
+def test_status_prioritizes_pending_review_cells_before_confirmed_findings(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_session(tmp_path, capsys)
+    _insert_finding(tmp_path, FindingState.CONFIRMED, 1)
+
+    main(["status", str(tmp_path), "--format", "json"])
+
+    data = json.loads(capsys.readouterr().out)
+    assert data["coverage"] == {CellState.PENDING.value: 1}
+    assert data["finding_state_counts"] == {FindingState.CONFIRMED.value: 1}
+    assert data["next_required_action"] == "run_review"
+    assert data["finalize_blockers"] == [
+        "review cells are still pending",
+        "findings remain confirmed",
+        "no review run has been completed",
+    ]
+
+
+def test_status_prioritizes_stale_review_cells_before_confirmed_findings(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_session(tmp_path, capsys)
+    _set_all_cells(tmp_path, CellState.STALE)
+    _insert_finding(tmp_path, FindingState.CONFIRMED, 1)
+
+    main(["status", str(tmp_path), "--format", "json"])
+
+    data = json.loads(capsys.readouterr().out)
+    assert data["coverage"] == {CellState.STALE.value: 1}
+    assert data["finding_state_counts"] == {FindingState.CONFIRMED.value: 1}
+    assert data["next_required_action"] == "run_review"
+    assert data["finalize_blockers"] == [
+        "review cells are stale after target changes",
+        "findings remain confirmed",
+        "no review run has been completed",
+    ]
+
+
 def test_status_treats_target_digest_drift_as_review_action(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -320,6 +359,24 @@ def test_ready_prompts_are_skill_directed_and_avoid_coordination_metadata(
     prompt = _ready_json(tmp_path, capsys)["prompt"]
     assert prompt is not None
     _assert_skill_directed_short_prompt(prompt, "Triage untriaged findings")
+
+
+def test_ready_prompts_review_for_incomplete_coverage_before_confirmed_findings(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_session(tmp_path, capsys)
+    _insert_finding(tmp_path, FindingState.CONFIRMED, 1)
+
+    pending_prompt = _ready_json(tmp_path, capsys)["prompt"]
+    assert pending_prompt is not None
+    _assert_skill_directed_short_prompt(pending_prompt, "Review pending review cells")
+    assert "Fix the next confirmed finding" not in pending_prompt
+
+    _set_all_cells(tmp_path, CellState.STALE)
+    stale_prompt = _ready_json(tmp_path, capsys)["prompt"]
+    assert stale_prompt is not None
+    _assert_skill_directed_short_prompt(stale_prompt, "Review stale review cells")
+    assert "Fix the next confirmed finding" not in stale_prompt
 
 
 def test_ready_finalize_prompt_mentions_commit_and_does_not_write_checkpoint(
