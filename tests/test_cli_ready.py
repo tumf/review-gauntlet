@@ -1,5 +1,6 @@
 import json
 import sqlite3
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -12,6 +13,18 @@ from review_gauntlet.targets import target_digest
 
 READY_PREFIX = "Use the review-gauntlet task execution skill."
 FORBIDDEN_PROMPT_TERMS = ("task_id", "claim", "release", "queue", "lease")
+
+
+def _git(root: Path, *args: str) -> str:
+    return subprocess.run(
+        ["git", *args], cwd=root, check=True, capture_output=True, text=True
+    ).stdout.strip()
+
+
+def _init_git_repo(root: Path) -> None:
+    _git(root, "init")
+    _git(root, "config", "user.email", "test@example.com")
+    _git(root, "config", "user.name", "Test User")
 
 
 def _init_session(root: Path, capsys: pytest.CaptureFixture[str]) -> str:
@@ -178,6 +191,41 @@ def test_ready_outputs_no_ready_task_when_only_blockers_remain(
         main(["ready", str(tmp_path), "--format", "text"])
     assert exc_info.value.code == 1
     assert capsys.readouterr().out == "no ready task\n"
+
+
+def test_ready_prompts_commit_when_finalize_blocked_by_dirty_git_changes(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_git_repo(tmp_path)
+    _init_session(tmp_path, capsys)
+    _git(tmp_path, "add", "README.md")
+    _git(tmp_path, "commit", "-m", "initial")
+
+    (tmp_path / "dirty.py").write_text("print('dirty')\n", encoding="utf-8")
+    _mark_finalize_ready(tmp_path)
+    prompt = _ready_json(tmp_path, capsys)["prompt"]
+    assert prompt is not None
+    _assert_skill_directed_short_prompt(prompt, "Commit intended git changes before finalizing")
+
+    _git(tmp_path, "add", "dirty.py")
+    _git(tmp_path, "commit", "-m", "add review dirty file")
+    (tmp_path / "package.json").write_text("{}\n", encoding="utf-8")
+    _mark_finalize_ready(tmp_path)
+    prompt = _ready_json(tmp_path, capsys)["prompt"]
+    assert prompt is not None
+    _assert_skill_directed_short_prompt(prompt, "Commit intended git changes before finalizing")
+
+
+def test_ready_outputs_no_ready_task_when_only_non_commit_blockers_remain(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_git_repo(tmp_path)
+    _init_session(tmp_path, capsys)
+    _git(tmp_path, "add", "README.md")
+    _git(tmp_path, "commit", "-m", "initial")
+    _set_all_cells(tmp_path, CellState.REVIEWED)
+
+    assert _ready_json_exits(tmp_path, capsys, expected_code=1) == {"prompt": None}
 
 
 def test_ready_prompts_are_skill_directed_and_avoid_coordination_metadata(
