@@ -149,9 +149,9 @@ When the same finding is detected while it is `fixed_pending_verification`, the 
 
 `findings --path` filters SHALL accept only repository-relative paths and directory prefixes. Absolute paths and parent-directory traversal SHALL fail with a usage error so filtering semantics remain repository-scoped and deterministic.
 
-Status and freshness computations SHALL use the same resolved repository root for review-universe traversal and relative digest paths. Invoking session status with the default root `.` SHALL be equivalent to invoking it with the absolute repository root.
+Status and freshness computations SHALL use the same resolved repository root for review-universe traversal and relative digest paths. Invoking session status with the default root `.` SHALL be equivalent to invoking it with the absolute repository root. When the last reviewed target digest differs from the current target digest, `status` SHALL expose review work as the next required action without requiring `status` to mutate persisted review cell states.
 
-`review-gauntlet ready` SHALL expose whether a continuation task is available through both stdout and process exit status. When a ready prompt exists, the command SHALL emit the existing prompt output and exit `0`. When no continuation task exists, the command SHALL preserve the existing no-task output while exiting `1` so external orchestrators can distinguish no-op completion without parsing stdout. After review-cell and finding continuation work is exhausted, `ready` SHALL treat dirty working-tree finalize blockers as actionable by returning a prompt that instructs the agent to commit intended git changes before finalizing. Commit-resolvable dirty blockers include dirty review-universe files relative to `HEAD` and uncommitted non-review files. `ready` SHALL NOT treat non-dirty finalize blockers as commit-resolvable.
+`review-gauntlet ready` SHALL expose whether a continuation task is available through both stdout and process exit status. When a ready prompt exists, the command SHALL emit the existing prompt output and exit `0`. When no continuation task exists, the command SHALL preserve the existing no-task output while exiting `1` so external orchestrators can distinguish no-op completion without parsing stdout. After review-cell and finding continuation work is exhausted, `ready` SHALL treat dirty working-tree finalize blockers as actionable by returning a prompt that instructs the agent to commit intended git changes before finalizing. Commit-resolvable dirty blockers include dirty review-universe files relative to `HEAD` and uncommitted non-review files. `ready` SHALL NOT treat non-dirty finalize blockers as commit-resolvable. `ready` SHALL also treat target digest drift since the last review run as actionable review work, returning a review-oriented prompt without mutating session ledger state.
 
 #### Scenario: Findings mark filter matches hyphenated public state
 
@@ -172,6 +172,14 @@ Status and freshness computations SHALL use the same resolved repository root fo
 **When**: the developer runs `review-gauntlet status --format json` from the repository root
 **Then**: stdout contains parseable JSON session status
 **And**: target digest computation does not fail due to relative and absolute path mixing
+
+#### Scenario: Status maps target digest drift to review work
+
+**Given**: an active review session whose persisted review cells are not stale
+**And**: the last reviewed target digest differs from the current target digest
+**When**: the developer runs `review-gauntlet status --format json`
+**Then**: stdout contains parseable JSON with `next_required_action` equal to `run_review`
+**And**: the command does not mutate persisted review cell states
 
 #### Scenario: Ready exits zero when an actionable task exists
 
@@ -206,10 +214,23 @@ Status and freshness computations SHALL use the same resolved repository root fo
 **And**: no checkpoint is written
 **And**: no ledger state is modified
 
-#### Scenario: Ready preserves no-task behavior for non-commit finalize blockers
+#### Scenario: Ready prompts review for target digest drift without mutating state
+
+**Given**: an active review session whose persisted review cells are not stale
+**And**: all findings are terminal
+**And**: finalization is blocked by target digest drift since the last review run
+**When**: the developer runs `review-gauntlet ready --format json`
+**Then**: stdout contains parseable JSON with a string `prompt`
+**And**: the prompt instructs the agent to run review work
+**And**: the command exits `0`
+**And**: no checkpoint is written
+**And**: no ledger state is modified
+
+#### Scenario: Ready preserves no-task behavior for non-commit non-drift finalize blockers
 
 **Given**: an active review session whose review cells and findings have no pending continuation work
 **And**: finalization is blocked by at least one blocker that committing dirty files cannot resolve
+**And**: finalization is not blocked by target digest drift
 **When**: the developer runs `review-gauntlet ready --format json`
 **Then**: stdout contains parseable JSON with `prompt` equal to `null`
 **And**: the command exits `1`
