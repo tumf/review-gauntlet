@@ -133,97 +133,139 @@ def build_parser() -> argparse.ArgumentParser:
     )
     for command in ("inventory", "plan"):
         subparser = subparsers.add_parser(command)
-        subparser.add_argument("root", nargs="?", default=".")
-        subparser.add_argument("--format", choices=("json", "text"), default="text")
+        _root_arg(subparser)
+        _output_format_arg(subparser)
     report = subparsers.add_parser("report")
-    report.add_argument("root", nargs="?", default=".")
-    report.add_argument("--format", choices=("text", "json"), default="text")
+    _root_arg(report)
+    _output_format_arg(report)
 
     init = subparsers.add_parser("init")
-    init.add_argument("root", nargs="?", default=".")
+    _root_arg(init)
     init.add_argument("--from", dest="base_ref")
     init.add_argument("--to", dest="head_ref")
-    init.add_argument("--worktree", action="store_true")
+    init.add_argument(
+        "--worktree", action="store_true", help="Review worktree changes (default: false)"
+    )
     init.add_argument("--commit")
-    init.add_argument("--all", dest="all_files", action="store_true")
-    init.add_argument("--format", choices=("text", "json"), default="text")
+    init.add_argument(
+        "--all", dest="all_files", action="store_true", help="Review all files (default: false)"
+    )
+    _output_format_arg(init)
 
     review = subparsers.add_parser("review")
-    review.add_argument("root", nargs="?", default=".")
-    review.add_argument("--budget", type=int, default=50)
-    review.add_argument("--concurrency", type=int, default=8)
+    _root_arg(review)
+    _budget_arg(review)
+    _concurrency_arg(review)
     review.add_argument("--fixture", type=Path)
     review.add_argument("--config", type=Path)
     _output_format_arg(review)
-    review.add_argument("--audience", choices=("human", "agent"), default="human")
+    _audience_arg(review)
 
     verify_fixes = subparsers.add_parser("verify-fixes")
-    verify_fixes.add_argument("root", nargs="?", default=".")
-    verify_fixes.add_argument("--budget", type=int, default=50)
-    verify_fixes.add_argument("--concurrency", type=int, default=8)
+    _root_arg(verify_fixes)
+    _budget_arg(verify_fixes)
+    _concurrency_arg(verify_fixes)
     verify_fixes.add_argument("--fixture", type=Path)
     verify_fixes.add_argument("--config", type=Path)
     _output_format_arg(verify_fixes)
-    verify_fixes.add_argument("--audience", choices=("human", "agent"), default="human")
-    verify_fixes.add_argument("--finding", action="append", default=[])
-    verify_fixes.add_argument("--path", action="append", default=[])
-
-    status = subparsers.add_parser("status")
-    status.add_argument("root", nargs="?", default=".")
-    status.add_argument("--format", choices=("text", "json"), default="text")
-    status.add_argument(
-        "--allow-non-review-dirty",
-        action="store_true",
-        help="Allow uncommitted non-review files in the working tree",
+    _audience_arg(verify_fixes)
+    verify_fixes.add_argument(
+        "--finding", action="append", default=[], help="Filter by finding ID (default: none)"
+    )
+    verify_fixes.add_argument(
+        "--path", action="append", default=[], help="Filter by finding path (default: none)"
     )
 
+    status = subparsers.add_parser("status")
+    _root_arg(status)
+    _output_format_arg(status)
+    _allow_non_review_dirty_arg(status)
+
     ready = subparsers.add_parser("ready")
-    ready.add_argument("root", nargs="?", default=".")
-    ready.add_argument("--format", choices=("text", "json"), default="text")
+    _root_arg(ready)
+    _output_format_arg(ready)
 
     findings = subparsers.add_parser("findings")
-    findings.add_argument("root", nargs="?", default=".")
-    findings.add_argument("--all", action="store_true")
-    findings.add_argument("--path", action="append", default=[])
+    _root_arg(findings)
+    findings.add_argument(
+        "--all", action="store_true", help="Include terminal findings (default: false)"
+    )
+    findings.add_argument(
+        "--path", action="append", default=[], help="Filter by finding path (default: none)"
+    )
     findings.add_argument(
         "--mark",
         action="append",
         choices=tuple(_FINDING_MARK_TO_STATE),
         default=[],
+        help="Filter by finding state marker (default: none)",
     )
-    findings.add_argument("--format", choices=("text", "json"), default="text")
+    _output_format_arg(findings)
 
     mark = subparsers.add_parser("mark")
-    mark.add_argument("root", nargs="?", default=".")
+    _root_arg(mark)
     mark.add_argument("finding_id")
     mark.add_argument(
         "state", choices=("confirmed", "false-positive", "waived", "accepted-risk", "fixed")
     )
-    mark.add_argument("--reason", default="")
-    mark.add_argument("--owner", default="")
-    mark.add_argument("--until", default="")
+    mark.add_argument("--reason", default="", help="Decision reason (default: none)")
+    mark.add_argument("--owner", default="", help="Decision owner (default: none)")
+    mark.add_argument(
+        "--until", default="", help="Decision expiry date, YYYY-MM-DD (default: none)"
+    )
     _output_format_arg(mark)
 
     finalize = subparsers.add_parser("finalize")
-    finalize.add_argument("root", nargs="?", default=".")
-    finalize.add_argument("--format", choices=("text", "json"), default="text")
-    finalize.add_argument(
-        "--allow-non-review-dirty",
-        action="store_true",
-        help="Allow uncommitted non-review files in the working tree",
-    )
+    _root_arg(finalize)
+    _output_format_arg(finalize)
+    _allow_non_review_dirty_arg(finalize)
 
     validate_verdict = subparsers.add_parser("validate-verdict")
     validate_verdict.add_argument("path", type=Path)
-    validate_verdict.add_argument("--format", choices=("text", "json"), default="text")
+    _output_format_arg(validate_verdict)
 
     completion = subparsers.add_parser("completion")
     completion.add_argument("shell", choices=("bash", "zsh", "fish"))
     return parser
 
 
+def _root_arg(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("root", nargs="?", default=".", help="Repository root (default: .)")
+
+
+def _budget_arg(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--budget", type=int, default=50, help="Maximum review budget (default: 50)"
+    )
+
+
+def _concurrency_arg(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--concurrency", type=int, default=8, help="Review concurrency (default: 8)"
+    )
+
+
+def _audience_arg(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--audience",
+        choices=("human", "agent"),
+        default="human",
+        help="Progress output audience (default: human)",
+    )
+
+
+def _allow_non_review_dirty_arg(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--allow-non-review-dirty",
+        action="store_true",
+        help="Allow uncommitted non-review files in the working tree (default: false)",
+    )
+
+
 def _output_format_arg(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--format", choices=("text", "json"), default="text")
+    parser.add_argument(
+        "--format", choices=("text", "json"), default="text", help="Output format (default: text)"
+    )
 
 
 def _completion_script(parser: argparse.ArgumentParser, shell: str) -> str:
