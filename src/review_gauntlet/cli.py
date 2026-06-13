@@ -177,6 +177,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="Allow uncommitted non-review files in the working tree",
     )
 
+    ready = subparsers.add_parser("ready")
+    ready.add_argument("root", nargs="?", default=".")
+    ready.add_argument("--format", choices=("text", "json"), default="text")
+
     findings = subparsers.add_parser("findings")
     findings.add_argument("root", nargs="?", default=".")
     findings.add_argument("--all", action="store_true")
@@ -430,6 +434,8 @@ def _run_session_command(args: argparse.Namespace, root: Path) -> None:
     elif args.command == "status":
         allow = bool(getattr(args, "allow_non_review_dirty", False))
         _emit(_status(store, root, allow_non_review_dirty=allow), args.format)
+    elif args.command == "ready":
+        _emit_ready(_ready_prompt(store, root), args.format)
     elif args.command == "findings":
         _emit(
             _findings(
@@ -941,6 +947,84 @@ def _reconcile_cells(store: SessionStore, root: Path, target: TargetSpec) -> Non
             store.update_cell_state(session_id, cell_id, CellState.SUPERSEDED)
         elif row["content_digest"] != current_cell.content_digest:
             store.update_cell_state(session_id, cell_id, CellState.STALE)
+
+
+READY_PROMPT_PREFIX = "Use the review-gauntlet task execution skill."
+
+_READY_PROMPTS = {
+    "reopened": (
+        f"{READY_PROMPT_PREFIX} Re-triage reopened findings; stop when no reopened findings remain."
+    ),
+    "untriaged": (
+        f"{READY_PROMPT_PREFIX} Triage untriaged findings; stop when no untriaged findings remain."
+    ),
+    "confirmed": (
+        f"{READY_PROMPT_PREFIX} Fix the next confirmed finding; stop when confirmed "
+        "findings are resolved or require re-triage."
+    ),
+    "fixed_pending_verification": (
+        f"{READY_PROMPT_PREFIX} Verify fixed-pending findings; stop when no fixed-pending "
+        "verification findings remain."
+    ),
+    "stale_review_cell": (
+        f"{READY_PROMPT_PREFIX} Review stale review cells; stop when no stale review cells remain."
+    ),
+    "pending_review_cell": (
+        f"{READY_PROMPT_PREFIX} Review pending review cells; stop when no pending review "
+        "cells remain."
+    ),
+    "finalize": (
+        f"{READY_PROMPT_PREFIX} Commit intended git changes before finalizing, then "
+        "finalize the review-gauntlet session; stop when the session is finalized or a "
+        "blocker remains."
+    ),
+}
+
+
+def _ready_prompt(store: SessionStore, root: Path) -> str | None:
+    session_id = store.active_session_id()
+    with store.connect() as conn:
+        cell_counts = dict(
+            conn.execute(
+                """
+                select state, count(*) as count
+                from review_cells
+                where session_id = ?
+                group by state
+                """,
+                (session_id,),
+            ).fetchall()
+        )
+        finding_counts = dict(
+            conn.execute(
+                "select state, count(*) as count from findings where session_id = ? group by state",
+                (session_id,),
+            ).fetchall()
+        )
+    if finding_counts.get(FindingState.REOPENED.value, 0):
+        return _READY_PROMPTS["reopened"]
+    if finding_counts.get(FindingState.UNTRIAGED.value, 0):
+        return _READY_PROMPTS["untriaged"]
+    if finding_counts.get(FindingState.CONFIRMED.value, 0):
+        return _READY_PROMPTS["confirmed"]
+    if finding_counts.get(FindingState.FIXED_PENDING_VERIFICATION.value, 0):
+        return _READY_PROMPTS["fixed_pending_verification"]
+    if cell_counts.get(CellState.STALE.value, 0):
+        return _READY_PROMPTS["stale_review_cell"]
+    if cell_counts.get(CellState.PENDING.value, 0):
+        return _READY_PROMPTS["pending_review_cell"]
+    if not _finalize_reasons(
+        cell_counts, finding_counts, store, session_id, root, allow_non_review_dirty=True
+    ):
+        return _READY_PROMPTS["finalize"]
+    return None
+
+
+def _emit_ready(prompt: str | None, output_format: str) -> None:
+    if output_format == "json":
+        print(json.dumps({"prompt": prompt}, indent=2, sort_keys=True))
+        return
+    print(prompt if prompt is not None else "no ready task")
 
 
 def _cmd_mark(args: argparse.Namespace, store: SessionStore) -> None:
