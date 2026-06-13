@@ -326,6 +326,65 @@ def test_status_treats_target_digest_drift_as_review_action(
     assert not (tmp_path / ".review-gauntlet" / "checkpoints" / "latest").exists()
 
 
+def test_status_prioritizes_pending_review_cells_before_fixed_pending_findings(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_session(tmp_path, capsys)
+    _insert_finding(tmp_path, FindingState.FIXED_PENDING_VERIFICATION, 1)
+
+    main(["status", str(tmp_path), "--format", "json"])
+
+    data = json.loads(capsys.readouterr().out)
+    assert data["coverage"] == {CellState.PENDING.value: 1}
+    assert data["finding_state_counts"] == {FindingState.FIXED_PENDING_VERIFICATION.value: 1}
+    assert data["next_required_action"] == "run_review"
+    assert data["finalize_blockers"] == [
+        "review cells are still pending",
+        "fixed findings require verification",
+        "no review run has been completed",
+    ]
+
+
+def test_status_prioritizes_stale_review_cells_before_fixed_pending_findings(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_session(tmp_path, capsys)
+    _set_all_cells(tmp_path, CellState.STALE)
+    _insert_finding(tmp_path, FindingState.FIXED_PENDING_VERIFICATION, 1)
+
+    main(["status", str(tmp_path), "--format", "json"])
+
+    data = json.loads(capsys.readouterr().out)
+    assert data["coverage"] == {CellState.STALE.value: 1}
+    assert data["finding_state_counts"] == {FindingState.FIXED_PENDING_VERIFICATION.value: 1}
+    assert data["next_required_action"] == "run_review"
+    assert data["finalize_blockers"] == [
+        "review cells are stale after target changes",
+        "fixed findings require verification",
+        "no review run has been completed",
+    ]
+
+
+def test_status_prioritizes_target_digest_drift_before_fixed_pending_findings(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_session(tmp_path, capsys)
+    _mark_finalize_ready(tmp_path)
+    _insert_finding(tmp_path, FindingState.FIXED_PENDING_VERIFICATION, 1)
+    (tmp_path / "README.md").write_text("# docs\n\nchanged\n", encoding="utf-8")
+
+    main(["status", str(tmp_path), "--format", "json"])
+
+    data = json.loads(capsys.readouterr().out)
+    assert data["coverage"] == {CellState.REVIEWED.value: 1}
+    assert data["finding_state_counts"] == {FindingState.FIXED_PENDING_VERIFICATION.value: 1}
+    assert data["next_required_action"] == "run_review"
+    assert data["finalize_blockers"] == [
+        "fixed findings require verification",
+        "target digest has changed since the last review run",
+    ]
+
+
 def test_ready_prompts_review_for_target_digest_drift_without_mutating_state(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -377,6 +436,55 @@ def test_ready_prompts_review_for_incomplete_coverage_before_confirmed_findings(
     assert stale_prompt is not None
     _assert_skill_directed_short_prompt(stale_prompt, "Review stale review cells")
     assert "Fix the next confirmed finding" not in stale_prompt
+
+
+def test_ready_prompts_review_for_incomplete_coverage_before_fixed_pending_findings(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_session(tmp_path, capsys)
+    _insert_finding(tmp_path, FindingState.FIXED_PENDING_VERIFICATION, 1)
+
+    pending_prompt = _ready_json(tmp_path, capsys)["prompt"]
+    assert pending_prompt is not None
+    _assert_skill_directed_short_prompt(pending_prompt, "Review pending review cells")
+    assert "Verify fixed-pending findings" not in pending_prompt
+
+    _set_all_cells(tmp_path, CellState.STALE)
+    stale_prompt = _ready_json(tmp_path, capsys)["prompt"]
+    assert stale_prompt is not None
+    _assert_skill_directed_short_prompt(stale_prompt, "Review stale review cells")
+    assert "Verify fixed-pending findings" not in stale_prompt
+
+
+def test_ready_prompts_review_for_target_digest_drift_before_fixed_pending_findings(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_session(tmp_path, capsys)
+    _mark_finalize_ready(tmp_path)
+    _insert_finding(tmp_path, FindingState.FIXED_PENDING_VERIFICATION, 1)
+    (tmp_path / "README.md").write_text("# docs\n\nchanged\n", encoding="utf-8")
+
+    prompt = _ready_json(tmp_path, capsys)["prompt"]
+
+    assert prompt is not None
+    _assert_skill_directed_short_prompt(prompt, "Review target changes")
+    assert "Verify fixed-pending findings" not in prompt
+
+
+def test_status_keeps_verify_fixes_when_coverage_is_current(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_session(tmp_path, capsys)
+    _mark_finalize_ready(tmp_path)
+    _insert_finding(tmp_path, FindingState.FIXED_PENDING_VERIFICATION, 1)
+
+    main(["status", str(tmp_path), "--format", "json"])
+
+    data = json.loads(capsys.readouterr().out)
+    assert data["coverage"] == {CellState.REVIEWED.value: 1}
+    assert data["finding_state_counts"] == {FindingState.FIXED_PENDING_VERIFICATION.value: 1}
+    assert data["finalize_blockers"] == ["fixed findings require verification"]
+    assert data["next_required_action"] == "run_verify_fixes"
 
 
 def test_ready_finalize_prompt_mentions_commit_and_does_not_write_checkpoint(
