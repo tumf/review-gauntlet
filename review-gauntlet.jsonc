@@ -8,7 +8,6 @@
     "command": "opencode",
     "args": [
       "run",
-      "--dangerously-skip-permissions",
       "{prompt}"
     ]
   }
