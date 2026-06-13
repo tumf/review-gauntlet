@@ -1,0 +1,299 @@
+{
+  "checkpoint_id": "RGC-000c45c09342-RGS-3893655e67c9",
+  "findings": [
+    {
+      "checkpoint_id": "RGC-000c45c09342-RGS-3893655e67c9",
+      "content": "`--budget` accepts negative values and silently treats them like a zero-budget run. This makes invalid user input look successful and can skip all requested review/verification work without surfacing a usage error. Validate the budget before branching on `<= 0`, consistent with the existing `--concurrency` validation.",
+      "finding_id": "RGF-0062",
+      "fingerprint": "5899d765923d08bca66d270ed75e6518d84e7e078bf876f285b734bdacfe2a78",
+      "latest_occurrence": {
+        "cell_id": "RGC-6cefdd41be393570",
+        "end_line": 496,
+        "finding_id": "RGF-0062",
+        "imprecise": 0,
+        "occurrence_id": 62,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 40,
+        "start_line": 496
+      },
+      "metadata": "{\"fingerprint\":\"5899d765923d08bca66d270ed75e6518d84e7e078bf876f285b734bdacfe2a78\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"data-validation\",\"content\":\"`--budget` accepts negative values and silently treats them like a zero-budget run. This makes invalid user input look successful and can skip all requested review/verification work without surfacing a usage error. Validate the budget before branching on `<= 0`, consistent with the existing `--concurrency` validation.\",\"suggestion_code\":\"    if args.budget < 0:\\n        fail(\\\"review --budget must be a non-negative integer\\\")\\n    if args.budget == 0:\\n        status = _status(store, root)\\n        _emit(\\n            {\\\"run_id\\\": None, \\\"reviewed_cells\\\": 0, \\\"finding_ids\\\": [], **status},\\n            args.format,\\n        )\\n        return\",\"existing_code\":\"    if args.budget <= 0:\\n        status = _status(store, root)\\n        _emit(\\n            {\\\"run_id\\\": None, \\\"reviewed_cells\\\": 0, \\\"finding_ids\\\": [], **status},\\n            args.format,\\n        )\\n        return\",\"start_line\":496,\"end_line\":496,\"thinking\":\"Data-validation issue: argparse enforces integer syntax but not the command's valid range. Negative budgets are nonsensical and currently exit successfully after doing no work.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-3893655e67c9",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-000c45c09342-RGS-3893655e67c9",
+      "content": "`--budget` is also accepted as a negative number for `verify-fixes`, causing the command to return the base result instead of rejecting invalid input. This can incorrectly report pending fixes as merely unverifiable without making clear that the invocation was invalid.",
+      "finding_id": "RGF-0063",
+      "fingerprint": "fd860d718c41ace28528894d8adcfe131014e0002368a76f70a11b6b4d2f3e71",
+      "latest_occurrence": {
+        "cell_id": "RGC-6cefdd41be393570",
+        "end_line": 620,
+        "finding_id": "RGF-0063",
+        "imprecise": 0,
+        "occurrence_id": 63,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 40,
+        "start_line": 620
+      },
+      "metadata": "{\"fingerprint\":\"fd860d718c41ace28528894d8adcfe131014e0002368a76f70a11b6b4d2f3e71\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"data-validation\",\"content\":\"`--budget` is also accepted as a negative number for `verify-fixes`, causing the command to return the base result instead of rejecting invalid input. This can incorrectly report pending fixes as merely unverifiable without making clear that the invocation was invalid.\",\"suggestion_code\":\"    if args.budget < 0:\\n        fail(\\\"verify-fixes --budget must be a non-negative integer\\\")\\n    if args.budget == 0 or not target_rows:\\n        _emit(result_base, args.format)\\n        return\",\"existing_code\":\"    if args.budget <= 0 or not target_rows:\\n        _emit(result_base, args.format)\\n        return\",\"start_line\":620,\"end_line\":620,\"thinking\":\"Same validation gap as review: negative budget is invalid input but is silently treated as a no-op.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-3893655e67c9",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-000c45c09342-RGS-3893655e67c9",
+      "content": "Checkpoint IDs are constructed with the raw session_id and then used as part of temporary directory names. If session_id contains a path separator or traversal segment, checkpoint creation can write/rename outside the checkpoints directory instead of keeping generated files under .review-gauntlet/checkpoints.",
+      "finding_id": "RGF-0064",
+      "fingerprint": "9456e04453c780018b702986ddd1250b1393e3871db8303bf4f0936df9293c88",
+      "latest_occurrence": {
+        "cell_id": "RGC-8769b06915f1af11",
+        "end_line": 197,
+        "finding_id": "RGF-0064",
+        "imprecise": 0,
+        "occurrence_id": 64,
+        "path": "src/review_gauntlet/checkpoint.py",
+        "run_id": 40,
+        "start_line": 164
+      },
+      "metadata": "{\"fingerprint\":\"9456e04453c780018b702986ddd1250b1393e3871db8303bf4f0936df9293c88\",\"path\":\"src/review_gauntlet/checkpoint.py\",\"rule_id\":\"data-validation\",\"content\":\"Checkpoint IDs are constructed with the raw session_id and then used as part of temporary directory names. If session_id contains a path separator or traversal segment, checkpoint creation can write/rename outside the checkpoints directory instead of keeping generated files under .review-gauntlet/checkpoints.\",\"suggestion_code\":\"    if any(part in {\\\"\\\", \\\".\\\", \\\"..\\\"} for part in Path(session_id).parts) or Path(session_id).name != session_id:\\n        raise ValueError(\\\"session_id must be a single path-safe segment\\\")\\n    checkpoint_id = f\\\"RGC-{head[:12]}-{session_id}\\\"\\n    generated_at = datetime.now(UTC).isoformat().replace(\\\"+00:00\\\", \\\"Z\\\")\\n    metadata = store.session_metadata(session_id)\\n    last_digest = store.last_run_target_digest(session_id)\",\"existing_code\":\"    checkpoint_id = f\\\"RGC-{head[:12]}-{session_id}\\\"\\n    generated_at = datetime.now(UTC).isoformat().replace(\\\"+00:00\\\", \\\"Z\\\")\\n    metadata = store.session_metadata(session_id)\\n    last_digest = store.last_run_target_digest(session_id)\",\"start_line\":164,\"end_line\":197,\"thinking\":\"The function validates the working tree but not the user/session-derived identifier before embedding it in filesystem paths.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/checkpoint.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-3893655e67c9",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-000c45c09342-RGS-3893655e67c9",
+      "content": "Dirty-path validation parses git path output with splitlines(), so filenames containing newlines are mis-split. That can cause assert_review_universe_clean/classify_working_tree_dirty to validate fabricated paths and miss the actual dirty review-universe file, allowing an unsafe checkpoint or producing misleading blockers. Use NUL-delimited git output and split on NUL for path validation.",
+      "finding_id": "RGF-0065",
+      "fingerprint": "b9021dc922b63b389dfb1d2dd90e9f630554d9709f2c44ac02bbc8ae3eeedc22",
+      "latest_occurrence": {
+        "cell_id": "RGC-8769b06915f1af11",
+        "end_line": 130,
+        "finding_id": "RGF-0065",
+        "imprecise": 0,
+        "occurrence_id": 65,
+        "path": "src/review_gauntlet/checkpoint.py",
+        "run_id": 41,
+        "start_line": 128
+      },
+      "metadata": "{\"fingerprint\":\"b9021dc922b63b389dfb1d2dd90e9f630554d9709f2c44ac02bbc8ae3eeedc22\",\"path\":\"src/review_gauntlet/checkpoint.py\",\"rule_id\":\"data-validation\",\"content\":\"Dirty-path validation parses git path output with splitlines(), so filenames containing newlines are mis-split. That can cause assert_review_universe_clean/classify_working_tree_dirty to validate fabricated paths and miss the actual dirty review-universe file, allowing an unsafe checkpoint or producing misleading blockers. Use NUL-delimited git output and split on NUL for path validation.\",\"suggestion_code\":\"    names = _split_nul(_git(root, \\\"diff\\\", \\\"--name-only\\\", \\\"-z\\\", \\\"--cached\\\"))\\n    names += _split_nul(_git(root, \\\"diff\\\", \\\"--name-only\\\", \\\"-z\\\"))\\n    names += _split_nul(_git(root, \\\"ls-files\\\", \\\"--others\\\", \\\"--exclude-standard\\\", \\\"-z\\\"))\",\"existing_code\":\"    names = _split(_git(root, \\\"diff\\\", \\\"--name-only\\\", \\\"--cached\\\"))\\n    names += _split(_git(root, \\\"diff\\\", \\\"--name-only\\\"))\\n    names += _split(_git(root, \\\"ls-files\\\", \\\"--others\\\", \\\"--exclude-standard\\\"))\",\"start_line\":128,\"end_line\":130,\"thinking\":\"Git path output is not line-safe; path validation should preserve exact filenames. The helper would need to split on '\\\\0' and drop only the trailing empty element.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/checkpoint.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-3893655e67c9",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-000c45c09342-RGS-3893655e67c9",
+      "content": "When the latest checkpoint is corrupt or refers to a missing/non-ancestor base, _validate_latest_checkpoint lets subprocess.CalledProcessError propagate. The CLI only handles ValueError for init target validation, so `review-gauntlet init --format json` can crash with a traceback instead of returning the documented usage error path for invalid checkpoint input.",
+      "finding_id": "RGF-0066",
+      "fingerprint": "6e06554c3fea295ee2edcb32d4b1cd21921ab4b30663633f20128928589d2736",
+      "latest_occurrence": {
+        "cell_id": "RGC-3f61aac0876a0d2e",
+        "end_line": 115,
+        "finding_id": "RGF-0066",
+        "imprecise": 0,
+        "occurrence_id": 66,
+        "path": "src/review_gauntlet/checkpoint.py",
+        "run_id": 42,
+        "start_line": 112
+      },
+      "metadata": "{\"fingerprint\":\"6e06554c3fea295ee2edcb32d4b1cd21921ab4b30663633f20128928589d2736\",\"path\":\"src/review_gauntlet/checkpoint.py\",\"rule_id\":\"cli-contract\",\"content\":\"When the latest checkpoint is corrupt or refers to a missing/non-ancestor base, _validate_latest_checkpoint lets subprocess.CalledProcessError propagate. The CLI only handles ValueError for init target validation, so `review-gauntlet init --format json` can crash with a traceback instead of returning the documented usage error path for invalid checkpoint input.\",\"suggestion_code\":\"    try:\\n        _git(root, \\\"rev-parse\\\", \\\"--verify\\\", f\\\"{base}^{{commit}}\\\")\\n    except subprocess.CalledProcessError as exc:\\n        raise ValueError(\\\"latest checkpoint review_base_commit does not resolve to a commit\\\") from exc\\n    try:\\n        _git(root, \\\"merge-base\\\", \\\"--is-ancestor\\\", base, \\\"HEAD\\\")\\n    except subprocess.CalledProcessError as exc:\\n        raise ValueError(\\\"latest checkpoint review_base_commit is not an ancestor of HEAD\\\") from exc\",\"existing_code\":\"    try:\\n        _git(root, \\\"rev-parse\\\", \\\"--verify\\\", f\\\"{base}^{{commit}}\\\")\\n        _git(root, \\\"merge-base\\\", \\\"--is-ancestor\\\", base, \\\"HEAD\\\")\\n    except subprocess.CalledProcessError as exc:\\n        raise ValueError(\\\"latest checkpoint review_base_commit is not an ancestor of HEAD\\\") from exc\",\"start_line\":112,\"end_line\":115,\"thinking\":\"rev-parse failures and merge-base ancestry failures are different invalid user-controlled checkpoint states; both should be converted to CLI-facing validation errors.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/checkpoint.py",
+      "rule_id": "cli-contract",
+      "session_id": "RGS-3893655e67c9",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-000c45c09342-RGS-3893655e67c9",
+      "content": "The latest checkpoint accepts arbitrary JSON values in `findings.json` as long as the top-level payload is a list, so a corrupted or hand-edited checkpoint can be treated as a valid review base even when its finding entries are not objects or do not match the checkpoint metadata. This violates the internal-consistency validation expected for committed checkpoints and can hide malformed review evidence until later consumers fail or silently ignore it.",
+      "finding_id": "RGF-0067",
+      "fingerprint": "827620bda45a5013e3c64b8026d09a9fc5266fbcd0b9b93d572232a30f4c03cd",
+      "latest_occurrence": {
+        "cell_id": "RGC-8769b06915f1af11",
+        "end_line": 104,
+        "finding_id": "RGF-0067",
+        "imprecise": 0,
+        "occurrence_id": 67,
+        "path": "src/review_gauntlet/checkpoint.py",
+        "run_id": 42,
+        "start_line": 103
+      },
+      "metadata": "{\"fingerprint\":\"827620bda45a5013e3c64b8026d09a9fc5266fbcd0b9b93d572232a30f4c03cd\",\"path\":\"src/review_gauntlet/checkpoint.py\",\"rule_id\":\"data-validation\",\"content\":\"The latest checkpoint accepts arbitrary JSON values in `findings.json` as long as the top-level payload is a list, so a corrupted or hand-edited checkpoint can be treated as a valid review base even when its finding entries are not objects or do not match the checkpoint metadata. This violates the internal-consistency validation expected for committed checkpoints and can hide malformed review evidence until later consumers fail or silently ignore it.\",\"suggestion_code\":\"        payload_key = \\\"findings\\\" if name == \\\"findings.json\\\" else \\\"events\\\"\\n        payload = checkpoint_file.get(payload_key)\\n        if not isinstance(payload, list):\\n            raise ValueError(f\\\"latest checkpoint is internally inconsistent: {name}\\\")\\n        if not all(\\n            isinstance(item, dict) and item.get(\\\"checkpoint_id\\\") == checkpoint_id\\n            for item in payload\\n        ):\\n            raise ValueError(f\\\"latest checkpoint is internally inconsistent: {name}\\\")\",\"existing_code\":\"        payload_key = \\\"findings\\\" if name == \\\"findings.json\\\" else \\\"events\\\"\\n        if not isinstance(checkpoint_file.get(payload_key), list):\\n            raise ValueError(f\\\"latest checkpoint is internally inconsistent: {name}\\\")\",\"start_line\":103,\"end_line\":104,\"thinking\":\"`_validate_latest_checkpoint` is the gate used by default init before consuming a committed checkpoint. It verifies the wrapper checkpoint_id but not the shape or per-entry checkpoint_id of the checkpoint payload, even though checkpoint generation writes per-row IDs. A malformed list such as `[null]` or entries from another checkpoint currently passes validation.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/checkpoint.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-3893655e67c9",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-000c45c09342-RGS-3893655e67c9",
+      "content": "A normal `review` run can silently mark fixed-pending findings as verified when their file is selected for any reason, because this call verifies every fixed-pending finding on evaluated paths rather than only findings/cells intentionally targeted for verification. If a file has both a pending review cell and a fixed-pending finding, running `review --budget 1` may transition that finding to `fixed_verified` even though the operator did not run `verify-fixes`, weakening the explicit fix-verification workflow and audit trail.",
+      "finding_id": "RGF-0068",
+      "fingerprint": "53cbc7e3376f0f6a2658823095a195393394f58708e5c5c88d67ad91b51dfac2",
+      "latest_occurrence": {
+        "cell_id": "RGC-98d51e4d6441e1d7",
+        "end_line": 574,
+        "finding_id": "RGF-0068",
+        "imprecise": 0,
+        "occurrence_id": 68,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 42,
+        "start_line": 574
+      },
+      "metadata": "{\"fingerprint\":\"53cbc7e3376f0f6a2658823095a195393394f58708e5c5c88d67ad91b51dfac2\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"cli-contract\",\"content\":\"A normal `review` run can silently mark fixed-pending findings as verified when their file is selected for any reason, because this call verifies every fixed-pending finding on evaluated paths rather than only findings/cells intentionally targeted for verification. If a file has both a pending review cell and a fixed-pending finding, running `review --budget 1` may transition that finding to `fixed_verified` even though the operator did not run `verify-fixes`, weakening the explicit fix-verification workflow and audit trail.\",\"suggestion_code\":\"    fixed_pending_ids = {\\n        str(row[\\\"finding_id\\\"])\\n        for row in store.list_fixed_pending_findings(session_id)\\n        if str(row[\\\"path\\\"]) in {cell.file_path for cell in selected_cells}\\n        and all(cell.file_path in fixed_pending_paths for cell in selected_cells if cell.file_path == str(row[\\\"path\\\"]))\\n    }\\n    store.verify_fixed_findings(session_id, seen_fingerprints, evaluated_paths, fixed_pending_ids)\",\"existing_code\":\"    store.verify_fixed_findings(session_id, seen_fingerprints, evaluated_paths)\",\"start_line\":574,\"end_line\":574,\"thinking\":\"verify-fixes already scopes verification to requested target IDs; the regular review path should not verify unrelated fixed-pending findings merely because their path was reviewed for other pending/stale cells.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "cli-contract",
+      "session_id": "RGS-3893655e67c9",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-000c45c09342-RGS-3893655e67c9",
+      "content": "`review --budget` is documented and validated as a cell budget, but `_select_review_cells` stops after `budget` distinct paths while appending every review cell for each selected path. A single path can have multiple rule cells, so `--budget 1` can review more than one cell and consume more adapter calls than requested.",
+      "finding_id": "RGF-0069",
+      "fingerprint": "f8f1ca77876c9f69c7155ed97858b801c398b0b31334cc24a75b7d97ab4bedb2",
+      "latest_occurrence": {
+        "cell_id": "RGC-98d51e4d6441e1d7",
+        "end_line": 831,
+        "finding_id": "RGF-0069",
+        "imprecise": 0,
+        "occurrence_id": 69,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 43,
+        "start_line": 827
+      },
+      "metadata": "{\"fingerprint\":\"f8f1ca77876c9f69c7155ed97858b801c398b0b31334cc24a75b7d97ab4bedb2\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"cli-contract\",\"content\":\"`review --budget` is documented and validated as a cell budget, but `_select_review_cells` stops after `budget` distinct paths while appending every review cell for each selected path. A single path can have multiple rule cells, so `--budget 1` can review more than one cell and consume more adapter calls than requested.\",\"suggestion_code\":\"        for cell in cells_by_path.get(file_path, []):\\n            if len(selected) >= budget:\\n                break\\n            if cell.id not in selected_ids:\\n                selected.append(cell)\\n                selected_ids.add(cell.id)\\n        selected_paths.add(file_path)\",\"existing_code\":\"        for cell in cells_by_path.get(file_path, []):\\n            if cell.id not in selected_ids:\\n                selected.append(cell)\\n                selected_ids.add(cell.id)\\n        selected_paths.add(file_path)\",\"start_line\":827,\"end_line\":831,\"thinking\":\"The loop guard at line 817 counts selected_paths, not selected cells, despite the CLI option being named budget and later reporting selected_cells. This violates the CLI contract and can unexpectedly exceed the user-provided budget.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "cli-contract",
+      "session_id": "RGS-3893655e67c9",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-000c45c09342-RGS-3893655e67c9",
+      "content": "Replacing an existing checkpoint is not atomic: after renaming latest to old_dir, a crash or process kill before tmp_dir.rename(checkpoint_dir) leaves no latest checkpoint at all. This is a CLI state contract risk because finalize can report a partially updated checkpoint directory even though the latest checkpoint disappeared. Prefer creating a new versioned checkpoint directory first and then atomically swapping a latest symlink/pointer file, or keep the old latest in place until the new checkpoint is fully installed.",
+      "finding_id": "RGF-0070",
+      "fingerprint": "d85157285b883a3abe7f96b7d86540193963da5970f08679a269435a79b4d535",
+      "latest_occurrence": {
+        "cell_id": "RGC-3f61aac0876a0d2e",
+        "end_line": 231,
+        "finding_id": "RGF-0070",
+        "imprecise": 0,
+        "occurrence_id": 70,
+        "path": "src/review_gauntlet/checkpoint.py",
+        "run_id": 46,
+        "start_line": 230
+      },
+      "metadata": "{\"fingerprint\":\"d85157285b883a3abe7f96b7d86540193963da5970f08679a269435a79b4d535\",\"path\":\"src/review_gauntlet/checkpoint.py\",\"rule_id\":\"cli-contract\",\"content\":\"Replacing an existing checkpoint is not atomic: after renaming latest to old_dir, a crash or process kill before tmp_dir.rename(checkpoint_dir) leaves no latest checkpoint at all. This is a CLI state contract risk because finalize can report a partially updated checkpoint directory even though the latest checkpoint disappeared. Prefer creating a new versioned checkpoint directory first and then atomically swapping a latest symlink/pointer file, or keep the old latest in place until the new checkpoint is fully installed.\",\"suggestion_code\":\"            versioned_dir = checkpoint_dir.parent / checkpoint_id\\n            tmp_dir.rename(versioned_dir)\\n            pointer_tmp = checkpoint_dir.parent / f\\\".latest.tmp-{os.getpid()}\\\"\\n            pointer_tmp.write_text(checkpoint_id + \\\"\\\\n\\\", encoding=\\\"utf-8\\\")\\n            pointer_tmp.replace(checkpoint_dir.parent / \\\"latest\\\")\",\"existing_code\":\"            checkpoint_dir.rename(old_dir)\\n            tmp_dir.rename(checkpoint_dir)\",\"start_line\":230,\"end_line\":231,\"thinking\":\"The current rollback handles ordinary Python exceptions, but not abrupt termination between the two renames. Since latest is the durable review base entrypoint, the update should avoid any window where latest is absent.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/checkpoint.py",
+      "rule_id": "cli-contract",
+      "session_id": "RGS-3893655e67c9",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-000c45c09342-RGS-3893655e67c9",
+      "content": "The checkpoint accepts any string that resolves to an ancestor as review_base_commit, including mutable refs such as HEAD or main. Because target_from_latest_checkpoint later reuses this raw value as the branch diff base, a corrupted or hand-edited latest checkpoint can make the next review compare against the wrong, current ref and silently skip changes. Validate that review_base_commit is an immutable commit object id (for example, compare it to `git rev-parse --verify <value>^{commit}` and persist/return the resolved SHA) before accepting it as a checkpoint base.",
+      "finding_id": "RGF-0071",
+      "fingerprint": "9358024e7c2de207d1fed1daeab6f89f83a45ae7523269ff90859fd64c4b34d1",
+      "latest_occurrence": {
+        "cell_id": "RGC-8769b06915f1af11",
+        "end_line": 129,
+        "finding_id": "RGF-0071",
+        "imprecise": 0,
+        "occurrence_id": 71,
+        "path": "src/review_gauntlet/checkpoint.py",
+        "run_id": 46,
+        "start_line": 120
+      },
+      "metadata": "{\"fingerprint\":\"9358024e7c2de207d1fed1daeab6f89f83a45ae7523269ff90859fd64c4b34d1\",\"path\":\"src/review_gauntlet/checkpoint.py\",\"rule_id\":\"data-validation\",\"content\":\"The checkpoint accepts any string that resolves to an ancestor as review_base_commit, including mutable refs such as HEAD or main. Because target_from_latest_checkpoint later reuses this raw value as the branch diff base, a corrupted or hand-edited latest checkpoint can make the next review compare against the wrong, current ref and silently skip changes. Validate that review_base_commit is an immutable commit object id (for example, compare it to `git rev-parse --verify <value>^{commit}` and persist/return the resolved SHA) before accepting it as a checkpoint base.\",\"suggestion_code\":\"    try:\\n        resolved_base = _git(root, \\\"rev-parse\\\", \\\"--verify\\\", f\\\"{base}^{{commit}}\\\")\\n    except subprocess.CalledProcessError as exc:\\n        raise ValueError(\\n            \\\"latest checkpoint review_base_commit does not resolve to a commit\\\"\\n        ) from exc\\n    if base != resolved_base:\\n        raise ValueError(\\\"latest checkpoint review_base_commit must be a resolved commit SHA\\\")\\n    try:\\n        _git(root, \\\"merge-base\\\", \\\"--is-ancestor\\\", resolved_base, \\\"HEAD\\\")\\n    except subprocess.CalledProcessError as exc:\\n        raise ValueError(\\\"latest checkpoint review_base_commit is not an ancestor of HEAD\\\") from exc\",\"existing_code\":\"    try:\\n        _git(root, \\\"rev-parse\\\", \\\"--verify\\\", f\\\"{base}^{{commit}}\\\")\\n    except subprocess.CalledProcessError as exc:\\n        raise ValueError(\\n            \\\"latest checkpoint review_base_commit does not resolve to a commit\\\"\\n        ) from exc\\n    try:\\n        _git(root, \\\"merge-base\\\", \\\"--is-ancestor\\\", base, \\\"HEAD\\\")\\n    except subprocess.CalledProcessError as exc:\\n        raise ValueError(\\\"latest checkpoint review_base_commit is not an ancestor of HEAD\\\") from exc\",\"start_line\":120,\"end_line\":129,\"thinking\":\"Checkpoint status is file input. The code validates resolvability and ancestry but not immutability, so symbolic refs pass and are later used as diff endpoints.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/checkpoint.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-3893655e67c9",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-000c45c09342-RGS-3893655e67c9",
+      "content": "`latest_checkpoint_dir` trusts the contents of `.review-gauntlet/checkpoints/latest` as a directory name without validating that it is a single safe path segment. If that file is corrupted or user-edited to `../some-dir`, subsequent checkpoint loading and validation will read `status.json`, `findings.json`, and `events.json` outside the checkpoints directory. This bypasses the intended checkpoint namespace and can make a forged external directory drive `--from-checkpoint` behavior. Validate the pointer value the same way `session_id` is validated before joining it to `pointer.parent`.",
+      "finding_id": "RGF-0072",
+      "fingerprint": "170b0d110eac1a1199322c171d4ee84f28563cb4db9da81241264748eed94104",
+      "latest_occurrence": {
+        "cell_id": "RGC-8769b06915f1af11",
+        "end_line": 49,
+        "finding_id": "RGF-0072",
+        "imprecise": 0,
+        "occurrence_id": 72,
+        "path": "src/review_gauntlet/checkpoint.py",
+        "run_id": 47,
+        "start_line": 47
+      },
+      "metadata": "{\"fingerprint\":\"170b0d110eac1a1199322c171d4ee84f28563cb4db9da81241264748eed94104\",\"path\":\"src/review_gauntlet/checkpoint.py\",\"rule_id\":\"data-validation\",\"content\":\"`latest_checkpoint_dir` trusts the contents of `.review-gauntlet/checkpoints/latest` as a directory name without validating that it is a single safe path segment. If that file is corrupted or user-edited to `../some-dir`, subsequent checkpoint loading and validation will read `status.json`, `findings.json`, and `events.json` outside the checkpoints directory. This bypasses the intended checkpoint namespace and can make a forged external directory drive `--from-checkpoint` behavior. Validate the pointer value the same way `session_id` is validated before joining it to `pointer.parent`.\",\"suggestion_code\":\"            if checkpoint_id and (\\n                not any(part in {\\\"\\\", \\\".\\\", \\\"..\\\"} for part in Path(checkpoint_id).parts)\\n                and Path(checkpoint_id).name == checkpoint_id\\n            ):\\n                candidate = pointer.parent / checkpoint_id\\n                if candidate.is_dir():\\n                    return candidate\",\"existing_code\":\"            if checkpoint_id:\\n                candidate = pointer.parent / checkpoint_id\\n                if candidate.is_dir():\\n                    return candidate\",\"start_line\":47,\"end_line\":49,\"thinking\":\"The writer constrains session_id, but the reader accepts arbitrary pointer text. Since latest_checkpoint_dir is the base for loading trusted checkpoint JSON, pointer traversal is a data validation issue in this file.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/checkpoint.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-3893655e67c9",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-000c45c09342-RGS-3893655e67c9",
+      "content": "The checkpoint validator accepts any string for checkpoint_id after checking status.json, then uses it only for cross-file equality. Because latest_checkpoint_dir() already resolves the checkpoint directory from the pointer, a manually edited status.json can claim a different checkpoint_id and still pass as long as findings.json/events.json repeat that value. This lets inconsistent or tampered checkpoint contents be treated as a valid latest checkpoint. Validate that checkpoint_id equals latest_checkpoint_dir(root).name before trusting the checkpoint.",
+      "finding_id": "RGF-0073",
+      "fingerprint": "abd6b038f11363954a0f235b187d0974aa94ce8c3ff8235cdee81bbd227a5af0",
+      "latest_occurrence": {
+        "cell_id": "RGC-8769b06915f1af11",
+        "end_line": 107,
+        "finding_id": "RGF-0073",
+        "imprecise": 0,
+        "occurrence_id": 73,
+        "path": "src/review_gauntlet/checkpoint.py",
+        "run_id": 48,
+        "start_line": 105
+      },
+      "metadata": "{\"fingerprint\":\"abd6b038f11363954a0f235b187d0974aa94ce8c3ff8235cdee81bbd227a5af0\",\"path\":\"src/review_gauntlet/checkpoint.py\",\"rule_id\":\"data-validation\",\"content\":\"The checkpoint validator accepts any string for checkpoint_id after checking status.json, then uses it only for cross-file equality. Because latest_checkpoint_dir() already resolves the checkpoint directory from the pointer, a manually edited status.json can claim a different checkpoint_id and still pass as long as findings.json/events.json repeat that value. This lets inconsistent or tampered checkpoint contents be treated as a valid latest checkpoint. Validate that checkpoint_id equals latest_checkpoint_dir(root).name before trusting the checkpoint.\",\"suggestion_code\":\"    checkpoint_id = checkpoint[\\\"checkpoint_id\\\"]\\n    if not isinstance(checkpoint_id, str):\\n        raise ValueError(\\\"latest checkpoint checkpoint_id must be a string\\\")\\n    if checkpoint_id != latest_checkpoint_dir(root).name:\\n        raise ValueError(\\\"latest checkpoint checkpoint_id does not match checkpoint directory\\\")\",\"existing_code\":\"    checkpoint_id = checkpoint[\\\"checkpoint_id\\\"]\\n    if not isinstance(checkpoint_id, str):\\n        raise ValueError(\\\"latest checkpoint checkpoint_id must be a string\\\")\",\"start_line\":105,\"end_line\":107,\"thinking\":\"_validate_latest_checkpoint reads status/findings/events from the directory selected by the latest pointer, but it does not bind the embedded ID to that directory. The existing session_id writer constrains generated IDs, but validation should reject persisted data that no longer matches the selected checkpoint.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/checkpoint.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-3893655e67c9",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-000c45c09342-RGS-3893655e67c9",
+      "content": "Replacing an existing checkpoint removes the old checkpoint directory before the new checkpoint and latest pointer are fully installed. If a later step such as pointer_tmp.replace fails, the exception handler only removes the temp directory and pointer temp file, leaving the previous checkpoint permanently deleted. This breaks the intended atomic/rollback behavior for checkpoint replacement and can lose the last usable review base on a failed finalize retry.",
+      "finding_id": "RGF-0074",
+      "fingerprint": "d672be7f31444c8420fbf0820903151f01fbd2b4cc1c38f39bd9da1e2b3eefdd",
+      "latest_occurrence": {
+        "cell_id": "RGC-3f61aac0876a0d2e",
+        "end_line": 262,
+        "finding_id": "RGF-0074",
+        "imprecise": 0,
+        "occurrence_id": 74,
+        "path": "src/review_gauntlet/checkpoint.py",
+        "run_id": 50,
+        "start_line": 242
+      },
+      "metadata": "{\"fingerprint\":\"d672be7f31444c8420fbf0820903151f01fbd2b4cc1c38f39bd9da1e2b3eefdd\",\"path\":\"src/review_gauntlet/checkpoint.py\",\"rule_id\":\"cli-contract\",\"content\":\"Replacing an existing checkpoint removes the old checkpoint directory before the new checkpoint and latest pointer are fully installed. If a later step such as pointer_tmp.replace fails, the exception handler only removes the temp directory and pointer temp file, leaving the previous checkpoint permanently deleted. This breaks the intended atomic/rollback behavior for checkpoint replacement and can lose the last usable review base on a failed finalize retry.\",\"suggestion_code\":\"backup_dir = checkpoints_dir / f\\\".{checkpoint_id}.bak-{os.getpid()}\\\"\\nif backup_dir.exists():\\n    shutil.rmtree(backup_dir)\\nif checkpoint_dir.exists():\\n    checkpoint_dir.rename(backup_dir)\\ntry:\\n    for filename, data in files.items():\\n        (tmp_dir / filename).write_text(\\n            json.dumps(data, indent=2, sort_keys=True) + \\\"\\\\n\\\", encoding=\\\"utf-8\\\"\\n        )\\n    (tmp_dir / \\\"summary.md\\\").write_text(summary, encoding=\\\"utf-8\\\")\\n    tmp_dir.rename(checkpoint_dir)\\n    pointer_tmp.write_text(checkpoint_id + \\\"\\\\n\\\", encoding=\\\"utf-8\\\")\\n    pointer_tmp.replace(pointer_path)\\n    if backup_dir.exists():\\n        shutil.rmtree(backup_dir)\\nexcept Exception:\\n    if tmp_dir.exists():\\n        shutil.rmtree(tmp_dir)\\n    if checkpoint_dir.exists() and backup_dir.exists():\\n        shutil.rmtree(checkpoint_dir)\\n    if backup_dir.exists():\\n        backup_dir.rename(checkpoint_dir)\\n    with suppress(OSError):\\n        pointer_tmp.unlink()\\n    raise\",\"existing_code\":\"    if tmp_dir.exists():\\n        shutil.rmtree(tmp_dir)\\n    if checkpoint_dir.exists():\\n        shutil.rmtree(checkpoint_dir)\\n    tmp_dir.mkdir(parents=True)\\n    pointer_tmp = checkpoints_dir / f\\\".latest.tmp-{os.getpid()}-{checkpoint_id}\\\"\\n    try:\\n        for filename, data in files.items():\\n            (tmp_dir / filename).write_text(\\n                json.dumps(data, indent=2, sort_keys=True) + \\\"\\\\n\\\", encoding=\\\"utf-8\\\"\\n            )\\n        (tmp_dir / \\\"summary.md\\\").write_text(summary, encoding=\\\"utf-8\\\")\\n        tmp_dir.rename(checkpoint_dir)\\n        pointer_tmp.write_text(checkpoint_id + \\\"\\\\n\\\", encoding=\\\"utf-8\\\")\\n        pointer_tmp.replace(pointer_path)\\n    except Exception:\\n        if tmp_dir.exists():\\n            shutil.rmtree(tmp_dir)\\n        with suppress(OSError):\\n            pointer_tmp.unlink()\\n        raise\",\"start_line\":242,\"end_line\":262,\"thinking\":\"The install sequence deletes the previous checkpoint before all failure points have passed, and the rollback path does not restore it.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/checkpoint.py",
+      "rule_id": "cli-contract",
+      "session_id": "RGS-3893655e67c9",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-000c45c09342-RGS-3893655e67c9",
+      "content": "A symlinked latest checkpoint pointer is still followed as a directory fallback. When `.review-gauntlet/checkpoints/latest` is a symlink, `latest_checkpoint_dir()` skips the safe pointer-file parsing but returns the symlink path, so `load_latest_checkpoint()` will read `latest/status.json` through that symlink. This bypasses the path-safety checks intended for checkpoint pointers and lets an untrusted repository state make `init` consume checkpoint files outside `.review-gauntlet/checkpoints`.",
+      "finding_id": "RGF-0075",
+      "fingerprint": "861bb92e1143dae750b440b8fd9d0d93b43710bb0eafcf3bb1ee78bbd0888e16",
+      "latest_occurrence": {
+        "cell_id": "RGC-3f61aac0876a0d2e",
+        "end_line": 54,
+        "finding_id": "RGF-0075",
+        "imprecise": 0,
+        "occurrence_id": 75,
+        "path": "src/review_gauntlet/checkpoint.py",
+        "run_id": 51,
+        "start_line": 39
+      },
+      "metadata": "{\"fingerprint\":\"861bb92e1143dae750b440b8fd9d0d93b43710bb0eafcf3bb1ee78bbd0888e16\",\"path\":\"src/review_gauntlet/checkpoint.py\",\"rule_id\":\"cli-contract\",\"content\":\"A symlinked latest checkpoint pointer is still followed as a directory fallback. When `.review-gauntlet/checkpoints/latest` is a symlink, `latest_checkpoint_dir()` skips the safe pointer-file parsing but returns the symlink path, so `load_latest_checkpoint()` will read `latest/status.json` through that symlink. This bypasses the path-safety checks intended for checkpoint pointers and lets an untrusted repository state make `init` consume checkpoint files outside `.review-gauntlet/checkpoints`.\",\"suggestion_code\":\"def latest_checkpoint_dir(root: Path) -> Path:\\n    pointer = root / \\\".review-gauntlet\\\" / \\\"checkpoints\\\" / \\\"latest\\\"\\n    if pointer.is_symlink():\\n        return pointer.parent / \\\"__invalid_latest_checkpoint_pointer__\\\"\\n    if pointer.is_file():\\n        try:\\n            checkpoint_id = pointer.read_text(encoding=\\\"utf-8\\\").strip()\\n        except OSError:\\n            pass\\n        else:\\n            if checkpoint_id and (\\n                not any(part in {\\\"\\\", \\\".\\\", \\\"..\\\"} for part in Path(checkpoint_id).parts)\\n                and Path(checkpoint_id).name == checkpoint_id\\n            ):\\n                candidate = pointer.parent / checkpoint_id\\n                if candidate.is_dir() and not candidate.is_symlink():\\n                    return candidate\\n    return pointer\",\"existing_code\":\"def latest_checkpoint_dir(root: Path) -> Path:\\n    pointer = root / \\\".review-gauntlet\\\" / \\\"checkpoints\\\" / \\\"latest\\\"\\n    if pointer.is_file() and not pointer.is_symlink():\\n        try:\\n            checkpoint_id = pointer.read_text(encoding=\\\"utf-8\\\").strip()\\n        except OSError:\\n            pass\\n        else:\\n            if checkpoint_id and (\\n                not any(part in {\\\"\\\", \\\".\\\", \\\"..\\\"} for part in Path(checkpoint_id).parts)\\n                and Path(checkpoint_id).name == checkpoint_id\\n            ):\\n                candidate = pointer.parent / checkpoint_id\\n                if candidate.is_dir():\\n                    return candidate\\n    return pointer\",\"start_line\":39,\"end_line\":54,\"thinking\":\"The function has a safe path segment check for file-based latest pointers, but symlinks fall through to a path that downstream code treats as a checkpoint directory. Rejecting symlinks keeps checkpoint resolution inside the managed checkpoint directory.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/checkpoint.py",
+      "rule_id": "cli-contract",
+      "session_id": "RGS-3893655e67c9",
+      "state": "fixed_verified"
+    }
+  ]
+}

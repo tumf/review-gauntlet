@@ -23,12 +23,13 @@ review-artifacts/
 .idea/
 .vscode/
 
-# Review Gauntlet runtime state; keep finalized latest checkpoints reviewable.
+# Review Gauntlet runtime state; keep finalized checkpoints reviewable.
 .review-gauntlet/*
 !.review-gauntlet/checkpoints/
 .review-gauntlet/checkpoints/*
-!.review-gauntlet/checkpoints/latest/
-!.review-gauntlet/checkpoints/latest/**
+!.review-gauntlet/checkpoints/RGC-*/
+!.review-gauntlet/checkpoints/RGC-*/*
+!.review-gauntlet/checkpoints/latest
 .review-gauntlet/ledger.sqlite
 .review-gauntlet/active-session.json
 .review-gauntlet/rules.lock

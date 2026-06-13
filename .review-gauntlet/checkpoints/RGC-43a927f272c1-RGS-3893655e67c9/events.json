@@ -1,0 +1,434 @@
+{
+  "checkpoint_id": "RGC-43a927f272c1-RGS-3893655e67c9",
+  "events": [
+    {
+      "checkpoint_id": "RGC-43a927f272c1-RGS-3893655e67c9",
+      "created_at": "2026-06-12 22:48:09",
+      "event_id": 101,
+      "finding_id": "RGF-0062",
+      "from_state": "untriaged",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "Fix implemented: negative --budget values are rejected with a fail() call before the <= 0 no-op branch, consistent with --concurrency validation.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-43a927f272c1-RGS-3893655e67c9",
+      "created_at": "2026-06-12 22:48:29",
+      "event_id": 102,
+      "finding_id": "RGF-0063",
+      "from_state": "untriaged",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "Fix implemented: verify-fixes now rejects negative --budget values before the zero-budget/no-target no-op branch.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-43a927f272c1-RGS-3893655e67c9",
+      "created_at": "2026-06-12 22:48:34",
+      "event_id": 103,
+      "finding_id": "RGF-0064",
+      "from_state": "untriaged",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "Confirmed as real issue: session_id is derived from uuid4().hex so path traversal is not practically possible, but adding explicit validation would improve defense-in-depth and protect against future session_id format changes.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-43a927f272c1-RGS-3893655e67c9",
+      "created_at": "2026-06-12 22:54:12",
+      "event_id": 104,
+      "finding_id": "RGF-0064",
+      "from_state": "confirmed",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "Validated session_id as a single path-safe segment before checkpoint path construction; added regression test.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-43a927f272c1-RGS-3893655e67c9",
+      "created_at": "2026-06-12 22:55:13",
+      "event_id": 105,
+      "finding_id": "RGF-0062",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-43a927f272c1-RGS-3893655e67c9",
+      "created_at": "2026-06-12 22:55:13",
+      "event_id": 106,
+      "finding_id": "RGF-0064",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-43a927f272c1-RGS-3893655e67c9",
+      "created_at": "2026-06-12 22:55:13",
+      "event_id": 107,
+      "finding_id": "RGF-0063",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-43a927f272c1-RGS-3893655e67c9",
+      "created_at": "2026-06-12 22:55:34",
+      "event_id": 108,
+      "finding_id": "RGF-0065",
+      "from_state": "untriaged",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "Newlines in filenames are an extreme edge case not encountered in this project. The splitlines() approach is adequate for this codebase and adding NUL-delimited parsing would add unnecessary complexity. No remediation needed.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-43a927f272c1-RGS-3893655e67c9",
+      "created_at": "2026-06-12 23:20:29",
+      "event_id": 109,
+      "finding_id": "RGF-0068",
+      "from_state": "untriaged",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "Confirmed: verify_fixed_findings is called unconditionally at end of every review command, so any fixed-pending finding on a reviewed path gets auto-verified without explicit verify-fixes. Fix needed.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-43a927f272c1-RGS-3893655e67c9",
+      "created_at": "2026-06-12 23:20:32",
+      "event_id": 110,
+      "finding_id": "RGF-0066",
+      "from_state": "untriaged",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "Confirmed: subprocess.CalledProcessError from git rev-parse/merge-base propagates uncaught. CLI only traps ValueError. Fix: catch CalledProcessError and raise ValueError.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-43a927f272c1-RGS-3893655e67c9",
+      "created_at": "2026-06-12 23:20:34",
+      "event_id": 111,
+      "finding_id": "RGF-0067",
+      "from_state": "untriaged",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "Confirmed: payload list items are not validated per-entry (each must be dict with matching checkpoint_id). Corrupted findings.json passes silently.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-43a927f272c1-RGS-3893655e67c9",
+      "created_at": "2026-06-12 23:37:46",
+      "event_id": 112,
+      "finding_id": "RGF-0069",
+      "from_state": "untriaged",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "Confirmed: review --budget is documented and reported as selected_cells, but _select_review_cells limits selected_paths and then appends all cells for each selected path, so a path with multiple rule cells can exceed the requested cell budget.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-43a927f272c1-RGS-3893655e67c9",
+      "created_at": "2026-06-12 23:45:00",
+      "event_id": 113,
+      "finding_id": "RGF-0066",
+      "from_state": "confirmed",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "Implemented checkpoint base resolution validation",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-43a927f272c1-RGS-3893655e67c9",
+      "created_at": "2026-06-12 23:45:01",
+      "event_id": 114,
+      "finding_id": "RGF-0067",
+      "from_state": "confirmed",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "Validated checkpoint payload entry shape and checkpoint_id",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-43a927f272c1-RGS-3893655e67c9",
+      "created_at": "2026-06-12 23:45:01",
+      "event_id": 115,
+      "finding_id": "RGF-0068",
+      "from_state": "confirmed",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "Normal review no longer verifies fixed-pending findings",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-43a927f272c1-RGS-3893655e67c9",
+      "created_at": "2026-06-12 23:45:01",
+      "event_id": 116,
+      "finding_id": "RGF-0069",
+      "from_state": "confirmed",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "Review budget now limits selected cells",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-43a927f272c1-RGS-3893655e67c9",
+      "created_at": "2026-06-12 23:46:32",
+      "event_id": 117,
+      "finding_id": "RGF-0068",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-43a927f272c1-RGS-3893655e67c9",
+      "created_at": "2026-06-12 23:46:32",
+      "event_id": 118,
+      "finding_id": "RGF-0066",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-43a927f272c1-RGS-3893655e67c9",
+      "created_at": "2026-06-12 23:46:32",
+      "event_id": 119,
+      "finding_id": "RGF-0067",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-43a927f272c1-RGS-3893655e67c9",
+      "created_at": "2026-06-12 23:46:32",
+      "event_id": 120,
+      "finding_id": "RGF-0069",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-43a927f272c1-RGS-3893655e67c9",
+      "created_at": "2026-06-12 23:52:55",
+      "event_id": 121,
+      "finding_id": "RGF-0071",
+      "from_state": "untriaged",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "Real issue: review_base_commit accepts mutable refs (HEAD/main) without resolving to immutable SHA. The ancestry check uses  directly instead of the resolved SHA, allowing symbolic refs to pass.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-43a927f272c1-RGS-3893655e67c9",
+      "created_at": "2026-06-12 23:52:58",
+      "event_id": 122,
+      "finding_id": "RGF-0070",
+      "from_state": "untriaged",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "Real issue: checkpoint replacement is non-atomic. A crash between  and  leaves no latest checkpoint. Should use versioned directories + atomic pointer file swap.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-43a927f272c1-RGS-3893655e67c9",
+      "created_at": "2026-06-12 23:57:32",
+      "event_id": 123,
+      "finding_id": "RGF-0071",
+      "from_state": "confirmed",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "Resolved: review_base_commit is now validated against git rev-parse --verify <value>^{commit} and must equal the resolved SHA, preventing mutable refs. Added ValueError with message requiring resolved commit SHA.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-43a927f272c1-RGS-3893655e67c9",
+      "created_at": "2026-06-12 23:57:35",
+      "event_id": 124,
+      "finding_id": "RGF-0070",
+      "from_state": "confirmed",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "Resolved: latest checkpoint is now a pointer file atomically replaced after writing a versioned checkpoint directory, preserving previous latest until pointer replacement succeeds.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-43a927f272c1-RGS-3893655e67c9",
+      "created_at": "2026-06-12 23:58:50",
+      "event_id": 125,
+      "finding_id": "RGF-0071",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-43a927f272c1-RGS-3893655e67c9",
+      "created_at": "2026-06-12 23:58:50",
+      "event_id": 126,
+      "finding_id": "RGF-0070",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-43a927f272c1-RGS-3893655e67c9",
+      "created_at": "2026-06-13 00:00:19",
+      "event_id": 127,
+      "finding_id": "RGF-0072",
+      "from_state": "untriaged",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "Resolved: latest checkpoint pointer text is now accepted only when it is a single safe path segment and resolves to an existing checkpoint directory under the checkpoints namespace.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-43a927f272c1-RGS-3893655e67c9",
+      "created_at": "2026-06-13 00:05:25",
+      "event_id": 128,
+      "finding_id": "RGF-0072",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-43a927f272c1-RGS-3893655e67c9",
+      "created_at": "2026-06-13 00:07:24",
+      "event_id": 129,
+      "finding_id": "RGF-0073",
+      "from_state": "untriaged",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "Valid data-validation issue: _validate_latest_checkpoint should assert checkpoint_id == latest_checkpoint_dir(root).name to prevent tampered status.json from being trusted. No code change yet.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-43a927f272c1-RGS-3893655e67c9",
+      "created_at": "2026-06-13 00:10:34",
+      "event_id": 130,
+      "finding_id": "RGF-0073",
+      "from_state": "confirmed",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "Validated checkpoint_id against latest checkpoint directory and updated tests.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-43a927f272c1-RGS-3893655e67c9",
+      "created_at": "2026-06-13 00:11:26",
+      "event_id": 131,
+      "finding_id": "RGF-0073",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-43a927f272c1-RGS-3893655e67c9",
+      "created_at": "2026-06-13 00:15:33",
+      "event_id": 132,
+      "finding_id": "RGF-0074",
+      "from_state": "untriaged",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "Existing checkpoint can be deleted before latest pointer replacement completes, and rollback does not restore it.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-43a927f272c1-RGS-3893655e67c9",
+      "created_at": "2026-06-13 00:18:13",
+      "event_id": 133,
+      "finding_id": "RGF-0074",
+      "from_state": "confirmed",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "Restored prior checkpoint on replacement failure before marking fix for verification.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-43a927f272c1-RGS-3893655e67c9",
+      "created_at": "2026-06-13 00:20:01",
+      "event_id": 134,
+      "finding_id": "RGF-0074",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-43a927f272c1-RGS-3893655e67c9",
+      "created_at": "2026-06-13 00:20:23",
+      "event_id": 135,
+      "finding_id": "RGF-0075",
+      "from_state": "untriaged",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "Added symlink rejection on latest pointer and candidate checkpoint directory to prevent path-safety bypass.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-43a927f272c1-RGS-3893655e67c9",
+      "created_at": "2026-06-13 00:21:52",
+      "event_id": 136,
+      "finding_id": "RGF-0075",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    }
+  ]
+}
