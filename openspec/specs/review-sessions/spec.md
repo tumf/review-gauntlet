@@ -680,7 +680,8 @@ The README Design section SHALL reflect the current implemented capabilities: in
 
 **Given**: an active review session with multiple kinds of incomplete work
 **When**: the developer runs `review-gauntlet ready --format json`
-**Then**: the selected prompt corresponds to the first available category in this order: reopened findings, untriaged findings, confirmed findings, fixed-pending verification findings, stale review cells, pending review cells, finalize
+**Then**: the selected prompt corresponds to the first available category in this order: stale review cells, pending review cells, reopened findings, untriaged findings, confirmed findings, fixed-pending verification findings, finalize
+**And**: finding prompts remain reachable after review-cell coverage is complete.
 
 #### Scenario: Ready leaves status output unchanged
 
