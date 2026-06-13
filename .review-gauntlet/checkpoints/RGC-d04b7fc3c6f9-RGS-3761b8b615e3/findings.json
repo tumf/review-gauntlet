@@ -1,0 +1,68 @@
+{
+  "checkpoint_id": "RGC-d04b7fc3c6f9-RGS-3761b8b615e3",
+  "findings": [
+    {
+      "checkpoint_id": "RGC-d04b7fc3c6f9-RGS-3761b8b615e3",
+      "content": "`mark --format json` emits a `FindingState` enum object directly. `_emit` uses `json.dumps` without a custom encoder, so this path raises `TypeError: Object of type FindingState is not JSON serializable` after mutating the store, leaving callers with a failed command despite the mark being applied.",
+      "finding_id": "RGF-0076",
+      "fingerprint": "5832a49a8dfad09fb74e3147674ae098f40dbe44df9702404b4ec25a34a7dea9",
+      "latest_occurrence": {
+        "cell_id": "RGC-6cefdd41be393570",
+        "end_line": 1087,
+        "finding_id": "RGF-0076",
+        "imprecise": 0,
+        "occurrence_id": 76,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 57,
+        "start_line": 1087
+      },
+      "metadata": "{\"fingerprint\":\"5832a49a8dfad09fb74e3147674ae098f40dbe44df9702404b4ec25a34a7dea9\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"data-validation\",\"content\":\"`mark --format json` emits a `FindingState` enum object directly. `_emit` uses `json.dumps` without a custom encoder, so this path raises `TypeError: Object of type FindingState is not JSON serializable` after mutating the store, leaving callers with a failed command despite the mark being applied.\",\"suggestion_code\":\"    _emit({\\\"finding_id\\\": args.finding_id, \\\"state\\\": mapping[args.state].value}, args.format)\",\"existing_code\":\"    _emit({\\\"finding_id\\\": args.finding_id, \\\"state\\\": mapping[args.state]}, args.format)\",\"start_line\":1087,\"end_line\":1087,\"thinking\":\"JSON output should contain primitive values only; other CLI status paths use strings/counts and Pydantic JSON serialization.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-3761b8b615e3",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-d04b7fc3c6f9-RGS-3761b8b615e3",
+      "content": "`validate-verdict` reads the entire verdict file before validation, so a malformed or unexpectedly large adapter artifact can consume unbounded memory. The adapter side already defines a bounded verdict size; the CLI validator should enforce the same limit before `read_text` so validation remains safe for file-json outputs.",
+      "finding_id": "RGF-0077",
+      "fingerprint": "209834693f1ee4849b34114fad5cfa53e48f4a78b7702c923389e360e5a94831",
+      "latest_occurrence": {
+        "cell_id": "RGC-6cefdd41be393570",
+        "end_line": 415,
+        "finding_id": "RGF-0077",
+        "imprecise": 0,
+        "occurrence_id": 77,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 58,
+        "start_line": 411
+      },
+      "metadata": "{\"fingerprint\":\"209834693f1ee4849b34114fad5cfa53e48f4a78b7702c923389e360e5a94831\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"data-validation\",\"content\":\"`validate-verdict` reads the entire verdict file before validation, so a malformed or unexpectedly large adapter artifact can consume unbounded memory. The adapter side already defines a bounded verdict size; the CLI validator should enforce the same limit before `read_text` so validation remains safe for file-json outputs.\",\"suggestion_code\":\"    path = Path(args.path)\\n    if not path.is_file():\\n        fail(f\\\"verdict file does not exist: {path}\\\")\\n    if path.stat().st_size > VERDICT_OUTPUT_SIZE_LIMIT_BYTES:\\n        fail(f\\\"verdict file exceeds size limit: {path}\\\", code=1)\\n    try:\\n        payload = validate_verdict_json(path.read_text(encoding=\\\"utf-8\\\"))\",\"existing_code\":\"    path = Path(args.path)\\n    if not path.is_file():\\n        fail(f\\\"verdict file does not exist: {path}\\\")\\n    try:\\n        payload = validate_verdict_json(path.read_text(encoding=\\\"utf-8\\\"))\",\"start_line\":411,\"end_line\":415,\"thinking\":\"The review cell is the CLI entrypoint. This is a data validation boundary for untrusted adapter output files, and currently it validates schema only after unbounded file ingestion.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-3761b8b615e3",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-d04b7fc3c6f9-RGS-3761b8b615e3",
+      "content": "`--budget` is documented and emitted as a maximum review budget, but this selection loop stops based on `selected_paths` while appending every rule cell for a path. If a single file has multiple review cells, `--budget 1` can review more than one cell, bypassing the caller's limit and producing misleading `reviewed_cells`/progress output. Enforce the limit on selected cells only.",
+      "finding_id": "RGF-0078",
+      "fingerprint": "996325dc07109b0976e65b72645f88a2c3985b1ec8652c5904b066934c219acd",
+      "latest_occurrence": {
+        "cell_id": "RGC-6cefdd41be393570",
+        "end_line": 909,
+        "finding_id": "RGF-0078",
+        "imprecise": 0,
+        "occurrence_id": 78,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 60,
+        "start_line": 893
+      },
+      "metadata": "{\"fingerprint\":\"996325dc07109b0976e65b72645f88a2c3985b1ec8652c5904b066934c219acd\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"data-validation\",\"content\":\"`--budget` is documented and emitted as a maximum review budget, but this selection loop stops based on `selected_paths` while appending every rule cell for a path. If a single file has multiple review cells, `--budget 1` can review more than one cell, bypassing the caller's limit and producing misleading `reviewed_cells`/progress output. Enforce the limit on selected cells only.\",\"suggestion_code\":\"        if len(selected) >= budget:\\n            break\\n        file_path = str(row[\\\"file_path\\\"])\\n        if file_path in selected_paths:\\n            continue\\n        if (\\n            row[\\\"state\\\"] not in {CellState.PENDING, CellState.STALE}\\n            and file_path not in fixed_pending_paths\\n        ):\\n            continue\\n        for cell in cells_by_path.get(file_path, []):\\n            if len(selected) >= budget:\\n                break\\n            if cell.id not in selected_ids:\\n                selected.append(cell)\\n                selected_ids.add(cell.id)\\n        selected_paths.add(file_path)\",\"existing_code\":\"        if len(selected_paths) >= budget:\\n            break\\n        file_path = str(row[\\\"file_path\\\"])\\n        if file_path in selected_paths:\\n            continue\\n        if (\\n            row[\\\"state\\\"] not in {CellState.PENDING, CellState.STALE}\\n            and file_path not in fixed_pending_paths\\n        ):\\n            continue\\n        for cell in cells_by_path.get(file_path, []):\\n            if len(selected) >= budget:\\n                break\\n            if cell.id not in selected_ids:\\n                selected.append(cell)\\n                selected_ids.add(cell.id)\\n        selected_paths.add(file_path)\",\"start_line\":893,\"end_line\":909,\"thinking\":\"The loop already enforces the cell limit inside the inner loop, so the outer loop should use the same unit. Otherwise any path with multiple cells can exceed the configured budget.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-3761b8b615e3",
+      "state": "fixed_verified"
+    }
+  ]
+}

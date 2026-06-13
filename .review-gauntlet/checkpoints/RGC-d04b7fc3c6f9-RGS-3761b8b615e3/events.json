@@ -1,0 +1,113 @@
+{
+  "checkpoint_id": "RGC-d04b7fc3c6f9-RGS-3761b8b615e3",
+  "events": [
+    {
+      "checkpoint_id": "RGC-d04b7fc3c6f9-RGS-3761b8b615e3",
+      "created_at": "2026-06-13 08:17:00",
+      "event_id": 137,
+      "finding_id": "RGF-0076",
+      "from_state": "untriaged",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "Confirmed in src/review_gauntlet/cli.py:1090: JSON output passes a FindingState enum to json.dumps via _emit, which cannot serialize enums.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-d04b7fc3c6f9-RGS-3761b8b615e3",
+      "created_at": "2026-06-13 08:23:56",
+      "event_id": 138,
+      "finding_id": "RGF-0076",
+      "from_state": "confirmed",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "cli.py:1090 changed mapping[args.state] to mapping[args.state].value to fix JSON serialization of FindingState enum",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-d04b7fc3c6f9-RGS-3761b8b615e3",
+      "created_at": "2026-06-13 08:24:53",
+      "event_id": 139,
+      "finding_id": "RGF-0076",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-d04b7fc3c6f9-RGS-3761b8b615e3",
+      "created_at": "2026-06-13 08:27:53",
+      "event_id": 140,
+      "finding_id": "RGF-0077",
+      "from_state": "untriaged",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "Confirmed: _cmd_validate_verdict at cli.py:410 reads the entire verdict file via path.read_text() before any size check, while VERDICT_OUTPUT_SIZE_LIMIT_BYTES=1MB is enforced only on the adapter side (review_adapter.py:466). The CLI validator should check path.stat().st_size before read_text to match adapter-side protection.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-d04b7fc3c6f9-RGS-3761b8b615e3",
+      "created_at": "2026-06-13 08:30:14",
+      "event_id": 141,
+      "finding_id": "RGF-0077",
+      "from_state": "confirmed",
+      "metadata": {
+        "owner": "tumf",
+        "until": ""
+      },
+      "reason": "Added VERDICT_OUTPUT_SIZE_LIMIT_BYTES check before path.read_text in _cmd_validate_verdict to prevent unbounded memory consumption from malformed adapter output.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-d04b7fc3c6f9-RGS-3761b8b615e3",
+      "created_at": "2026-06-13 08:31:30",
+      "event_id": 142,
+      "finding_id": "RGF-0077",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-d04b7fc3c6f9-RGS-3761b8b615e3",
+      "created_at": "2026-06-13 08:35:31",
+      "event_id": 143,
+      "finding_id": "RGF-0078",
+      "from_state": "untriaged",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "Valid: outer budget check counts selected paths while review budget is enforced in cells, so multi-cell files can exceed the requested cell budget.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-d04b7fc3c6f9-RGS-3761b8b615e3",
+      "created_at": "2026-06-13 08:40:18",
+      "event_id": 144,
+      "finding_id": "RGF-0078",
+      "from_state": "confirmed",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "fixed budget check from selected_paths to selected to enforce per-cell limit",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-d04b7fc3c6f9-RGS-3761b8b615e3",
+      "created_at": "2026-06-13 08:41:29",
+      "event_id": 145,
+      "finding_id": "RGF-0078",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    }
+  ]
+}
