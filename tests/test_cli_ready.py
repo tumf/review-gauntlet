@@ -30,6 +30,19 @@ def _ready_json(root: Path, capsys: pytest.CaptureFixture[str]) -> dict[str, str
     return {"prompt": prompt}
 
 
+def _ready_json_exits(
+    root: Path, capsys: pytest.CaptureFixture[str], expected_code: int
+) -> dict[str, str | None]:
+    with pytest.raises(SystemExit) as exc_info:
+        main(["ready", str(root), "--format", "json"])
+    assert exc_info.value.code == expected_code
+    data = json.loads(capsys.readouterr().out)
+    assert set(data) == {"prompt"}
+    prompt = data["prompt"]
+    assert prompt is None or isinstance(prompt, str)
+    return {"prompt": prompt}
+
+
 def _set_all_cells(root: Path, state: CellState) -> None:
     store = SessionStore(root)
     session_id = store.active_session_id()
@@ -96,6 +109,20 @@ def test_ready_command_outputs_prompt_only_json_and_text(
     assert "{" not in text
 
 
+def test_ready_actionable_prompt_returns_success_without_system_exit(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_session(tmp_path, capsys)
+
+    result = main(["ready", str(tmp_path), "--format", "json"])
+
+    assert result is None
+    data = json.loads(capsys.readouterr().out)
+    prompt = data["prompt"]
+    assert isinstance(prompt, str)
+    _assert_skill_directed_short_prompt(prompt, "Review pending review cells")
+
+
 def test_ready_priority_order_is_deterministic(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -145,9 +172,11 @@ def test_ready_outputs_no_ready_task_when_only_blockers_remain(
     _init_session(tmp_path, capsys)
     _set_all_cells(tmp_path, CellState.REVIEWED)
 
-    assert _ready_json(tmp_path, capsys) == {"prompt": None}
+    assert _ready_json_exits(tmp_path, capsys, expected_code=1) == {"prompt": None}
 
-    main(["ready", str(tmp_path), "--format", "text"])
+    with pytest.raises(SystemExit) as exc_info:
+        main(["ready", str(tmp_path), "--format", "text"])
+    assert exc_info.value.code == 1
     assert capsys.readouterr().out == "no ready task\n"
 
 
