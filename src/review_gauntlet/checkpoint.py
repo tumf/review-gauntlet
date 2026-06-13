@@ -243,10 +243,13 @@ def write_latest_checkpoint(
     checkpoints_dir.mkdir(parents=True, exist_ok=True)
     tmp_dir = checkpoints_dir / f".{checkpoint_id}.tmp-{os.getpid()}"
     backup_dir = checkpoints_dir / f".{checkpoint_id}.bak-{os.getpid()}"
+    pointer_backup_dir = checkpoints_dir / f".latest.bak-{os.getpid()}-{checkpoint_id}"
     if tmp_dir.exists():
         shutil.rmtree(tmp_dir)
     if backup_dir.exists():
         shutil.rmtree(backup_dir)
+    if pointer_backup_dir.exists():
+        shutil.rmtree(pointer_backup_dir)
     tmp_dir.mkdir(parents=True)
     pointer_tmp = checkpoints_dir / f".latest.tmp-{os.getpid()}-{checkpoint_id}"
     try:
@@ -259,7 +262,12 @@ def write_latest_checkpoint(
             checkpoint_dir.rename(backup_dir)
         tmp_dir.rename(checkpoint_dir)
         pointer_tmp.write_text(checkpoint_id + "\n", encoding="utf-8")
+        if pointer_path.is_dir():
+            pointer_path.rename(pointer_backup_dir)
         pointer_tmp.replace(pointer_path)
+        with suppress(OSError):
+            if pointer_backup_dir.exists():
+                shutil.rmtree(pointer_backup_dir)
     except Exception:
         if tmp_dir.exists():
             shutil.rmtree(tmp_dir)
@@ -267,6 +275,10 @@ def write_latest_checkpoint(
             shutil.rmtree(checkpoint_dir)
         if backup_dir.exists():
             backup_dir.rename(checkpoint_dir)
+        if pointer_backup_dir.exists() and not pointer_path.exists():
+            pointer_backup_dir.rename(pointer_path)
+        elif pointer_backup_dir.exists():
+            shutil.rmtree(pointer_backup_dir)
         with suppress(OSError):
             pointer_tmp.unlink()
         raise
