@@ -43,6 +43,7 @@ def test_cli_completion_outputs_script_for_supported_shells(
         "review",
         "verify-fixes",
         "status",
+        "ready",
         "findings",
         "mark",
         "finalize",
