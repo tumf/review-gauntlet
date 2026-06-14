@@ -41,7 +41,7 @@ Use this sequence when the user asks you to perform a review:
 
 Use `--format json` for all session-scoped commands (`init`, `status`, `review`, `findings`, `verify-fixes`, `finalize`) so the agent can parse structured output. Use `--audience agent` on `review` and `verify-fixes` when the adapter runs without human interaction.
 
-`findings` is intentionally bounded to 10 returned findings by default and reports both `total` and `returned`. Treat `returned < total` as explicit incompleteness: narrow with `--path`, `--mark`, or `--limit N` when working on a subset. Use `--all-findings` only when the workflow explicitly needs the entire filtered result set in one response. Do not confuse `--all` with `--all-findings`: `--all` includes terminal findings in visibility, while `--all-findings` disables result-size limiting.
+`findings` is intentionally bounded to 10 returned findings by default and reports both `total` and `returned`. Treat `returned < total` as explicit incompleteness: narrow with `--path`, `--mark`, or `--limit N` when working on a subset. For example, use `review-gauntlet findings --mark confirmed --limit 3 --format json` to work a bounded batch, then re-check `total` and `returned` before deciding whether more findings remain. Use `--all-findings` only when the workflow explicitly needs the entire filtered result set in one response, such as a final reconciliation step where the full matching list is required. Do not confuse `--all` with `--all-findings`: `--all` includes terminal findings in visibility, while `--all-findings` disables result-size limiting.
 
 Run one `review` step at a time. Wait for human action between steps.
 
