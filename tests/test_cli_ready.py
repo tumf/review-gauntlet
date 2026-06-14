@@ -520,6 +520,7 @@ def test_ready_prompts_verify_fixes_when_only_whole_digest_drifted(
     assert prompt is not None
     _assert_skill_directed_short_prompt(prompt, "Verify fixed-pending findings")
     assert "Review target changes" not in prompt
+    assert "target digest" not in prompt.lower()
     assert _ledger_snapshot(tmp_path) == before
 
 
