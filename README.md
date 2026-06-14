@@ -175,6 +175,21 @@ review-gauntlet verify-fixes --config review-gauntlet.jsonc
 review-gauntlet finalize
 ```
 
+### Convenient `ready` usage
+
+`ready` prints the next review prompt, making it easy to hand off one pending review
+unit to an external agent:
+
+```bash
+review-gauntlet ready | opencode run
+```
+
+To keep feeding ready prompts to opencode until no review unit remains:
+
+```bash
+while p=$(review-gauntlet ready); do opencode run "$p"; done
+```
+
 ## Shell completion
 
 The installed `review-gauntlet` command can generate completion scripts for common
