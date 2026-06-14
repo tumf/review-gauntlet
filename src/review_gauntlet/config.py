@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 from enum import StrEnum
@@ -91,8 +92,8 @@ class CommandAdapterConfig(BaseModel):
     @field_validator("timeout_seconds")
     @classmethod
     def validate_timeout(cls, value: float) -> float:
-        if value <= 0:
-            raise ValueError("adapter.timeout_seconds must be greater than zero")
+        if not math.isfinite(value) or value <= 0:
+            raise ValueError("adapter.timeout_seconds must be a finite value greater than zero")
         return value
 
     @field_validator("cwd")
@@ -161,8 +162,8 @@ def discover_config_path(root: Path, explicit: Path | None = None) -> Path | Non
 def _xdg_config_home() -> Path:
     configured = os.environ.get("XDG_CONFIG_HOME")
     if configured:
-        return Path(configured).expanduser()
-    return Path.home() / ".config"
+        return Path(configured).expanduser().resolve()
+    return (Path.home() / ".config").resolve()
 
 
 def load_config(
@@ -185,7 +186,21 @@ def _validate_template_string(value: str) -> None:
         name = match.group(1)
         if name not in SUPPORTED_TEMPLATE_VARIABLES:
             raise ValueError(f"unsupported template variable {{{name}}}")
-    if literal_removed.count("{") != literal_removed.count("}"):
+    brace_depth = 0
+    index = 0
+    while index < len(value):
+        pair = value[index : index + 2]
+        if pair in {"{{", "}}"}:
+            index += 2
+            continue
+        if value[index] == "{":
+            brace_depth += 1
+        elif value[index] == "}":
+            brace_depth -= 1
+            if brace_depth < 0:
+                break
+        index += 1
+    if brace_depth != 0:
         raise ValueError(
             "unsupported template literal brace; literal braces must be balanced or escaped "
             "as '{{' and '}}'"

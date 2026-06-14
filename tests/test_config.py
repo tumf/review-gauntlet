@@ -1,3 +1,4 @@
+import math
 from pathlib import Path
 
 import pytest
@@ -34,9 +35,9 @@ def test_config_discovery_precedence(tmp_path: Path) -> None:
 def test_global_xdg_config_is_discovered_when_repo_config_is_absent(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    xdg_home = tmp_path / "xdg-config"
+    xdg_home = tmp_path / "xdg-config" / ".." / "xdg-config"
     monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg_home))
-    global_config = xdg_home / "review-gauntlet" / "config.jsonc"
+    global_config = xdg_home.resolve() / "review-gauntlet" / "config.jsonc"
     global_config.parent.mkdir(parents=True)
     global_config.write_text(
         '{"adapter":{"type":"command","command":"global-tool"}}', encoding="utf-8"
@@ -217,16 +218,20 @@ def test_command_adapter_config_accepts_literal_braces(value: str) -> None:
     assert config.args == (value,)
 
 
-@pytest.mark.parametrize("value", ["literal { brace", "literal } brace", "{prompt", "prompt}"])
+@pytest.mark.parametrize(
+    "value",
+    ["literal { brace", "literal } brace", "{prompt", "prompt}", "{{repo_root}"],
+)
 def test_command_adapter_config_rejects_unescaped_literal_braces(value: str) -> None:
     with pytest.raises(ValueError, match="literal brace"):
         CommandAdapterConfig.model_validate({"type": "command", "command": "tool", "args": [value]})
 
 
-def test_command_adapter_config_rejects_non_positive_timeout() -> None:
-    with pytest.raises(ValueError, match="greater than zero"):
+@pytest.mark.parametrize("timeout", [0, -1, math.inf, -math.inf, math.nan])
+def test_command_adapter_config_rejects_invalid_timeout(timeout: float) -> None:
+    with pytest.raises(ValueError, match="finite value greater than zero"):
         CommandAdapterConfig.model_validate(
-            {"type": "command", "command": "tool", "timeout_seconds": 0}
+            {"type": "command", "command": "tool", "timeout_seconds": timeout}
         )
 
 

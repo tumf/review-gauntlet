@@ -126,6 +126,33 @@ def test_mark_rejects_malformed_until_before_writing_event(
     assert _finding_event_count(tmp_path) == before
 
 
+def test_mark_rejects_until_for_non_terminal_states(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_with_finding(tmp_path, capsys)
+    finding_id = _first_finding_id(tmp_path)
+    before = _finding_event_count(tmp_path)
+
+    with pytest.raises(SystemExit) as excinfo:
+        main(
+            [
+                "mark",
+                str(tmp_path),
+                finding_id,
+                "confirmed",
+                "--until",
+                "2099-01-01",
+                "--format",
+                "json",
+            ]
+        )
+
+    captured = capsys.readouterr()
+    assert excinfo.value.code == 64
+    assert "only valid for waived or accepted-risk" in captured.err
+    assert _finding_event_count(tmp_path) == before
+
+
 def test_finalize_treats_malformed_terminal_metadata_as_blocker(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

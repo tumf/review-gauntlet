@@ -1104,6 +1104,9 @@ def _emit_ready(prompt: str | None, output_format: str) -> None:
 
 
 def _cmd_mark(args: argparse.Namespace, store: SessionStore) -> None:
+    metadata_states = {"accepted-risk", "waived"}
+    if args.until and args.state not in metadata_states:
+        raise ValueError("mark --until is only valid for waived or accepted-risk findings")
     if args.until:
         try:
             date.fromisoformat(str(args.until))
@@ -1116,7 +1119,7 @@ def _cmd_mark(args: argparse.Namespace, store: SessionStore) -> None:
         "accepted-risk": FindingState.ACCEPTED_RISK,
         "fixed": FindingState.FIXED_PENDING_VERIFICATION,
     }
-    metadata = {"owner": args.owner, "until": args.until}
+    metadata = {"owner": args.owner, "until": args.until} if args.state in metadata_states else {}
     store.mark_finding(args.finding_id, mapping[args.state], args.reason, metadata)
     _emit({"finding_id": args.finding_id, "state": mapping[args.state].value}, args.format)
 
