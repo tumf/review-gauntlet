@@ -1,25 +1,49 @@
 Review Gauntlet
 ===============
 
-A coverage gate for agentic code reviews.
+Plan-first AI code review with files × rules coverage.
 
-Review Gauntlet is not another AI code reviewer. Tools like Codex Review, Open
-Code Review, opencode, static analyzers, and custom agents can all produce
-findings. Review Gauntlet sits above them: it defines the review surface, slices
-it into auditable coverage cells, runs reviewers through adapters, records
-evidence, and only finalizes when required coverage and live findings are closed.
+Review Gauntlet is a plan-first coverage gate for AI code review. Before running
+reviewers, it builds a files × rules review matrix. Each cell represents a
+concrete review obligation: this file must be checked against this rule. Review
+Gauntlet then runs AI reviewers, static analyzers, or custom adapters against
+those cells, records evidence and findings, and only finalizes when the required
+coverage is complete.
 
-Reviewers find issues. Review Gauntlet proves what was reviewed.
+Reviewers find issues. Review Gauntlet proves which files were checked against
+which rules.
 
 ## How is this different from AI review tools?
 
+AI review tools usually generate comments from a diff. Review Gauntlet starts one
+layer earlier: it creates a review plan. It crosses files with review rules to
+build a coverage matrix, then runs reviewers against the required cells and
+records evidence for each completed review obligation.
+
 | Tool type | Primary job |
 |---|---|
-| Codex Review / Open Code Review / opencode | Review code and produce comments |
-| Static analyzers | Detect known patterns and rule violations |
-| Review Gauntlet | Define the review surface, orchestrate reviewers, track coverage, preserve evidence, and gate finalization |
+| Codex Review / Open Code Review / opencode | Generate review comments |
+| Static analyzers | Detect known rule violations |
+| Review Gauntlet | Plan the review, build the files × rules matrix, track coverage, preserve evidence, and gate finalization |
 
 Review Gauntlet is designed to work with reviewers, not compete with them.
+
+## How it works
+
+Review Gauntlet makes code review plan-first and auditable.
+
+1. Define the review surface
+   - files, directories, diffs, commits, or other review targets
+2. Define the review rules
+   - security, correctness, maintainability, architecture, project-specific checks, or custom rules
+3. Build a review matrix
+   - each file × rule pair becomes a review cell
+4. Run reviewers
+   - AI reviewers, static analyzers, opencode, Codex-style agents, or custom adapters inspect assigned cells
+5. Track evidence and findings
+   - prompts, outputs, findings, coverage state, and unresolved issues are recorded
+6. Finalize only when complete
+   - Review Gauntlet only finalizes when required coverage is complete and live findings are closed
 
 ## Prerequisites
 
@@ -37,16 +61,59 @@ Then create a `review-gauntlet.jsonc` adapter configuration that invokes that ag
 Review Gauntlet tracks coverage and evidence; the configured agent performs the
 actual code review.
 
-## Quick start
+## Before you run a review
 
-Run Review Gauntlet without installing it permanently:
+A review session does not work from the CLI alone. Install all required pieces
+first:
+
+1. install the `review-gauntlet` CLI
+2. install and configure an external review agent CLI
+3. install the matching Review Gauntlet skill or prompt guidance for that agent
+4. add a discoverable adapter config such as `review-gauntlet.jsonc`
+
+### Install the CLI
 
 ```bash
-uvx review-gauntlet --help
-uvx review-gauntlet init
-uvx review-gauntlet review --config review-gauntlet.jsonc
-uvx review-gauntlet status
+uv tool install review-gauntlet
 ```
+
+### Install the skill
+
+Install the Review Gauntlet agent skill:
+
+```bash
+npx skills add tumf/review-gauntlet
+```
+
+### Create an adapter config
+
+Review Gauntlet discovers config automatically from
+`.review-gauntlet/config.jsonc`, `review-gauntlet.jsonc`, or the XDG user config
+directory. The repository ships sample configs under `configs/`.
+
+Copy the sample for your agent:
+
+```bash
+cp configs/review-gauntlet-opencode.jsonc review-gauntlet.jsonc
+# or: cp configs/review-gauntlet-codex.jsonc review-gauntlet.jsonc
+# or: cp configs/review-gauntlet-claude.jsonc review-gauntlet.jsonc
+```
+
+Edit `review-gauntlet.jsonc` if your agent command or arguments differ, then verify
+that `review-gauntlet review` runs end-to-end.
+
+---
+
+```bash
+uv tool install review-gauntlet
+# (install the skill and adapter config as described above)
+review-gauntlet init
+review-gauntlet review
+review-gauntlet status
+```
+
+Use `uvx review-gauntlet --help` only for a temporary CLI inspection; it does not
+install the agent skill or adapter config needed for review sessions.
 
 ## Installation
 
@@ -79,7 +146,7 @@ with a configured external CLI adapter:
 
 ```bash
 review-gauntlet init
-review-gauntlet review --config review-gauntlet.jsonc
+review-gauntlet review
 review-gauntlet status
 review-gauntlet findings
 review-gauntlet verify-fixes --config review-gauntlet.jsonc
@@ -137,7 +204,7 @@ review-gauntlet init --commit <commit-oid>
 review-gauntlet init --all
 
 # Execute exactly one review step for the initialized session.
-review-gauntlet review --config review-gauntlet.jsonc
+review-gauntlet review
 
 # Select at most 20 cells for this run and execute up to 4 adapter calls at once.
 review-gauntlet review --budget 20 --concurrency 4
