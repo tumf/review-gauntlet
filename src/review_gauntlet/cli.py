@@ -1254,8 +1254,6 @@ def _ready_prompt(store: SessionStore, root: Path) -> str | None:
         effective_cell_counts, finding_counts, store, session_id, root, allow_non_review_dirty=False
     )
     if effective_cell_counts.get(CellState.PENDING.value, 0):
-        if _finalize_blockers_include_commit_resolvable(finalize_reasons):
-            return _READY_PROMPTS["finalize"]
         return _READY_PROMPTS["pending_review_cell"]
     if finding_counts.get(FindingState.REOPENED.value, 0):
         return _READY_PROMPTS["reopened"]
@@ -1307,10 +1305,6 @@ def _finalize_blockers_are_commit_resolvable(reasons: list[str]) -> bool:
     return bool(reasons) and all(
         _finalize_blocker_is_commit_resolvable(reason) for reason in reasons
     )
-
-
-def _finalize_blockers_include_commit_resolvable(reasons: list[str]) -> bool:
-    return any(_finalize_blocker_is_commit_resolvable(reason) for reason in reasons)
 
 
 def _finalize_blocker_is_commit_resolvable(reason: str) -> bool:
