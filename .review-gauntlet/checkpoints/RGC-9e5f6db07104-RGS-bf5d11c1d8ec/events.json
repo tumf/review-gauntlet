@@ -1,0 +1,365 @@
+{
+  "checkpoint_id": "RGC-9e5f6db07104-RGS-bf5d11c1d8ec",
+  "events": [
+    {
+      "checkpoint_id": "RGC-9e5f6db07104-RGS-bf5d11c1d8ec",
+      "created_at": "2026-06-14 12:19:15",
+      "event_id": 166,
+      "finding_id": "RGF-0087",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Confirmed: workflow uses ubuntu-latest at .github/workflows/ci.yml:11, so the runner image is moving rather than pinned.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-9e5f6db07104-RGS-bf5d11c1d8ec",
+      "created_at": "2026-06-14 12:19:15",
+      "event_id": 167,
+      "finding_id": "RGF-0088",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Confirmed: workflow uses astral-sh/setup-uv@v6 at .github/workflows/ci.yml:18, which is a tag rather than an immutable SHA.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-9e5f6db07104-RGS-bf5d11c1d8ec",
+      "created_at": "2026-06-14 12:19:15",
+      "event_id": 168,
+      "finding_id": "RGF-0086",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Confirmed: Makefile check omits coverage at Makefile:21 while CI runs make coverage at .github/workflows/ci.yml:38-39.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-9e5f6db07104-RGS-bf5d11c1d8ec",
+      "created_at": "2026-06-14 12:19:15",
+      "event_id": 169,
+      "finding_id": "RGF-0090",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Confirmed: README opencode example includes --dangerously-skip-permissions at README.md:331 but the bundled preset args omit it in src/review_gauntlet/presets/opencode.jsonc:9-12.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-9e5f6db07104-RGS-bf5d11c1d8ec",
+      "created_at": "2026-06-14 12:19:15",
+      "event_id": 170,
+      "finding_id": "RGF-0089",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Confirmed: pyproject advertises Python 3.12 and 3.13 at pyproject.toml:20-21 while CI installs only Python 3.11 and pyright targets 3.11.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-9e5f6db07104-RGS-bf5d11c1d8ec",
+      "created_at": "2026-06-14 12:21:07",
+      "event_id": 171,
+      "finding_id": "RGF-0087",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Pinned GitHub Actions runner to ubuntu-24.04 and make check passes.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-9e5f6db07104-RGS-bf5d11c1d8ec",
+      "created_at": "2026-06-14 12:28:54",
+      "event_id": 172,
+      "finding_id": "RGF-0091",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "CI hardcodes Python 3.11 while pyproject advertises Python 3.12 and 3.13 support; confirmed as a real reproducibility gap.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-9e5f6db07104-RGS-bf5d11c1d8ec",
+      "created_at": "2026-06-14 12:30:37",
+      "event_id": 173,
+      "finding_id": "RGF-0088",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Pinned astral-sh/setup-uv v6 to commit d0d8abe699bfb85fec6de9f7adb5ae17292296ff in CI workflow.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-9e5f6db07104-RGS-bf5d11c1d8ec",
+      "created_at": "2026-06-14 12:32:48",
+      "event_id": 174,
+      "finding_id": "RGF-0092",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "actions/checkout remains pinned to the mutable v4 tag in .github/workflows/ci.yml, so this reproducibility finding is real.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-9e5f6db07104-RGS-bf5d11c1d8ec",
+      "created_at": "2026-06-14 13:34:16",
+      "event_id": 175,
+      "finding_id": "RGF-0092",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Pinned actions/checkout to the current v4 commit SHA in CI workflow.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-9e5f6db07104-RGS-bf5d11c1d8ec",
+      "created_at": "2026-06-14 13:35:35",
+      "event_id": 176,
+      "finding_id": "RGF-0091",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Added CI Python matrix for advertised 3.11, 3.12, and 3.13 support.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-9e5f6db07104-RGS-bf5d11c1d8ec",
+      "created_at": "2026-06-14 13:36:51",
+      "event_id": 177,
+      "finding_id": "RGF-0091",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-9e5f6db07104-RGS-bf5d11c1d8ec",
+      "created_at": "2026-06-14 13:36:51",
+      "event_id": 178,
+      "finding_id": "RGF-0092",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-9e5f6db07104-RGS-bf5d11c1d8ec",
+      "created_at": "2026-06-14 13:36:51",
+      "event_id": 179,
+      "finding_id": "RGF-0087",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-9e5f6db07104-RGS-bf5d11c1d8ec",
+      "created_at": "2026-06-14 13:36:51",
+      "event_id": 180,
+      "finding_id": "RGF-0088",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-9e5f6db07104-RGS-bf5d11c1d8ec",
+      "created_at": "2026-06-14 13:38:19",
+      "event_id": 181,
+      "finding_id": "RGF-0093",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "CI dependency sync does not enforce the committed uv.lock; .github/workflows/ci.yml:30-31 runs uv sync --all-groups without --locked.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-9e5f6db07104-RGS-bf5d11c1d8ec",
+      "created_at": "2026-06-14 13:40:15",
+      "event_id": 182,
+      "finding_id": "RGF-0093",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Added --locked to uv sync in CI so dependencies are installed from the committed lockfile; make check passes.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-9e5f6db07104-RGS-bf5d11c1d8ec",
+      "created_at": "2026-06-14 13:41:43",
+      "event_id": 183,
+      "finding_id": "RGF-0086",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Updated make check to include coverage so local CI-equivalent validation matches the CI workflow; make check passes.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-9e5f6db07104-RGS-bf5d11c1d8ec",
+      "created_at": "2026-06-14 13:43:03",
+      "event_id": 184,
+      "finding_id": "RGF-0090",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Aligned README opencode minimal config with the bundled opencode preset args; make check passes.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-9e5f6db07104-RGS-bf5d11c1d8ec",
+      "created_at": "2026-06-14 13:43:17",
+      "event_id": 185,
+      "finding_id": "RGF-0089",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Added CI matrix for Python 3.11, 3.12, and 3.13 so advertised classifiers are covered by CI; make check passes locally.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-9e5f6db07104-RGS-bf5d11c1d8ec",
+      "created_at": "2026-06-14 13:44:40",
+      "event_id": 186,
+      "finding_id": "RGF-0093",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-9e5f6db07104-RGS-bf5d11c1d8ec",
+      "created_at": "2026-06-14 13:44:40",
+      "event_id": 187,
+      "finding_id": "RGF-0089",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-9e5f6db07104-RGS-bf5d11c1d8ec",
+      "created_at": "2026-06-14 13:44:40",
+      "event_id": 188,
+      "finding_id": "RGF-0086",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-9e5f6db07104-RGS-bf5d11c1d8ec",
+      "created_at": "2026-06-14 13:44:40",
+      "event_id": 189,
+      "finding_id": "RGF-0090",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-9e5f6db07104-RGS-bf5d11c1d8ec",
+      "created_at": "2026-06-14 13:47:26",
+      "event_id": 190,
+      "finding_id": "RGF-0094",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Makefile check target includes coverage while AGENTS.md documents CI-equivalent check as format-check lint typecheck test and coverage is a separate Make target",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-9e5f6db07104-RGS-bf5d11c1d8ec",
+      "created_at": "2026-06-14 13:47:26",
+      "event_id": 191,
+      "finding_id": "RGF-0095",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "README documents latest/status.json, but implementation uses latest as a pointer file and stores snapshots under checkpoints/<checkpoint_id>/",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-9e5f6db07104-RGS-bf5d11c1d8ec",
+      "created_at": "2026-06-14 13:50:24",
+      "event_id": 192,
+      "finding_id": "RGF-0094",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Aligned Makefile check target with CI gate steps by leaving coverage as explicit target.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-9e5f6db07104-RGS-bf5d11c1d8ec",
+      "created_at": "2026-06-14 13:51:01",
+      "event_id": 193,
+      "finding_id": "RGF-0095",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Corrected README checkpoint snapshot location and latest pointer description.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-9e5f6db07104-RGS-bf5d11c1d8ec",
+      "created_at": "2026-06-14 13:52:58",
+      "event_id": 194,
+      "finding_id": "RGF-0095",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-9e5f6db07104-RGS-bf5d11c1d8ec",
+      "created_at": "2026-06-14 13:52:58",
+      "event_id": 195,
+      "finding_id": "RGF-0094",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-9e5f6db07104-RGS-bf5d11c1d8ec",
+      "created_at": "2026-06-14 13:58:28",
+      "event_id": 196,
+      "finding_id": "RGF-0096",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Normal review selects fixed-pending paths in _select_review_cells but _cmd_review does not call verify_fixed_findings; verify transition only occurs in verify-fixes.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-9e5f6db07104-RGS-bf5d11c1d8ec",
+      "created_at": "2026-06-14 14:00:41",
+      "event_id": 197,
+      "finding_id": "RGF-0096",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Normal review now verifies fixed-pending findings for evaluated paths; focused tests cover verified, reopened, and partial-failure behavior",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-9e5f6db07104-RGS-bf5d11c1d8ec",
+      "created_at": "2026-06-14 14:02:36",
+      "event_id": 198,
+      "finding_id": "RGF-0096",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-9e5f6db07104-RGS-bf5d11c1d8ec",
+      "created_at": "2026-06-14 14:06:33",
+      "event_id": 199,
+      "finding_id": "RGF-0097",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "\u73fe\u884c\u30b3\u30fc\u30c9\u306f verify-fixes \u3067 reopened_ids \u304c\u3042\u308b\u3060\u3051\u3067\u3082 exit 1 \u306b\u306a\u3063\u3066\u304a\u308a\u3001adapter/runtime failure \u3068\u691c\u8a3c\u306b\u3088\u308b\u518d\u30aa\u30fc\u30d7\u30f3\u3092\u7d42\u4e86\u30b3\u30fc\u30c9\u3067\u533a\u5225\u3067\u304d\u306a\u3044\u305f\u3081\u5b9f\u5728\u3059\u308b\u6307\u6458\u3068\u3057\u3066\u78ba\u8a8d\u3057\u305f",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-9e5f6db07104-RGS-bf5d11c1d8ec",
+      "created_at": "2026-06-14 14:11:13",
+      "event_id": 200,
+      "finding_id": "RGF-0097",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Changed verify-fixes to treat reopened findings as successful verification results rather than command failures; updated regression test; make check passes",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-9e5f6db07104-RGS-bf5d11c1d8ec",
+      "created_at": "2026-06-14 14:12:12",
+      "event_id": 201,
+      "finding_id": "RGF-0097",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    }
+  ]
+}
