@@ -1,4 +1,4 @@
-.PHONY: test format format-check lint typecheck check coverage hooks install install-hooks bump-patch bump-minor bump-major
+.PHONY: test format format-check lint typecheck check coverage hooks install install-hooks publish bump-patch bump-minor bump-major
 
 test:
 	uv run pytest
@@ -28,6 +28,9 @@ install:
 
 install-hooks:
 	uv run prek install --install-hooks --hook-type pre-commit --hook-type pre-push
+
+publish:
+	uv publish
 
 bump-patch:
 	uv run bump-my-version bump patch
