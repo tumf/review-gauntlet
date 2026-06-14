@@ -39,7 +39,7 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
-    "hatch>=1.17.0",
+    "bump-my-version>=1.2.4",
     "prek>=0.4.4",
     "pyright>=1.1.410",
     "pytest>=9.0.3",
@@ -47,8 +47,19 @@ dev = [
     "ruff>=0.15.16",
 ]
 
-[tool.hatch.version]
-path = "src/review_gauntlet/__about__.py"
+[tool.bumpversion]
+current_version = "0.1.0"
+tag = false
+sign_tags = false
+allow_dirty = true
+commit = false
+message = "Bump version: {current_version} → {new_version}"
+
+[[tool.bumpversion.files]]
+filename = "pyproject.toml"
+
+[[tool.bumpversion.files]]
+filename = "src/review_gauntlet/__about__.py"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

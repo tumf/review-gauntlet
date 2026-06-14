@@ -30,10 +30,10 @@ install-hooks:
 	uv run prek install --install-hooks --hook-type pre-commit --hook-type pre-push
 
 bump-patch:
-	uv run hatch version patch
+	uv run bump-my-version bump patch
 
 bump-minor:
-	uv run hatch version minor
+	uv run bump-my-version bump minor
 
 bump-major:
-	uv run hatch version major
+	uv run bump-my-version bump major
