@@ -1053,8 +1053,6 @@ def _ready_prompt(store: SessionStore, root: Path) -> str | None:
                 (session_id,),
             ).fetchall()
         )
-    if cell_counts.get(CellState.STALE.value, 0):
-        return _READY_PROMPTS["stale_review_cell"]
     if cell_counts.get(CellState.PENDING.value, 0):
         return _READY_PROMPTS["pending_review_cell"]
     finalize_reasons = _finalize_reasons(
@@ -1070,6 +1068,8 @@ def _ready_prompt(store: SessionStore, root: Path) -> str | None:
         return _READY_PROMPTS["confirmed"]
     if finding_counts.get(FindingState.FIXED_PENDING_VERIFICATION.value, 0):
         return _READY_PROMPTS["fixed_pending_verification"]
+    if cell_counts.get(CellState.STALE.value, 0):
+        return _READY_PROMPTS["stale_review_cell"]
     if not finalize_reasons or _finalize_blockers_are_commit_resolvable(finalize_reasons):
         return _READY_PROMPTS["finalize"]
     return None
@@ -1344,7 +1344,7 @@ def _is_expired(metadata_json: str, today: date) -> bool:
 def _next_action(
     cell_counts: dict[str, int], finding_counts: dict[str, int], reasons: list[str]
 ) -> str:
-    if cell_counts.get("pending", 0) or cell_counts.get("stale", 0):
+    if cell_counts.get("pending", 0):
         return "run_review"
     if _finalize_blockers_include_target_digest_drift(reasons):
         return "run_review"
@@ -1354,6 +1354,8 @@ def _next_action(
         return "fix_confirmed_findings"
     if finding_counts.get("fixed_pending_verification", 0):
         return "run_verify_fixes"
+    if cell_counts.get("stale", 0):
+        return "run_review"
     if reasons:
         return "resolve_finalize_blockers"
     return "finalize"
