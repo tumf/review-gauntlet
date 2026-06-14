@@ -9,19 +9,26 @@ on:
 jobs:
   checks:
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version:
+          - "3.11"
+          - "3.12"
+          - "3.13"
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
 
       - name: Install uv
         uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff
 
       - name: Set up Python
-        run: uv python install 3.11
+        run: uv python install ${{ matrix.python-version }}
 
       - name: Sync dependencies
-        run: uv sync --all-groups
+        run: uv sync --all-groups --locked
 
       - name: Format check
         run: make format-check
