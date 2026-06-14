@@ -1194,6 +1194,7 @@ def _reconcile_cells(store: SessionStore, root: Path, target: TargetSpec) -> Non
         cell.id: cell
         for cell in cells_from_plan(_build_target_plan(root, target), file_digests(root))
     }
+    fixed_pending_paths = store.fixed_pending_paths(session_id)
     existing = {str(row["cell_id"]): row for row in store.list_cells(session_id)}
     new_cells = tuple(cell for cell_id, cell in current.items() if cell_id not in existing)
     store.add_cells(session_id, new_cells)
@@ -1201,7 +1202,10 @@ def _reconcile_cells(store: SessionStore, root: Path, target: TargetSpec) -> Non
         current_cell = current.get(cell_id)
         if current_cell is None:
             store.update_cell_state(session_id, cell_id, CellState.SUPERSEDED)
-        elif row["content_digest"] != current_cell.content_digest:
+        elif (
+            row["content_digest"] != current_cell.content_digest
+            and current_cell.file_path not in fixed_pending_paths
+        ):
             store.update_cell_state(session_id, cell_id, CellState.STALE)
 
 
@@ -1285,13 +1289,17 @@ def _effective_current_target_coverage(
         cell.id: cell
         for cell in cells_from_plan(_build_target_plan(root, target), file_digests(root))
     }
+    fixed_pending_paths = store.fixed_pending_paths(session_id)
     persisted_cells = {str(row["cell_id"]): row for row in store.list_cells(session_id)}
     counts: dict[str, int] = {}
     for cell_id, current_cell in current_cells.items():
         persisted = persisted_cells.get(cell_id)
         if persisted is None:
             state = CellState.PENDING.value
-        elif persisted["content_digest"] != current_cell.content_digest:
+        elif (
+            persisted["content_digest"] != current_cell.content_digest
+            and current_cell.file_path not in fixed_pending_paths
+        ):
             state = CellState.STALE.value
         else:
             state = str(persisted["state"])

@@ -73,6 +73,10 @@ def _states_by_path(tmp_path: Path) -> dict[str, str]:
     return {str(path): str(state) for path, state in rows}
 
 
+def _cell_rows_by_path(tmp_path: Path, path: str) -> list[dict[str, object]]:
+    return [dict(row) for row in SessionStore(tmp_path).list_cells() if row["file_path"] == path]
+
+
 def _count_runs_and_events(tmp_path: Path) -> tuple[int, int]:
     with sqlite3.connect(tmp_path / ".review-gauntlet" / "ledger.sqlite") as conn:
         runs = conn.execute("select count(*) from runs").fetchone()[0]
@@ -153,6 +157,39 @@ def test_verify_fixes_success_json_and_filters_only_fixed_pending(
         "README.md": "fixed_verified",
         "app.py": "fixed_pending_verification",
     }
+
+
+def test_verify_fixes_resolves_fixed_pending_path_digest_drift(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    ids = _seed_two_fixed_findings(tmp_path, capsys)
+    before_rows = _cell_rows_by_path(tmp_path, "README.md")
+    assert before_rows
+    before_digest = str(before_rows[0]["content_digest"])
+    (tmp_path / "README.md").write_text("# docs\n\nfixed content\n", encoding="utf-8")
+    empty_fixture = _fixture(tmp_path, {})
+
+    main(
+        [
+            "verify-fixes",
+            str(tmp_path),
+            "--fixture",
+            str(empty_fixture),
+            "--finding",
+            ids["README.md"],
+            "--format",
+            "json",
+        ]
+    )
+
+    data = json.loads(capsys.readouterr().out)
+    after_rows = _cell_rows_by_path(tmp_path, "README.md")
+    refreshed_rows = [row for row in after_rows if row["content_digest"] != before_digest]
+    assert data["reviewed_cells"] == 1
+    assert data["fixed_verified_ids"] == [ids["README.md"]]
+    assert len(refreshed_rows) == 1
+    assert refreshed_rows[0]["state"] == "reviewed"
+    assert _states_by_path(tmp_path)["README.md"] == "fixed_verified"
 
 
 def test_verify_fixes_redetection_reopens_without_command_failure(
