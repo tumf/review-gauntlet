@@ -1086,8 +1086,10 @@ def _ready_prompt(store: SessionStore, root: Path) -> str | None:
                 (session_id,),
             ).fetchall()
         )
-    current_coverage_requires_review = _current_review_coverage_requires_review(
-        store, session_id, root
+    effective_cell_counts = _effective_current_target_coverage(store, session_id, root)
+    current_coverage_requires_review = bool(
+        effective_cell_counts.get(CellState.PENDING.value, 0)
+        or effective_cell_counts.get(CellState.STALE.value, 0)
     )
     if cell_counts.get(CellState.PENDING.value, 0):
         return _READY_PROMPTS["pending_review_cell"]
@@ -1107,7 +1109,7 @@ def _ready_prompt(store: SessionStore, root: Path) -> str | None:
         return _READY_PROMPTS["confirmed"]
     if finding_counts.get(FindingState.FIXED_PENDING_VERIFICATION.value, 0):
         return _READY_PROMPTS["fixed_pending_verification"]
-    if cell_counts.get(CellState.STALE.value, 0):
+    if effective_cell_counts.get(CellState.STALE.value, 0):
         return _READY_PROMPTS["stale_review_cell"]
     if not finalize_reasons or _finalize_blockers_are_commit_resolvable(finalize_reasons):
         return _READY_PROMPTS["finalize"]
@@ -1123,22 +1125,30 @@ def _finalize_blockers_include_target_digest_drift(reasons: list[str]) -> bool:
     return _TARGET_DIGEST_DRIFT_REASON in reasons
 
 
-def _current_review_coverage_requires_review(
+def _effective_current_target_coverage(
     store: SessionStore, session_id: str, root: Path
-) -> bool:
+) -> dict[str, int]:
     metadata = store.session_metadata(session_id)
     target = TargetSpec.model_validate(metadata["target"])
-    current_cells = cells_from_plan(_build_target_plan(root, target), file_digests(root))
+    current_cells = {
+        cell.id: cell
+        for cell in cells_from_plan(_build_target_plan(root, target), file_digests(root))
+    }
     persisted_cells = {str(row["cell_id"]): row for row in store.list_cells(session_id)}
-    for current_cell in current_cells:
-        persisted = persisted_cells.get(current_cell.id)
+    counts: dict[str, int] = {}
+    for cell_id, current_cell in current_cells.items():
+        persisted = persisted_cells.get(cell_id)
         if persisted is None:
-            return True
-        if persisted["state"] != CellState.REVIEWED.value:
-            return True
-        if persisted["content_digest"] != current_cell.content_digest:
-            return True
-    return False
+            state = CellState.PENDING.value
+        elif persisted["content_digest"] != current_cell.content_digest:
+            state = CellState.STALE.value
+        else:
+            state = str(persisted["state"])
+        counts[state] = counts.get(state, 0) + 1
+    for cell_id in persisted_cells:
+        if cell_id not in current_cells:
+            counts[CellState.SUPERSEDED.value] = counts.get(CellState.SUPERSEDED.value, 0) + 1
+    return counts
 
 
 def _finalize_blockers_are_commit_resolvable(reasons: list[str]) -> bool:
@@ -1189,17 +1199,6 @@ def _status(
 ) -> dict[str, object]:
     session_id = store.active_session_id()
     with store.connect() as conn:
-        cell_counts = dict(
-            conn.execute(
-                """
-                select state, count(*) as count
-                from review_cells
-                where session_id = ?
-                group by state
-                """,
-                (session_id,),
-            ).fetchall()
-        )
         finding_counts = dict(
             conn.execute(
                 "select state, count(*) as count from findings where session_id = ? group by state",
@@ -1209,22 +1208,24 @@ def _status(
         run_count = conn.execute(
             "select count(*) as count from runs where session_id = ?", (session_id,)
         ).fetchone()["count"]
+    effective_cell_counts = _effective_current_target_coverage(store, session_id, root)
     reasons = _finalize_reasons(
-        cell_counts, finding_counts, store, session_id, root, allow_non_review_dirty
+        effective_cell_counts, finding_counts, store, session_id, root, allow_non_review_dirty
     )
-    current_coverage_requires_review = _current_review_coverage_requires_review(
-        store, session_id, root
+    current_coverage_requires_review = bool(
+        effective_cell_counts.get(CellState.PENDING.value, 0)
+        or effective_cell_counts.get(CellState.STALE.value, 0)
     )
     return {
         "session_id": session_id,
         "session_state": "active",
-        "coverage": cell_counts,
+        "coverage": effective_cell_counts,
         "finding_state_counts": finding_counts,
         "run_count": int(run_count),
         "can_finalize": not reasons,
         "finalize_blockers": reasons,
         "next_required_action": _next_action(
-            cell_counts, finding_counts, reasons, current_coverage_requires_review
+            effective_cell_counts, finding_counts, reasons, current_coverage_requires_review
         ),
     }
 

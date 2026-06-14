@@ -392,6 +392,24 @@ def test_ready_keeps_stale_only_review_cells_reachable(
     _assert_skill_directed_short_prompt(prompt, "Review stale review cells")
 
 
+def test_status_reports_reviewed_current_cell_as_stale_after_digest_change(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_commit_target_session(tmp_path, capsys)
+    _mark_finalize_ready(tmp_path)
+    (tmp_path / "README.md").write_text("# docs\n\nreview target changed\n", encoding="utf-8")
+    before = _ledger_snapshot(tmp_path)
+
+    main(["status", str(tmp_path), "--format", "json"])
+
+    data = json.loads(capsys.readouterr().out)
+    assert data["coverage"] == {CellState.STALE.value: 1}
+    assert data["next_required_action"] == "run_review"
+    assert "review cells are stale after target changes" in data["finalize_blockers"]
+    assert _ledger_snapshot(tmp_path) == before
+    assert not (tmp_path / ".review-gauntlet" / "checkpoints" / "latest").exists()
+
+
 def test_status_keeps_digest_drift_as_finalize_blocker_when_coverage_is_complete(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -468,10 +486,11 @@ def test_status_prioritizes_review_when_current_target_cell_is_missing(
     main(["status", str(tmp_path), "--format", "json"])
 
     data = json.loads(capsys.readouterr().out)
-    assert data["coverage"] == {}
+    assert data["coverage"] == {CellState.PENDING.value: 1}
     assert data["finding_state_counts"] == {FindingState.FIXED_PENDING_VERIFICATION.value: 1}
     assert data["next_required_action"] == "run_review"
     assert data["finalize_blockers"] == [
+        "review cells are still pending",
         "fixed findings require verification",
         "target digest has changed since the last review run",
     ]
