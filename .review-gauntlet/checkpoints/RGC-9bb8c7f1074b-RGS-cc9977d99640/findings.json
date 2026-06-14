@@ -1,0 +1,131 @@
+{
+  "checkpoint_id": "RGC-9bb8c7f1074b-RGS-cc9977d99640",
+  "findings": [
+    {
+      "checkpoint_id": "RGC-9bb8c7f1074b-RGS-cc9977d99640",
+      "content": "When an existing checkpoint directory is replaced and a later step fails before the backup is restored, rollback deletes the partially-written checkpoint_dir and renames backup_dir back, but the successfully-written pointer_tmp is not removed if pointer_tmp.replace(pointer_path) already ran. A subsequent call can then fail at pointer_tmp.write_text because the stale pointer_tmp file remains. Remove pointer_tmp unconditionally before re-raising, not only under suppress after the backup/pointer restore logic.",
+      "finding_id": "RGF-0098",
+      "fingerprint": "0c3d4d7ee6be11960cddc0415ac746712552998e6cc8e8338d2eff98c1c83bb4",
+      "latest_occurrence": {
+        "cell_id": "RGC-3f61aac0876a0d2e",
+        "end_line": 283,
+        "finding_id": "RGF-0098",
+        "imprecise": 0,
+        "occurrence_id": 98,
+        "path": "src/review_gauntlet/checkpoint.py",
+        "run_id": 85,
+        "start_line": 282
+      },
+      "metadata": "{\"fingerprint\":\"0c3d4d7ee6be11960cddc0415ac746712552998e6cc8e8338d2eff98c1c83bb4\",\"path\":\"src/review_gauntlet/checkpoint.py\",\"rule_id\":\"cli-contract\",\"content\":\"When an existing checkpoint directory is replaced and a later step fails before the backup is restored, rollback deletes the partially-written checkpoint_dir and renames backup_dir back, but the successfully-written pointer_tmp is not removed if pointer_tmp.replace(pointer_path) already ran. A subsequent call can then fail at pointer_tmp.write_text because the stale pointer_tmp file remains. Remove pointer_tmp unconditionally before re-raising, not only under suppress after the backup/pointer restore logic.\",\"suggestion_code\":\"        with suppress(OSError):\\n            pointer_tmp.unlink(missing_ok=True)\",\"existing_code\":\"        with suppress(OSError):\\n            pointer_tmp.unlink()\",\"start_line\":282,\"end_line\":283,\"thinking\":\"Path.write_text fails if the path already exists as a directory, and stale temp artifacts in the checkpoints directory can make future checkpoint writes fail. The cleanup currently only handles pointer_tmp after pointer backup handling and uses unlink without missing_ok; if pointer_tmp became pointer_path via replace this is harmless under suppress, but if a stale temp directory exists from a prior interrupted run, it is not cleaned before write_text.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/checkpoint.py",
+      "rule_id": "cli-contract",
+      "session_id": "RGS-cc9977d99640",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-9bb8c7f1074b-RGS-cc9977d99640",
+      "content": "If the latest checkpoint pointer exists as a regular file and contains an unsafe checkpoint id (for example '../outside'), latest_checkpoint_dir falls through to returning the pointer file itself. load_latest_checkpoint then looks for latest/status.json under a file path and silently returns None, so an unsafe or corrupted pointer is ignored instead of being rejected. That can make init fall back to reviewing all files rather than failing closed on a tampered latest checkpoint. Return a guaranteed invalid directory path for any existing-but-unusable pointer content, matching the symlink case.",
+      "finding_id": "RGF-0099",
+      "fingerprint": "affbcd71a7bc0ec7de250b88e941881209bac502517f012743831c4b0051255d",
+      "latest_occurrence": {
+        "cell_id": "RGC-8769b06915f1af11",
+        "end_line": 56,
+        "finding_id": "RGF-0099",
+        "imprecise": 0,
+        "occurrence_id": 99,
+        "path": "src/review_gauntlet/checkpoint.py",
+        "run_id": 85,
+        "start_line": 43
+      },
+      "metadata": "{\"fingerprint\":\"affbcd71a7bc0ec7de250b88e941881209bac502517f012743831c4b0051255d\",\"path\":\"src/review_gauntlet/checkpoint.py\",\"rule_id\":\"data-validation\",\"content\":\"If the latest checkpoint pointer exists as a regular file and contains an unsafe checkpoint id (for example '../outside'), latest_checkpoint_dir falls through to returning the pointer file itself. load_latest_checkpoint then looks for latest/status.json under a file path and silently returns None, so an unsafe or corrupted pointer is ignored instead of being rejected. That can make init fall back to reviewing all files rather than failing closed on a tampered latest checkpoint. Return a guaranteed invalid directory path for any existing-but-unusable pointer content, matching the symlink case.\",\"suggestion_code\":\"    if pointer.is_file():\\n        try:\\n            checkpoint_id = pointer.read_text(encoding=\\\"utf-8\\\").strip()\\n        except OSError:\\n            return pointer.parent / \\\"__invalid_latest_checkpoint_pointer__\\\"\\n        if checkpoint_id and (\\n            not any(part in {\\\"\\\", \\\".\\\", \\\"..\\\"} for part in Path(checkpoint_id).parts)\\n            and Path(checkpoint_id).name == checkpoint_id\\n        ):\\n            candidate = pointer.parent / checkpoint_id\\n            if candidate.is_dir() and not candidate.is_symlink():\\n                return candidate\\n        return pointer.parent / \\\"__invalid_latest_checkpoint_pointer__\\\"\\n    return pointer\",\"existing_code\":\"    if pointer.is_file():\\n        try:\\n            checkpoint_id = pointer.read_text(encoding=\\\"utf-8\\\").strip()\\n        except OSError:\\n            pass\\n        else:\\n            if checkpoint_id and (\\n                not any(part in {\\\"\\\", \\\".\\\", \\\"..\\\"} for part in Path(checkpoint_id).parts)\\n                and Path(checkpoint_id).name == checkpoint_id\\n            ):\\n                candidate = pointer.parent / checkpoint_id\\n                if candidate.is_dir() and not candidate.is_symlink():\\n                    return candidate\\n    return pointer\",\"start_line\":43,\"end_line\":56,\"thinking\":\"The file already treats symlink pointers as invalid by returning a non-existent invalid directory. Regular-file pointers with unsafe ids should get the same fail-closed behavior; otherwise load_latest_checkpoint returns None because status_path is under the pointer file. The existing test test_default_init_ignores_unsafe_latest_checkpoint_pointer appears to codify the permissive behavior, but this is a data-validation/security boundary for checkpoint trust.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/checkpoint.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-cc9977d99640",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-9bb8c7f1074b-RGS-cc9977d99640",
+      "content": "The latest checkpoint validator only checks that referenced JSON files contain objects and matching checkpoint_id values, but it never verifies their schema_version fields. A stale or hand-edited findings.json/events.json with an incompatible schema can still be accepted as a review base, defeating the version gate applied to status.json.",
+      "finding_id": "RGF-0100",
+      "fingerprint": "1323ab37db66381ec3fb21e111839e85165149b18a02d8eafc6178ac5feb91d5",
+      "latest_occurrence": {
+        "cell_id": "RGC-8769b06915f1af11",
+        "end_line": 124,
+        "finding_id": "RGF-0100",
+        "imprecise": 0,
+        "occurrence_id": 100,
+        "path": "src/review_gauntlet/checkpoint.py",
+        "run_id": 88,
+        "start_line": 122
+      },
+      "metadata": "{\"fingerprint\":\"1323ab37db66381ec3fb21e111839e85165149b18a02d8eafc6178ac5feb91d5\",\"path\":\"src/review_gauntlet/checkpoint.py\",\"rule_id\":\"data-validation\",\"content\":\"The latest checkpoint validator only checks that referenced JSON files contain objects and matching checkpoint_id values, but it never verifies their schema_version fields. A stale or hand-edited findings.json/events.json with an incompatible schema can still be accepted as a review base, defeating the version gate applied to status.json.\",\"suggestion_code\":\"        checkpoint_file = cast(dict[str, Any], data)\\n        if checkpoint_file.get(\\\"schema_version\\\") != CHECKPOINT_SCHEMA_VERSION:\\n            raise ValueError(f\\\"latest checkpoint {name} schema_version is not supported\\\")\\n        if checkpoint_file.get(\\\"checkpoint_id\\\") != checkpoint_id:\\n            raise ValueError(f\\\"latest checkpoint is internally inconsistent: {name}\\\")\",\"existing_code\":\"        checkpoint_file = cast(dict[str, Any], data)\\n        if checkpoint_file.get(\\\"checkpoint_id\\\") != checkpoint_id:\\n            raise ValueError(f\\\"latest checkpoint is internally inconsistent: {name}\\\")\",\"start_line\":122,\"end_line\":124,\"thinking\":\"status.json is schema-versioned and validated, while the companion checkpoint files are treated as structurally compatible forever. Adding the same version check prevents accepting mixed-version checkpoint artifacts.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/checkpoint.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-cc9977d99640",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-9bb8c7f1074b-RGS-cc9977d99640",
+      "content": "`load_latest_checkpoint` follows the `latest` pointer and reads `status.json`, but it does not validate the checkpoint object before returning it. Callers that use this function directly can therefore consume a tampered checkpoint with an unsupported schema, incomplete state, unsafe base ref, or inconsistent companion files; only `target_from_latest_checkpoint` performs validation. Validate before returning so the data-validation guarantees are centralized at the load boundary.",
+      "finding_id": "RGF-0101",
+      "fingerprint": "a14ae9b643b3602d160310aebf6d4103541df287cd299a9ce318ef7d02c69ac1",
+      "latest_occurrence": {
+        "cell_id": "RGC-8769b06915f1af11",
+        "end_line": 73,
+        "finding_id": "RGF-0101",
+        "imprecise": 0,
+        "occurrence_id": 101,
+        "path": "src/review_gauntlet/checkpoint.py",
+        "run_id": 89,
+        "start_line": 63
+      },
+      "metadata": "{\"fingerprint\":\"a14ae9b643b3602d160310aebf6d4103541df287cd299a9ce318ef7d02c69ac1\",\"path\":\"src/review_gauntlet/checkpoint.py\",\"rule_id\":\"data-validation\",\"content\":\"`load_latest_checkpoint` follows the `latest` pointer and reads `status.json`, but it does not validate the checkpoint object before returning it. Callers that use this function directly can therefore consume a tampered checkpoint with an unsupported schema, incomplete state, unsafe base ref, or inconsistent companion files; only `target_from_latest_checkpoint` performs validation. Validate before returning so the data-validation guarantees are centralized at the load boundary.\",\"suggestion_code\":\"def load_latest_checkpoint(root: Path) -> dict[str, Any] | None:\\n    status_path = latest_checkpoint_dir(root) / \\\"status.json\\\"\\n    if not status_path.exists():\\n        return None\\n    try:\\n        data = json.loads(status_path.read_text(encoding=\\\"utf-8\\\"))\\n    except json.JSONDecodeError as exc:\\n        raise ValueError(\\\"latest checkpoint status.json is invalid JSON\\\") from exc\\n    if not isinstance(data, dict):\\n        raise ValueError(\\\"latest checkpoint status.json must contain a JSON object\\\")\\n    checkpoint = cast(dict[str, Any], data)\\n    _validate_latest_checkpoint(root, checkpoint)\\n    return checkpoint\",\"existing_code\":\"def load_latest_checkpoint(root: Path) -> dict[str, Any] | None:\\n    status_path = latest_checkpoint_dir(root) / \\\"status.json\\\"\\n    if not status_path.exists():\\n        return None\\n    try:\\n        data = json.loads(status_path.read_text(encoding=\\\"utf-8\\\"))\\n    except json.JSONDecodeError as exc:\\n        raise ValueError(\\\"latest checkpoint status.json is invalid JSON\\\") from exc\\n    if not isinstance(data, dict):\\n        raise ValueError(\\\"latest checkpoint status.json must contain a JSON object\\\")\\n    return cast(dict[str, Any], data)\",\"start_line\":63,\"end_line\":73,\"thinking\":\"The validation helper already enforces required fields, schema version, complete/usable state, companion file consistency, and immutable ancestor base commits. Keeping it only in one higher-level caller leaves direct users of load_latest_checkpoint with unvalidated checkpoint data.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/checkpoint.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-cc9977d99640",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-9bb8c7f1074b-RGS-cc9977d99640",
+      "content": "Existing latest checkpoint files are only checked with exists(), so a dangling symlink or directory named status.json/findings.json/events.json/summary.md can be accepted as present. For JSON files, read_text() then raises a raw OSError/IsADirectoryError instead of the intended checkpoint consistency error; for summary.md, a non-file path can pass validation entirely. Validate that each required checkpoint artifact is a regular non-symlink file before reading or accepting it.",
+      "finding_id": "RGF-0102",
+      "fingerprint": "b9f173ec288cec884a6a7ca7e4948c79a8d4a2220049f4706603ed9d87140b55",
+      "latest_occurrence": {
+        "cell_id": "RGC-f760d63617535770",
+        "end_line": 117,
+        "finding_id": "RGF-0102",
+        "imprecise": 0,
+        "occurrence_id": 102,
+        "path": "src/review_gauntlet/checkpoint.py",
+        "run_id": 90,
+        "start_line": 112
+      },
+      "metadata": "{\"fingerprint\":\"b9f173ec288cec884a6a7ca7e4948c79a8d4a2220049f4706603ed9d87140b55\",\"path\":\"src/review_gauntlet/checkpoint.py\",\"rule_id\":\"test-evidence\",\"content\":\"Existing latest checkpoint files are only checked with exists(), so a dangling symlink or directory named status.json/findings.json/events.json/summary.md can be accepted as present. For JSON files, read_text() then raises a raw OSError/IsADirectoryError instead of the intended checkpoint consistency error; for summary.md, a non-file path can pass validation entirely. Validate that each required checkpoint artifact is a regular non-symlink file before reading or accepting it.\",\"suggestion_code\":\"        path = latest_checkpoint_dir(root) / name\\n        if not path.is_file() or path.is_symlink():\\n            raise ValueError(f\\\"latest checkpoint is internally inconsistent: missing {name}\\\")\\n        try:\\n            data = json.loads(path.read_text(encoding=\\\"utf-8\\\"))\",\"existing_code\":\"        path = latest_checkpoint_dir(root) / name\\n        if not path.exists():\\n            raise ValueError(f\\\"latest checkpoint is internally inconsistent: missing {name}\\\")\\n        try:\\n            data = json.loads(path.read_text(encoding=\\\"utf-8\\\"))\",\"start_line\":112,\"end_line\":117,\"thinking\":\"Checkpoint validation already rejects a symlinked latest directory pointer, so required files should receive the same file-type hardening. exists() is weaker than the code's consistency contract.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/checkpoint.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-cc9977d99640",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-9bb8c7f1074b-RGS-cc9977d99640",
+      "content": "summary.md validation has the same issue: exists() treats directories and symlinks as acceptable, so a checkpoint can be considered internally consistent even when its summary artifact is not a regular file. Use is_file() and reject symlinks to match the hardened latest/checkpoint directory handling above.",
+      "finding_id": "RGF-0103",
+      "fingerprint": "b4035cf7b7e5b63720502c1be36aebc1ff3f3b3eb31e888aea1e328056e852d4",
+      "latest_occurrence": {
+        "cell_id": "RGC-f760d63617535770",
+        "end_line": 140,
+        "finding_id": "RGF-0103",
+        "imprecise": 0,
+        "occurrence_id": 103,
+        "path": "src/review_gauntlet/checkpoint.py",
+        "run_id": 90,
+        "start_line": 138
+      },
+      "metadata": "{\"fingerprint\":\"b4035cf7b7e5b63720502c1be36aebc1ff3f3b3eb31e888aea1e328056e852d4\",\"path\":\"src/review_gauntlet/checkpoint.py\",\"rule_id\":\"test-evidence\",\"content\":\"summary.md validation has the same issue: exists() treats directories and symlinks as acceptable, so a checkpoint can be considered internally consistent even when its summary artifact is not a regular file. Use is_file() and reject symlinks to match the hardened latest/checkpoint directory handling above.\",\"suggestion_code\":\"    summary = latest_checkpoint_dir(root) / \\\"summary.md\\\"\\n    if not summary.is_file() or summary.is_symlink():\\n        raise ValueError(\\\"latest checkpoint is internally inconsistent: missing summary.md\\\")\",\"existing_code\":\"    summary = latest_checkpoint_dir(root) / \\\"summary.md\\\"\\n    if not summary.exists():\\n        raise ValueError(\\\"latest checkpoint is internally inconsistent: missing summary.md\\\")\",\"start_line\":138,\"end_line\":140,\"thinking\":\"A directory or symlink summary.md should not make a checkpoint usable as a review base.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/checkpoint.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-cc9977d99640",
+      "state": "fixed_verified"
+    }
+  ]
+}

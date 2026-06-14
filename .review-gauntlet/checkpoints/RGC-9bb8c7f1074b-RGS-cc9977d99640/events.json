@@ -1,0 +1,145 @@
+{
+  "checkpoint_id": "RGC-9bb8c7f1074b-RGS-cc9977d99640",
+  "events": [
+    {
+      "checkpoint_id": "RGC-9bb8c7f1074b-RGS-cc9977d99640",
+      "created_at": "2026-06-14 14:25:26",
+      "event_id": 202,
+      "finding_id": "RGF-0098",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "pointer_tmp.unlink() -> missing_ok=True added to handle case where pointer_tmp already replaced pointer_path before rollback",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-9bb8c7f1074b-RGS-cc9977d99640",
+      "created_at": "2026-06-14 14:25:30",
+      "event_id": 203,
+      "finding_id": "RGF-0099",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "latest_checkpoint_dir now returns invalid latest checkpoint path on pointer read failure instead of falling through to pointer path",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-9bb8c7f1074b-RGS-cc9977d99640",
+      "created_at": "2026-06-14 14:28:40",
+      "event_id": 204,
+      "finding_id": "RGF-0098",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-9bb8c7f1074b-RGS-cc9977d99640",
+      "created_at": "2026-06-14 14:28:40",
+      "event_id": 205,
+      "finding_id": "RGF-0099",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-9bb8c7f1074b-RGS-cc9977d99640",
+      "created_at": "2026-06-14 14:29:58",
+      "event_id": 206,
+      "finding_id": "RGF-0100",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Companion checkpoint files findings.json and events.json are loaded as checkpoint artifacts but only checkpoint_id and payload shape are validated; unlike status.json their schema_version is not checked, so mixed-version or hand-edited artifacts can be accepted as a review base.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-9bb8c7f1074b-RGS-cc9977d99640",
+      "created_at": "2026-06-14 14:32:50",
+      "event_id": 207,
+      "finding_id": "RGF-0100",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Validated companion checkpoint files now require matching schema_version and generated checkpoint findings/events include schema_version.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-9bb8c7f1074b-RGS-cc9977d99640",
+      "created_at": "2026-06-14 14:34:17",
+      "event_id": 208,
+      "finding_id": "RGF-0100",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-9bb8c7f1074b-RGS-cc9977d99640",
+      "created_at": "2026-06-14 14:35:42",
+      "event_id": 209,
+      "finding_id": "RGF-0101",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "load_latest_checkpoint has no direct callers outside target_from_latest_checkpoint, and that caller validates the checkpoint before using fields; no unvalidated consumption path exists in current code.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-9bb8c7f1074b-RGS-cc9977d99640",
+      "created_at": "2026-06-14 14:40:06",
+      "event_id": 210,
+      "finding_id": "RGF-0102",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Required checkpoint artifacts should be regular non-symlink files; exists() permits directories/symlinks and can leak raw filesystem errors.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-9bb8c7f1074b-RGS-cc9977d99640",
+      "created_at": "2026-06-14 14:40:06",
+      "event_id": 211,
+      "finding_id": "RGF-0103",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "summary.md has the same artifact type validation gap and should reject directories/symlinks.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-9bb8c7f1074b-RGS-cc9977d99640",
+      "created_at": "2026-06-14 14:42:06",
+      "event_id": 212,
+      "finding_id": "RGF-0102",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Validated checkpoint companion artifacts as regular non-symlink files and covered directory case in tests",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-9bb8c7f1074b-RGS-cc9977d99640",
+      "created_at": "2026-06-14 14:42:06",
+      "event_id": 213,
+      "finding_id": "RGF-0103",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Validated checkpoint summary artifact as a regular non-symlink file and covered directory case in tests",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-9bb8c7f1074b-RGS-cc9977d99640",
+      "created_at": "2026-06-14 14:43:48",
+      "event_id": 214,
+      "finding_id": "RGF-0103",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-9bb8c7f1074b-RGS-cc9977d99640",
+      "created_at": "2026-06-14 14:43:48",
+      "event_id": 215,
+      "finding_id": "RGF-0102",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    }
+  ]
+}
