@@ -415,7 +415,7 @@ def test_review_without_fixture_or_config_prints_actionable_config_guidance(
     error = capsys.readouterr().err
     assert "review-gauntlet config init --preset opencode" in error
     assert "review-gauntlet config init --global --preset opencode" in error
-    assert "review-gauntlet config list" in error
+    assert "review-gauntlet config preset list" in error
 
 
 def test_command_adapter_reviews_selected_cells_concurrently_with_isolated_artifacts(
@@ -646,7 +646,7 @@ def test_review_without_fixture_or_config_fails(
     error = capsys.readouterr().err
     assert "review-gauntlet config init --preset opencode" in error
     assert "review-gauntlet config init --global --preset opencode" in error
-    assert "review-gauntlet config list" in error
+    assert "review-gauntlet config preset list" in error
 
 
 def test_command_adapter_invalid_verdict_cli_failure_includes_diagnostics(

@@ -109,8 +109,8 @@ review-gauntlet config init --global --preset opencode
 Inspect available presets and validate the effective config:
 
 ```bash
-review-gauntlet config list
-review-gauntlet config show opencode
+review-gauntlet config preset list
+review-gauntlet config preset show opencode
 review-gauntlet config validate
 review-gauntlet config effective --format json
 ```
