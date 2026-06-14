@@ -1053,6 +1053,9 @@ def _ready_prompt(store: SessionStore, root: Path) -> str | None:
                 (session_id,),
             ).fetchall()
         )
+    current_coverage_requires_review = _current_review_coverage_requires_review(
+        store, session_id, root
+    )
     if cell_counts.get(CellState.STALE.value, 0):
         return _READY_PROMPTS["stale_review_cell"]
     if cell_counts.get(CellState.PENDING.value, 0):
@@ -1060,7 +1063,10 @@ def _ready_prompt(store: SessionStore, root: Path) -> str | None:
     finalize_reasons = _finalize_reasons(
         cell_counts, finding_counts, store, session_id, root, allow_non_review_dirty=False
     )
-    if _finalize_blockers_include_target_digest_drift(finalize_reasons):
+    if (
+        _finalize_blockers_include_target_digest_drift(finalize_reasons)
+        and current_coverage_requires_review
+    ):
         return _READY_PROMPTS["target_digest_drift"]
     if finding_counts.get(FindingState.REOPENED.value, 0):
         return _READY_PROMPTS["reopened"]
@@ -1082,6 +1088,24 @@ _DIRTY_NON_REVIEW_PREFIX = "working tree has uncommitted non-review files: "
 
 def _finalize_blockers_include_target_digest_drift(reasons: list[str]) -> bool:
     return _TARGET_DIGEST_DRIFT_REASON in reasons
+
+
+def _current_review_coverage_requires_review(
+    store: SessionStore, session_id: str, root: Path
+) -> bool:
+    metadata = store.session_metadata(session_id)
+    target = TargetSpec.model_validate(metadata["target"])
+    current_cells = cells_from_plan(_build_target_plan(root, target), file_digests(root))
+    persisted_cells = {str(row["cell_id"]): row for row in store.list_cells(session_id)}
+    for current_cell in current_cells:
+        persisted = persisted_cells.get(current_cell.id)
+        if persisted is None:
+            return True
+        if persisted["state"] != CellState.REVIEWED.value:
+            return True
+        if persisted["content_digest"] != current_cell.content_digest:
+            return True
+    return False
 
 
 def _finalize_blockers_are_commit_resolvable(reasons: list[str]) -> bool:
@@ -1155,6 +1179,9 @@ def _status(
     reasons = _finalize_reasons(
         cell_counts, finding_counts, store, session_id, root, allow_non_review_dirty
     )
+    current_coverage_requires_review = _current_review_coverage_requires_review(
+        store, session_id, root
+    )
     return {
         "session_id": session_id,
         "session_state": "active",
@@ -1163,7 +1190,9 @@ def _status(
         "run_count": int(run_count),
         "can_finalize": not reasons,
         "finalize_blockers": reasons,
-        "next_required_action": _next_action(cell_counts, finding_counts, reasons),
+        "next_required_action": _next_action(
+            cell_counts, finding_counts, reasons, current_coverage_requires_review
+        ),
     }
 
 
@@ -1342,11 +1371,14 @@ def _is_expired(metadata_json: str, today: date) -> bool:
 
 
 def _next_action(
-    cell_counts: dict[str, int], finding_counts: dict[str, int], reasons: list[str]
+    cell_counts: dict[str, int],
+    finding_counts: dict[str, int],
+    reasons: list[str],
+    current_coverage_requires_review: bool,
 ) -> str:
     if cell_counts.get("pending", 0) or cell_counts.get("stale", 0):
         return "run_review"
-    if _finalize_blockers_include_target_digest_drift(reasons):
+    if _finalize_blockers_include_target_digest_drift(reasons) and current_coverage_requires_review:
         return "run_review"
     if finding_counts.get("untriaged", 0) or finding_counts.get("reopened", 0):
         return "triage_findings"
