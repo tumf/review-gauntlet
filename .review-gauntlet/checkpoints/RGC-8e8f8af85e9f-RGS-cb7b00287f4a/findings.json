@@ -1,0 +1,89 @@
+{
+  "checkpoint_id": "RGC-8e8f8af85e9f-RGS-cb7b00287f4a",
+  "findings": [
+    {
+      "checkpoint_id": "RGC-8e8f8af85e9f-RGS-cb7b00287f4a",
+      "content": "Escaped template braces are removed before scanning, so malformed inputs such as `{{repo_root}` have balanced brace counts after removal and are accepted even though they are not a valid escaped literal or template. This can let invalid adapter configuration pass validation and fail later during formatting/execution. Validate unmatched braces on the original string or use a parser that consumes escaped brace pairs instead of deleting them first.",
+      "finding_id": "RGF-0079",
+      "fingerprint": "ffa900076850dfdf03234c8a0251a34562261bbae80e84bdee60e6f2c1465f5e",
+      "latest_occurrence": {
+        "cell_id": "RGC-33f200fbf6e4de4d",
+        "end_line": 188,
+        "finding_id": "RGF-0079",
+        "imprecise": 0,
+        "occurrence_id": 79,
+        "path": "src/review_gauntlet/config.py",
+        "run_id": 64,
+        "start_line": 183
+      },
+      "metadata": "{\"fingerprint\":\"ffa900076850dfdf03234c8a0251a34562261bbae80e84bdee60e6f2c1465f5e\",\"path\":\"src/review_gauntlet/config.py\",\"rule_id\":\"data-validation\",\"content\":\"Escaped template braces are removed before scanning, so malformed inputs such as `{{repo_root}` have balanced brace counts after removal and are accepted even though they are not a valid escaped literal or template. This can let invalid adapter configuration pass validation and fail later during formatting/execution. Validate unmatched braces on the original string or use a parser that consumes escaped brace pairs instead of deleting them first.\",\"suggestion_code\":\"    literal_removed = value.replace(\\\"{{\\\", \\\"\\\").replace(\\\"}}\\\", \\\"\\\")\\n    for match in TEMPLATE_PATTERN.finditer(literal_removed):\\n        name = match.group(1)\\n        if name not in SUPPORTED_TEMPLATE_VARIABLES:\\n            raise ValueError(f\\\"unsupported template variable {{{name}}}\\\")\\n    try:\\n        value.format_map({name: \\\"\\\" for name in SUPPORTED_TEMPLATE_VARIABLES})\\n    except ValueError as exc:\\n        raise ValueError(\\n            \\\"unsupported template literal brace; literal braces must be balanced or escaped \\\"\\n            \\\"as '{{' and '}}'\\\"\\n        ) from exc\\n    if literal_removed.count(\\\"{\\\") != literal_removed.count(\\\"}\\\"):\",\"existing_code\":\"    literal_removed = value.replace(\\\"{{\\\", \\\"\\\").replace(\\\"}}\\\", \\\"\\\")\\n    for match in TEMPLATE_PATTERN.finditer(literal_removed):\\n        name = match.group(1)\\n        if name not in SUPPORTED_TEMPLATE_VARIABLES:\\n            raise ValueError(f\\\"unsupported template variable {{{name}}}\\\")\\n    if literal_removed.count(\\\"{\\\") != literal_removed.count(\\\"}\\\"):\",\"start_line\":183,\"end_line\":188,\"thinking\":\"The current validation mutates the input before checking brace balance, masking half-escaped braces. Python format-style validation on the original string catches these malformed templates.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/config.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-cb7b00287f4a",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-8e8f8af85e9f-RGS-cb7b00287f4a",
+      "content": "The mark command accepts waiver metadata for every target state and stores it even when it is not semantically applicable. That lets `review-gauntlet mark RGF-0001 confirmed --until 2000-01-01` persist expiry metadata on a confirmed finding, and if the finding is later transitioned to waived without a fresh `--until`, expiry checks only inspect the latest waived/accepted-risk event and will treat the waiver as non-expiring. Validate `--until` (and owner expiry metadata) only for terminal waiver/risk states, or clear/reject it for other state transitions so stale metadata cannot influence later policy decisions.",
+      "finding_id": "RGF-0080",
+      "fingerprint": "3691e1a9f41b5aee09fcae8c1fbbd91cda2ed35c61f98cb59182f9593102b4ab",
+      "latest_occurrence": {
+        "cell_id": "RGC-6cefdd41be393570",
+        "end_line": 1120,
+        "finding_id": "RGF-0080",
+        "imprecise": 0,
+        "occurrence_id": 80,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 64,
+        "start_line": 1106
+      },
+      "metadata": "{\"fingerprint\":\"3691e1a9f41b5aee09fcae8c1fbbd91cda2ed35c61f98cb59182f9593102b4ab\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"data-validation\",\"content\":\"The mark command accepts waiver metadata for every target state and stores it even when it is not semantically applicable. That lets `review-gauntlet mark RGF-0001 confirmed --until 2000-01-01` persist expiry metadata on a confirmed finding, and if the finding is later transitioned to waived without a fresh `--until`, expiry checks only inspect the latest waived/accepted-risk event and will treat the waiver as non-expiring. Validate `--until` (and owner expiry metadata) only for terminal waiver/risk states, or clear/reject it for other state transitions so stale metadata cannot influence later policy decisions.\",\"suggestion_code\":\"def _cmd_mark(args: argparse.Namespace, store: SessionStore) -> None:\\n    mapping = {\\n        \\\"confirmed\\\": FindingState.CONFIRMED,\\n        \\\"false-positive\\\": FindingState.FALSE_POSITIVE,\\n        \\\"waived\\\": FindingState.WAIVED,\\n        \\\"accepted-risk\\\": FindingState.ACCEPTED_RISK,\\n        \\\"fixed\\\": FindingState.FIXED_PENDING_VERIFICATION,\\n    }\\n    metadata_states = {\\\"waived\\\", \\\"accepted-risk\\\"}\\n    if args.until and args.state not in metadata_states:\\n        raise ValueError(\\\"mark --until is only valid for waived or accepted-risk findings\\\")\\n    if args.until:\\n        try:\\n            date.fromisoformat(str(args.until))\\n        except ValueError as exc:\\n            raise ValueError(\\\"mark --until must be an ISO date (YYYY-MM-DD)\\\") from exc\\n    metadata = {\\\"owner\\\": args.owner, \\\"until\\\": args.until} if args.state in metadata_states else {}\\n    store.mark_finding(args.finding_id, mapping[args.state], args.reason, metadata)\",\"existing_code\":\"def _cmd_mark(args: argparse.Namespace, store: SessionStore) -> None:\\n    if args.until:\\n        try:\\n            date.fromisoformat(str(args.until))\\n        except ValueError as exc:\\n            raise ValueError(\\\"mark --until must be an ISO date (YYYY-MM-DD)\\\") from exc\\n    mapping = {\\n        \\\"confirmed\\\": FindingState.CONFIRMED,\\n        \\\"false-positive\\\": FindingState.FALSE_POSITIVE,\\n        \\\"waived\\\": FindingState.WAIVED,\\n        \\\"accepted-risk\\\": FindingState.ACCEPTED_RISK,\\n        \\\"fixed\\\": FindingState.FIXED_PENDING_VERIFICATION,\\n    }\\n    metadata = {\\\"owner\\\": args.owner, \\\"until\\\": args.until}\\n    store.mark_finding(args.finding_id, mapping[args.state], args.reason, metadata)\",\"start_line\":1106,\"end_line\":1120,\"thinking\":\"Data validation should reject metadata on states where the expiry policy does not apply; otherwise persisted event metadata becomes ambiguous and can create incorrect expiry behavior.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-cb7b00287f4a",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-8e8f8af85e9f-RGS-cb7b00287f4a",
+      "content": "This validator accepts NaN and Infinity because Pydantic will parse them as floats and the only check is `<= 0`. Those values are not meaningful subprocess timeouts: `subprocess.communicate(timeout=float(\"nan\"))` can behave as an immediate timeout and `Infinity` can effectively disable the configured bound, so a malformed config can either fail every review or hang indefinitely. Require a finite positive timeout.",
+      "finding_id": "RGF-0081",
+      "fingerprint": "e0d7ef139bd0c4462d55fa76d36834e39fc93e53f3373826dff4758866a6d10c",
+      "latest_occurrence": {
+        "cell_id": "RGC-33f200fbf6e4de4d",
+        "end_line": 96,
+        "finding_id": "RGF-0081",
+        "imprecise": 0,
+        "occurrence_id": 81,
+        "path": "src/review_gauntlet/config.py",
+        "run_id": 66,
+        "start_line": 91
+      },
+      "metadata": "{\"fingerprint\":\"e0d7ef139bd0c4462d55fa76d36834e39fc93e53f3373826dff4758866a6d10c\",\"path\":\"src/review_gauntlet/config.py\",\"rule_id\":\"data-validation\",\"content\":\"This validator accepts NaN and Infinity because Pydantic will parse them as floats and the only check is `<= 0`. Those values are not meaningful subprocess timeouts: `subprocess.communicate(timeout=float(\\\"nan\\\"))` can behave as an immediate timeout and `Infinity` can effectively disable the configured bound, so a malformed config can either fail every review or hang indefinitely. Require a finite positive timeout.\",\"suggestion_code\":\"    @field_validator(\\\"timeout_seconds\\\")\\n    @classmethod\\n    def validate_timeout(cls, value: float) -> float:\\n        if not math.isfinite(value) or value <= 0:\\n            raise ValueError(\\\"adapter.timeout_seconds must be a finite value greater than zero\\\")\\n        return value\",\"existing_code\":\"    @field_validator(\\\"timeout_seconds\\\")\\n    @classmethod\\n    def validate_timeout(cls, value: float) -> float:\\n        if value <= 0:\\n            raise ValueError(\\\"adapter.timeout_seconds must be greater than zero\\\")\\n        return value\",\"start_line\":91,\"end_line\":96,\"thinking\":\"The selected rule is data validation; this field feeds subprocess timeout handling, so non-finite values should be rejected at config load time.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/config.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-cb7b00287f4a",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-8e8f8af85e9f-RGS-cb7b00287f4a",
+      "content": "`XDG_CONFIG_HOME` is used without resolving or constraining it. If this CLI is run in a repository with no local config, an attacker-controlled environment can make review-gauntlet load an adapter config from an arbitrary directory outside the repo, causing an unexpected external review command to execute. Consider ignoring global config in non-interactive/CI contexts or requiring an explicit opt-in/ownership check before using env-provided global adapter config.",
+      "finding_id": "RGF-0082",
+      "fingerprint": "3c958f3f7642caf7ac95b097e5be67688589ee9a50761cccfbe1326b3c502c94",
+      "latest_occurrence": {
+        "cell_id": "RGC-6441eaf3b1a748b6",
+        "end_line": 166,
+        "finding_id": "RGF-0082",
+        "imprecise": 0,
+        "occurrence_id": 82,
+        "path": "src/review_gauntlet/config.py",
+        "run_id": 68,
+        "start_line": 162
+      },
+      "metadata": "{\"fingerprint\":\"3c958f3f7642caf7ac95b097e5be67688589ee9a50761cccfbe1326b3c502c94\",\"path\":\"src/review_gauntlet/config.py\",\"rule_id\":\"cli-contract\",\"content\":\"`XDG_CONFIG_HOME` is used without resolving or constraining it. If this CLI is run in a repository with no local config, an attacker-controlled environment can make review-gauntlet load an adapter config from an arbitrary directory outside the repo, causing an unexpected external review command to execute. Consider ignoring global config in non-interactive/CI contexts or requiring an explicit opt-in/ownership check before using env-provided global adapter config.\",\"suggestion_code\":\"def _xdg_config_home() -> Path:\\n    configured = os.environ.get(\\\"XDG_CONFIG_HOME\\\")\\n    if configured:\\n        return Path(configured).expanduser().resolve()\\n    return (Path.home() / \\\".config\\\").resolve()\",\"existing_code\":\"def _xdg_config_home() -> Path:\\n    configured = os.environ.get(\\\"XDG_CONFIG_HOME\\\")\\n    if configured:\\n        return Path(configured).expanduser()\\n    return Path.home() / \\\".config\\\"\",\"start_line\":162,\"end_line\":166,\"thinking\":\"The code already permits repo-local config and explicit config; adding global discovery changes trust boundaries because adapter.command is executable. At minimum paths should be canonicalized, and ideally global config should not be implicitly trusted for automated review runs.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/config.py",
+      "rule_id": "cli-contract",
+      "session_id": "RGS-cb7b00287f4a",
+      "state": "fixed_verified"
+    }
+  ]
+}

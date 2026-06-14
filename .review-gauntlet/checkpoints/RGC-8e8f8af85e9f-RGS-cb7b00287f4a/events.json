@@ -1,0 +1,131 @@
+{
+  "checkpoint_id": "RGC-8e8f8af85e9f-RGS-cb7b00287f4a",
+  "events": [
+    {
+      "checkpoint_id": "RGC-8e8f8af85e9f-RGS-cb7b00287f4a",
+      "created_at": "2026-06-14 06:26:25",
+      "event_id": 146,
+      "finding_id": "RGF-0080",
+      "from_state": "untriaged",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "\u5b9f\u88c5\u78ba\u8a8d\u6e08\u307f: --until/owner metadata \u304c waived/accepted-risk \u4ee5\u5916\u306e\u72b6\u614b\u306b\u3082\u4fdd\u5b58\u3055\u308c\u308b\u305f\u3081\u3001\u72b6\u614b\u9077\u79fb\u5f8c\u306e expiry policy \u3092\u66d6\u6627\u306b\u3057\u5f97\u308b",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-8e8f8af85e9f-RGS-cb7b00287f4a",
+      "created_at": "2026-06-14 06:26:25",
+      "event_id": 147,
+      "finding_id": "RGF-0079",
+      "from_state": "untriaged",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "\u5b9f\u88c5\u78ba\u8a8d\u6e08\u307f: escaped braces \u3092\u524a\u9664\u3057\u3066\u304b\u3089 brace balance \u3092\u898b\u308b\u305f\u3081\u3001\u534a\u7aef\u306a escape \u3092\u4e0d\u6b63\u3068\u3057\u3066\u691c\u51fa\u3067\u304d\u306a\u3044",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-8e8f8af85e9f-RGS-cb7b00287f4a",
+      "created_at": "2026-06-14 06:28:50",
+      "event_id": 148,
+      "finding_id": "RGF-0080",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Rejected --until for non-waiver mark states and omitted metadata for non-terminal transitions; added regression test.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-8e8f8af85e9f-RGS-cb7b00287f4a",
+      "created_at": "2026-06-14 06:35:02",
+      "event_id": 149,
+      "finding_id": "RGF-0079",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Validated template brace parsing on the original string so half-escaped braces like {{repo_root} are rejected; added regression coverage.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-8e8f8af85e9f-RGS-cb7b00287f4a",
+      "created_at": "2026-06-14 06:42:03",
+      "event_id": 150,
+      "finding_id": "RGF-0081",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Non-finite adapter.timeout_seconds is accepted by current validator; subprocess timeouts require finite positive values.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-8e8f8af85e9f-RGS-cb7b00287f4a",
+      "created_at": "2026-06-14 06:44:54",
+      "event_id": 151,
+      "finding_id": "RGF-0081",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Rejected non-finite adapter.timeout_seconds values with math.isfinite and added regression coverage for inf, -inf, and nan.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-8e8f8af85e9f-RGS-cb7b00287f4a",
+      "created_at": "2026-06-14 06:52:00",
+      "event_id": 152,
+      "finding_id": "RGF-0080",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-8e8f8af85e9f-RGS-cb7b00287f4a",
+      "created_at": "2026-06-14 06:52:00",
+      "event_id": 153,
+      "finding_id": "RGF-0081",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-8e8f8af85e9f-RGS-cb7b00287f4a",
+      "created_at": "2026-06-14 06:52:00",
+      "event_id": 154,
+      "finding_id": "RGF-0079",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-8e8f8af85e9f-RGS-cb7b00287f4a",
+      "created_at": "2026-06-14 07:00:14",
+      "event_id": 155,
+      "finding_id": "RGF-0082",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "config.py reads XDG_CONFIG_HOME global config without canonicalizing the env-provided directory; this is a real trust-boundary concern for implicit adapter config discovery",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-8e8f8af85e9f-RGS-cb7b00287f4a",
+      "created_at": "2026-06-14 07:02:10",
+      "event_id": 156,
+      "finding_id": "RGF-0082",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Resolved by canonicalizing XDG_CONFIG_HOME and home config paths with Path.resolve before global config discovery.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-8e8f8af85e9f-RGS-cb7b00287f4a",
+      "created_at": "2026-06-14 07:03:40",
+      "event_id": 157,
+      "finding_id": "RGF-0082",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    }
+  ]
+}
