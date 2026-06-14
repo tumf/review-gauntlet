@@ -1,11 +1,25 @@
 Review Gauntlet
 ===============
 
-Coverage-driven review orchestration for agentic code reviews.
+A coverage gate for agentic code reviews.
 
-The goal is not to pretend an LLM can guarantee bug-free code. The goal is to
-guarantee that a defined review surface was inspected, with evidence, before a
-project is called reviewed.
+Review Gauntlet is not another AI code reviewer. Tools like Codex Review, Open
+Code Review, opencode, static analyzers, and custom agents can all produce
+findings. Review Gauntlet sits above them: it defines the review surface, slices
+it into auditable coverage cells, runs reviewers through adapters, records
+evidence, and only finalizes when required coverage and live findings are closed.
+
+Reviewers find issues. Review Gauntlet proves what was reviewed.
+
+## How is this different from AI review tools?
+
+| Tool type | Primary job |
+|---|---|
+| Codex Review / Open Code Review / opencode | Review code and produce comments |
+| Static analyzers | Detect known patterns and rule violations |
+| Review Gauntlet | Define the review surface, orchestrate reviewers, track coverage, preserve evidence, and gate finalization |
+
+Review Gauntlet is designed to work with reviewers, not compete with them.
 
 ## Commands
 
