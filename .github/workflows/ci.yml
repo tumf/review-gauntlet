@@ -23,5 +23,17 @@ jobs:
       - name: Sync dependencies
         run: uv sync --all-groups
 
-      - name: Check
-        run: make check
+      - name: Format check
+        run: make format-check
+
+      - name: Lint
+        run: make lint
+
+      - name: Typecheck
+        run: make typecheck
+
+      - name: Test
+        run: make test
+
+      - name: Coverage
+        run: make coverage
