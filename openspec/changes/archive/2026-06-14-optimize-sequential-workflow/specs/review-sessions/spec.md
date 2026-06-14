@@ -33,7 +33,7 @@ Status and freshness computations SHALL use the same resolved repository root fo
 **When**: the developer runs `review-gauntlet status --format json`
 **Then**: stdout contains parseable JSON with `coverage.stale` greater than `0`
 **And**: `finding_state_counts.fixed_pending_verification` is greater than `0`
-**And**: `next_required_action` is `verify_fixes`
+**And**: `next_required_action` is `run_verify_fixes`
 **And**: the stale coverage remains visible as a finalization blocker
 
 #### Scenario: Status keeps pending review before finding work

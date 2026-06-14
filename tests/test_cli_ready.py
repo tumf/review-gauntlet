@@ -229,6 +229,22 @@ def test_ready_outputs_no_ready_task_when_only_blockers_remain(
     assert capsys.readouterr().out == "no ready task\n"
 
 
+def test_ready_prioritizes_pending_review_before_dirty_finalize_blocker(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_git_repo(tmp_path)
+    _init_session(tmp_path, capsys)
+    _git(tmp_path, "add", "README.md")
+    _git(tmp_path, "commit", "-m", "initial")
+    (tmp_path / "dirty.py").write_text("print('dirty')\n", encoding="utf-8")
+
+    prompt = _ready_json(tmp_path, capsys)["prompt"]
+
+    assert prompt is not None
+    _assert_skill_directed_short_prompt(prompt, "Review pending review cells")
+    assert "Commit intended git changes before finalizing" not in prompt
+
+
 def test_ready_prompts_commit_when_finalize_blocked_by_dirty_git_changes(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -237,15 +253,15 @@ def test_ready_prompts_commit_when_finalize_blocked_by_dirty_git_changes(
     _git(tmp_path, "add", "README.md")
     _git(tmp_path, "commit", "-m", "initial")
 
-    (tmp_path / "dirty.py").write_text("print('dirty')\n", encoding="utf-8")
+    (tmp_path / "package.json").write_text("{}\n", encoding="utf-8")
     _mark_finalize_ready(tmp_path)
     prompt = _ready_json(tmp_path, capsys)["prompt"]
     assert prompt is not None
     _assert_skill_directed_short_prompt(prompt, "Commit intended git changes before finalizing")
 
-    _git(tmp_path, "add", "dirty.py")
-    _git(tmp_path, "commit", "-m", "add review dirty file")
-    (tmp_path / "package.json").write_text("{}\n", encoding="utf-8")
+    _git(tmp_path, "add", "package.json")
+    _git(tmp_path, "commit", "-m", "add non-review dirty file")
+    (tmp_path / "package-lock.json").write_text("{}\n", encoding="utf-8")
     _mark_finalize_ready(tmp_path)
     prompt = _ready_json(tmp_path, capsys)["prompt"]
     assert prompt is not None

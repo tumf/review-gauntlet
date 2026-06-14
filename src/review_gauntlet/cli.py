@@ -1243,17 +1243,6 @@ _READY_PROMPTS = {
 def _ready_prompt(store: SessionStore, root: Path) -> str | None:
     session_id = store.active_session_id()
     with store.connect() as conn:
-        cell_counts = dict(
-            conn.execute(
-                """
-                select state, count(*) as count
-                from review_cells
-                where session_id = ?
-                group by state
-                """,
-                (session_id,),
-            ).fetchall()
-        )
         finding_counts = dict(
             conn.execute(
                 "select state, count(*) as count from findings where session_id = ? group by state",
@@ -1261,20 +1250,11 @@ def _ready_prompt(store: SessionStore, root: Path) -> str | None:
             ).fetchall()
         )
     effective_cell_counts = _effective_current_target_coverage(store, session_id, root)
-    current_coverage_requires_review = bool(
-        effective_cell_counts.get(CellState.PENDING.value, 0)
-        or effective_cell_counts.get(CellState.STALE.value, 0)
-    )
-    if cell_counts.get(CellState.PENDING.value, 0):
-        return _READY_PROMPTS["pending_review_cell"]
     finalize_reasons = _finalize_reasons(
-        cell_counts, finding_counts, store, session_id, root, allow_non_review_dirty=False
+        effective_cell_counts, finding_counts, store, session_id, root, allow_non_review_dirty=False
     )
-    if (
-        _finalize_blockers_include_target_digest_drift(finalize_reasons)
-        and current_coverage_requires_review
-    ):
-        return _READY_PROMPTS["target_digest_drift"]
+    if effective_cell_counts.get(CellState.PENDING.value, 0):
+        return _READY_PROMPTS["pending_review_cell"]
     if finding_counts.get(FindingState.REOPENED.value, 0):
         return _READY_PROMPTS["reopened"]
     if finding_counts.get(FindingState.UNTRIAGED.value, 0):
@@ -1293,10 +1273,6 @@ def _ready_prompt(store: SessionStore, root: Path) -> str | None:
 _TARGET_DIGEST_DRIFT_REASON = "target digest has changed since the last review run"
 _DIRTY_REVIEW_UNIVERSE_PREFIX = "review-universe files are dirty relative to HEAD: "
 _DIRTY_NON_REVIEW_PREFIX = "working tree has uncommitted non-review files: "
-
-
-def _finalize_blockers_include_target_digest_drift(reasons: list[str]) -> bool:
-    return _TARGET_DIGEST_DRIFT_REASON in reasons
 
 
 def _effective_current_target_coverage(
@@ -1636,8 +1612,6 @@ def _next_action(
     current_coverage_requires_review: bool,
 ) -> str:
     if cell_counts.get("pending", 0):
-        return "run_review"
-    if _finalize_blockers_include_target_digest_drift(reasons) and current_coverage_requires_review:
         return "run_review"
     if finding_counts.get("untriaged", 0) or finding_counts.get("reopened", 0):
         return "triage_findings"
