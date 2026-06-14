@@ -117,7 +117,7 @@ npx skills add tumf/review-gauntlet
 Review Gauntlet discovers config automatically from
 `.review-gauntlet/config.jsonc`, `review-gauntlet.jsonc`, or the XDG user config
 directory. Starter presets are bundled in the installed package, so first-time users
-do not need to clone this repository to create a config.
+can create a config without any extra setup.
 
 Create a project config:
 
@@ -155,7 +155,7 @@ review-gauntlet review
 review-gauntlet status
 ```
 
-`uvx review-gauntlet config init --preset opencode` is the clone-free starter flow.
+`uvx review-gauntlet config init --preset opencode` is the package-based starter flow.
 For regular use, install the CLI with `uv tool install review-gauntlet` so the same
 command is available as `review-gauntlet`.
 
