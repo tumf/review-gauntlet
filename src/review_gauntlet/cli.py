@@ -1271,7 +1271,7 @@ def _ready_prompt(store: SessionStore, root: Path) -> str | None:
 
 
 _TARGET_DIGEST_DRIFT_REASON = "target digest has changed since the last review run"
-_DIRTY_REVIEW_UNIVERSE_PREFIX = "review-universe files are dirty relative to HEAD: "
+_DIRTY_REVIEW_UNIVERSE_PREFIX = "review-universe files are dirty relative to HEAD"
 _DIRTY_NON_REVIEW_PREFIX = "working tree has uncommitted non-review files: "
 
 
@@ -1302,8 +1302,15 @@ def _effective_current_target_coverage(
 
 
 def _finalize_blockers_are_commit_resolvable(reasons: list[str]) -> bool:
-    return bool(reasons) and all(
-        _finalize_blocker_is_commit_resolvable(reason) for reason in reasons
+    if not reasons:
+        return False
+    has_dirty_review_universe = any(
+        reason.startswith(_DIRTY_REVIEW_UNIVERSE_PREFIX) for reason in reasons
+    )
+    return all(
+        _finalize_blocker_is_commit_resolvable(reason)
+        or (has_dirty_review_universe and reason == _TARGET_DIGEST_DRIFT_REASON)
+        for reason in reasons
     )
 
 

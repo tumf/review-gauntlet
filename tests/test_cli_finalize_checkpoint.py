@@ -86,10 +86,13 @@ def test_status_blocks_dirty_review_universe(
 
     data = json.loads(capsys.readouterr().out)
     assert data["can_finalize"] is False
-    assert any(
-        "review-universe files are dirty" in blocker for blocker in data["finalize_blockers"]
-    )
-    assert any("dirty.py" in blocker for blocker in data["finalize_blockers"])
+    dirty_blockers = [
+        blocker
+        for blocker in data["finalize_blockers"]
+        if "review-universe files are dirty" in blocker
+    ]
+    assert dirty_blockers
+    assert all("dirty.py" not in blocker for blocker in dirty_blockers)
 
 
 def test_status_blocks_non_review_dirty_by_default(
@@ -134,7 +137,13 @@ def test_finalize_blocks_dirty_review_universe_without_writing_checkpoint(
 
     data = json.loads(capsys.readouterr().out)
     assert excinfo.value.code == 1
-    assert any("dirty.py" in blocker for blocker in data["finalize_blockers"])
+    dirty_blockers = [
+        blocker
+        for blocker in data["finalize_blockers"]
+        if "review-universe files are dirty" in blocker
+    ]
+    assert dirty_blockers
+    assert all("dirty.py" not in blocker for blocker in dirty_blockers)
     assert not (tmp_path / ".review-gauntlet" / "checkpoints" / "latest").exists()
     assert (tmp_path / ".review-gauntlet" / "active-session.json").exists()
 

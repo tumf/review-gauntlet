@@ -23,7 +23,7 @@ class DirtyReviewUniverseError(ValueError):
     paths: tuple[str, ...]
 
     def __str__(self) -> str:
-        return "review-universe files are dirty relative to HEAD: " + ", ".join(self.paths)
+        return "review-universe files are dirty relative to HEAD"
 
 
 @dataclass(frozen=True)
