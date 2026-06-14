@@ -120,7 +120,8 @@ def _validate_latest_checkpoint(root: Path, checkpoint: dict[str, Any]) -> None:
         if not isinstance(data, dict):
             raise ValueError(f"latest checkpoint is internally inconsistent: {name}")
         checkpoint_file = cast(dict[str, Any], data)
-        if checkpoint_file.get("schema_version") != CHECKPOINT_SCHEMA_VERSION:
+        checkpoint_schema = checkpoint_file.get("schema_version")
+        if checkpoint_schema is not None and checkpoint_schema != CHECKPOINT_SCHEMA_VERSION:
             raise ValueError(f"latest checkpoint {name} schema_version is not supported")
         if checkpoint_file.get("checkpoint_id") != checkpoint_id:
             raise ValueError(f"latest checkpoint is internally inconsistent: {name}")

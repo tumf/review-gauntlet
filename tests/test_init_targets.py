@@ -194,6 +194,27 @@ def test_default_init_rejects_checkpoint_companion_schema_version(
     assert "schema_version" in capsys.readouterr().err
 
 
+def test_default_init_allows_legacy_checkpoint_companions_without_schema_version(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_repo(tmp_path)
+    base = _git(tmp_path, "rev-parse", "HEAD")
+    (tmp_path / "after.py").write_text("print('after')\n", encoding="utf-8")
+    _git(tmp_path, "add", "after.py")
+    _git(tmp_path, "commit", "-m", "after")
+    _write_checkpoint(tmp_path, base)
+    checkpoint_dir = tmp_path / ".review-gauntlet" / "checkpoints" / "RGC-test"
+
+    for name, payload_key in (("findings.json", "findings"), ("events.json", "events")):
+        (checkpoint_dir / name).write_text(
+            json.dumps({"checkpoint_id": "RGC-test", payload_key: []}), encoding="utf-8"
+        )
+
+    main(["init", str(tmp_path), "--format", "json"])
+
+    assert json.loads(capsys.readouterr().out)["cell_count"] > 0
+
+
 def test_default_init_rejects_non_file_checkpoint_companion(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
