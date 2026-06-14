@@ -651,7 +651,7 @@ def _cmd_review(args: argparse.Namespace, root: Path, store: SessionStore) -> No
     evaluated_paths: set[str] = set()
     first_failure: tuple[ReviewCell, ReviewAdapterError] | None = None
     for selected in selected_cells:
-        outcome = results[selected.id]
+        outcome = _review_cell_outcome(results, selected)
         if isinstance(outcome, ReviewAdapterError):
             if first_failure is None:
                 first_failure = (selected, outcome)
@@ -768,7 +768,7 @@ def _cmd_verify_fixes(args: argparse.Namespace, root: Path, store: SessionStore)
     evaluated_paths: set[str] = set()
     first_failure: tuple[ReviewCell, ReviewAdapterError] | None = None
     for selected in selected_cells:
-        outcome = results[selected.id]
+        outcome = _review_cell_outcome(results, selected)
         if isinstance(outcome, ReviewAdapterError):
             if first_failure is None:
                 first_failure = (selected, outcome)
@@ -975,6 +975,18 @@ def review_cells_concurrently(
     else:
         executor.shutdown(wait=True, cancel_futures=False)
     return results
+
+
+def _review_cell_outcome(
+    results: dict[str, ReviewAdapterResult | ReviewAdapterError], cell: ReviewCell
+) -> ReviewAdapterResult | ReviewAdapterError:
+    outcome = results.get(cell.id)
+    if outcome is not None:
+        return outcome
+    return ReviewAdapterError(
+        f"review cell produced no result: {cell.id}",
+        failure={"error": "missing review result", "cell_id": cell.id},
+    )
 
 
 def _is_timeout_failure(error: ReviewAdapterError) -> bool:
