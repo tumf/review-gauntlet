@@ -181,6 +181,51 @@ def test_default_init_rejects_non_string_checkpoint_id(
     assert "checkpoint_id must be a string" in capsys.readouterr().err
 
 
+def test_default_init_rejects_checkpoint_companion_schema_version(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_repo(tmp_path)
+    _write_checkpoint(tmp_path, _git(tmp_path, "rev-parse", "HEAD"), companion_schema_version=2)
+
+    with pytest.raises(SystemExit) as excinfo:
+        main(["init", str(tmp_path), "--format", "json"])
+
+    assert excinfo.value.code == 64
+    assert "schema_version" in capsys.readouterr().err
+
+
+def test_default_init_rejects_non_file_checkpoint_companion(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_repo(tmp_path)
+    _write_checkpoint(tmp_path, _git(tmp_path, "rev-parse", "HEAD"))
+    checkpoint_dir = tmp_path / ".review-gauntlet" / "checkpoints" / "RGC-test"
+    (checkpoint_dir / "findings.json").unlink()
+    (checkpoint_dir / "findings.json").mkdir()
+
+    with pytest.raises(SystemExit) as excinfo:
+        main(["init", str(tmp_path), "--format", "json"])
+
+    assert excinfo.value.code == 64
+    assert "internally inconsistent" in capsys.readouterr().err
+
+
+def test_default_init_rejects_non_file_checkpoint_summary(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_repo(tmp_path)
+    _write_checkpoint(tmp_path, _git(tmp_path, "rev-parse", "HEAD"))
+    checkpoint_dir = tmp_path / ".review-gauntlet" / "checkpoints" / "RGC-test"
+    (checkpoint_dir / "summary.md").unlink()
+    (checkpoint_dir / "summary.md").mkdir()
+
+    with pytest.raises(SystemExit) as excinfo:
+        main(["init", str(tmp_path), "--format", "json"])
+
+    assert excinfo.value.code == 64
+    assert "internally inconsistent" in capsys.readouterr().err
+
+
 def test_default_init_rejects_missing_payload_array(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -198,10 +243,11 @@ def test_default_init_rejects_missing_payload_array(
     }
     (checkpoint_dir / "status.json").write_text(json.dumps(status), encoding="utf-8")
     (checkpoint_dir / "findings.json").write_text(
-        json.dumps({"checkpoint_id": "RGC-test"}), encoding="utf-8"
+        json.dumps({"schema_version": 1, "checkpoint_id": "RGC-test"}), encoding="utf-8"
     )
     (checkpoint_dir / "events.json").write_text(
-        json.dumps({"checkpoint_id": "RGC-test", "events": []}), encoding="utf-8"
+        json.dumps({"schema_version": 1, "checkpoint_id": "RGC-test", "events": []}),
+        encoding="utf-8",
     )
     (checkpoint_dir / "summary.md").write_text("# checkpoint\n", encoding="utf-8")
 
@@ -219,7 +265,8 @@ def test_default_init_rejects_checkpoint_payload_entries_without_matching_id(
     _write_checkpoint(tmp_path, _git(tmp_path, "rev-parse", "HEAD"))
     checkpoint_dir = tmp_path / ".review-gauntlet" / "checkpoints" / "RGC-test"
     (checkpoint_dir / "findings.json").write_text(
-        json.dumps({"checkpoint_id": "RGC-test", "findings": [None]}), encoding="utf-8"
+        json.dumps({"schema_version": 1, "checkpoint_id": "RGC-test", "findings": [None]}),
+        encoding="utf-8",
     )
 
     with pytest.raises(SystemExit) as excinfo:
@@ -428,6 +475,7 @@ def _write_checkpoint(
     schema_version: int = 1,
     checkpoint_id: object = "RGC-test",
     companion_checkpoint_id: object | None = None,
+    companion_schema_version: int = 1,
 ) -> None:
     checkpoint_dir = root / ".review-gauntlet" / "checkpoints" / str(checkpoint_id)
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
@@ -444,6 +492,7 @@ def _write_checkpoint(
     (checkpoint_dir / "findings.json").write_text(
         json.dumps(
             {
+                "schema_version": companion_schema_version,
                 "checkpoint_id": companion_checkpoint_id
                 if companion_checkpoint_id is not None
                 else checkpoint_id,
@@ -455,6 +504,7 @@ def _write_checkpoint(
     (checkpoint_dir / "events.json").write_text(
         json.dumps(
             {
+                "schema_version": companion_schema_version,
                 "checkpoint_id": companion_checkpoint_id
                 if companion_checkpoint_id is not None
                 else checkpoint_id,

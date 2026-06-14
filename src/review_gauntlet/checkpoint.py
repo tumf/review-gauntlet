@@ -44,7 +44,7 @@ def latest_checkpoint_dir(root: Path) -> Path:
         try:
             checkpoint_id = pointer.read_text(encoding="utf-8").strip()
         except OSError:
-            pass
+            return pointer.parent / "__invalid_latest_checkpoint_pointer__"
         else:
             if checkpoint_id and (
                 not any(part in {"", ".", ".."} for part in Path(checkpoint_id).parts)
@@ -111,7 +111,7 @@ def _validate_latest_checkpoint(root: Path, checkpoint: dict[str, Any]) -> None:
         raise ValueError("latest checkpoint checkpoint_id does not match checkpoint directory")
     for name in ("findings.json", "events.json"):
         path = latest_checkpoint_dir(root) / name
-        if not path.exists():
+        if not path.is_file() or path.is_symlink():
             raise ValueError(f"latest checkpoint is internally inconsistent: missing {name}")
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
@@ -120,6 +120,8 @@ def _validate_latest_checkpoint(root: Path, checkpoint: dict[str, Any]) -> None:
         if not isinstance(data, dict):
             raise ValueError(f"latest checkpoint is internally inconsistent: {name}")
         checkpoint_file = cast(dict[str, Any], data)
+        if checkpoint_file.get("schema_version") != CHECKPOINT_SCHEMA_VERSION:
+            raise ValueError(f"latest checkpoint {name} schema_version is not supported")
         if checkpoint_file.get("checkpoint_id") != checkpoint_id:
             raise ValueError(f"latest checkpoint is internally inconsistent: {name}")
         payload_key = "findings" if name == "findings.json" else "events"
@@ -134,7 +136,7 @@ def _validate_latest_checkpoint(root: Path, checkpoint: dict[str, Any]) -> None:
             if entry.get("checkpoint_id") != checkpoint_id:
                 raise ValueError(f"latest checkpoint is internally inconsistent: {name}")
     summary = latest_checkpoint_dir(root) / "summary.md"
-    if not summary.exists():
+    if not summary.is_file() or summary.is_symlink():
         raise ValueError("latest checkpoint is internally inconsistent: missing summary.md")
     base = checkpoint["review_base_commit"]
     if not isinstance(base, str):
@@ -233,8 +235,16 @@ def write_latest_checkpoint(
     events = _checkpoint_events(store, session_id, checkpoint_id)
     files = {
         "status.json": base_status,
-        "findings.json": {"checkpoint_id": checkpoint_id, "findings": findings},
-        "events.json": {"checkpoint_id": checkpoint_id, "events": events},
+        "findings.json": {
+            "schema_version": CHECKPOINT_SCHEMA_VERSION,
+            "checkpoint_id": checkpoint_id,
+            "findings": findings,
+        },
+        "events.json": {
+            "schema_version": CHECKPOINT_SCHEMA_VERSION,
+            "checkpoint_id": checkpoint_id,
+            "events": events,
+        },
     }
     summary = _render_summary(base_status, findings, events)
     pointer_path = latest_checkpoint_pointer(root)
@@ -280,7 +290,7 @@ def write_latest_checkpoint(
         elif pointer_backup_dir.exists():
             shutil.rmtree(pointer_backup_dir)
         with suppress(OSError):
-            pointer_tmp.unlink()
+            pointer_tmp.unlink(missing_ok=True)
         raise
     if backup_dir.exists():
         shutil.rmtree(backup_dir)
