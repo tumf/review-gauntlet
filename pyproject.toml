@@ -6,11 +6,29 @@ readme = "README.md"
 authors = [
     { name = "tumf", email = "tumf@users.noreply.github.com" }
 ]
+license = "MIT"
 requires-python = ">=3.11"
+keywords = ["agentic", "code-review", "coverage", "review", "cli"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Quality Assurance",
+]
 dependencies = [
     "pydantic>=2.13.4",
     "pydantic-settings>=2.14.1",
 ]
+
+[project.urls]
+Repository = "https://github.com/tumf/review-gauntlet"
+Issues = "https://github.com/tumf/review-gauntlet/issues"
 
 [project.scripts]
 review-gauntlet = "review_gauntlet.cli:main"

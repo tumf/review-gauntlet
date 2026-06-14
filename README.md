@@ -14,6 +14,12 @@ uv sync
 make check
 ```
 
+Run the published CLI without installing it permanently:
+
+```bash
+uvx review-gauntlet --help
+```
+
 Install the local CLI as the canonical `review-gauntlet` command when you want to
 run it outside `uv run`:
 
