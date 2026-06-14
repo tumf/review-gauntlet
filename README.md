@@ -45,7 +45,7 @@ review-gauntlet status
 
 # 7. Triage or fix live findings. Mark fixed items, then re-run the verifier.
 review-gauntlet mark <finding-id> fixed --reason "fixed in follow-up"
-review-gauntlet verify-fixes --config review-gauntlet.jsonc
+review-gauntlet verify-fixes
 review-gauntlet status
 
 # 8. Finalize only after status reports can_finalize: true
@@ -193,7 +193,7 @@ review-gauntlet init
 review-gauntlet review
 review-gauntlet status
 review-gauntlet findings
-review-gauntlet verify-fixes --config review-gauntlet.jsonc
+review-gauntlet verify-fixes
 review-gauntlet finalize
 ```
 
@@ -276,7 +276,7 @@ finding decisions, and finalize only when both coverage and findings are closed:
 review-gauntlet status
 review-gauntlet findings
 review-gauntlet mark <finding-id> fixed --reason "fixed in follow-up"
-review-gauntlet verify-fixes --config review-gauntlet.jsonc
+review-gauntlet verify-fixes
 review-gauntlet finalize
 # Finalize writes Git-reviewable JSON/Markdown snapshots atomically.
 git add .review-gauntlet/checkpoints/latest
