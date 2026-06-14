@@ -13,6 +13,28 @@ coverage is complete.
 Reviewers find issues. Review Gauntlet proves which files were checked against
 which rules.
 
+## Quick Start
+
+The fastest way to review a repository:
+
+```bash
+# 1. Install the CLI (skip if already installed)
+uv tool install review-gauntlet
+
+# 2. Create an adapter config (uses bundled presets — no clone required)
+uvx review-gauntlet config init --preset opencode
+
+# 3. Run the review pipeline
+review-gauntlet init
+review-gauntlet review
+review-gauntlet status
+review-gauntlet finalize
+```
+
+Review Gauntlet builds a files × rules coverage matrix, runs the configured
+reviewer against each cell, records evidence, and only finalizes when all
+required coverage is complete.
+
 ## How is this different from AI review tools?
 
 AI review tools usually generate comments from a diff. Review Gauntlet starts one
@@ -45,26 +67,9 @@ Review Gauntlet makes code review plan-first and auditable.
 6. Finalize only when complete
    - Review Gauntlet only finalizes when required coverage is complete and live findings are closed
 
-## Prerequisites
-
-Review Gauntlet requires a configured external review agent before use. Install and
-configure the agent CLI you want to use, then install the matching agent skill or
-prompt guidance for that agent.
-
-For example, with opencode:
-
-```bash
-opencode --help
-```
-
-Then create a `review-gauntlet.jsonc` adapter configuration that invokes that agent.
-Review Gauntlet tracks coverage and evidence; the configured agent performs the
-actual code review.
-
 ## Before you run a review
 
-A review session does not work from the CLI alone. Install all required pieces
-first:
+A review session does not work from the CLI alone. Install all required pieces first:
 
 1. install the `review-gauntlet` CLI
 2. install and configure an external review agent CLI
@@ -92,12 +97,10 @@ Review Gauntlet discovers config automatically from
 directory. Starter presets are bundled in the installed package, so first-time users
 do not need to clone this repository to create a config.
 
-Create a project config for opencode:
+Create a project config:
 
 ```bash
-uvx review-gauntlet config init --preset opencode
-# or: review-gauntlet config init --preset codex
-# or: review-gauntlet config init --preset claude
+review-gauntlet config init --preset opencode
 ```
 
 Create a global default config instead:
@@ -245,9 +248,11 @@ git add .review-gauntlet/checkpoints/latest
 Successful `finalize` requires both coverage and live findings to be closed and
 review-universe files to match `HEAD`; dirty tracked, staged, unstaged, or
 untracked eligible files block checkpoint creation. It writes
-`.review-gauntlet/checkpoints/latest/status.json`, `findings.json`, `events.json`,
-and `summary.md`, then clears the active session so the next command is
-`review-gauntlet init`. There is intentionally no separate checkpoint command.
+`status.json`, `findings.json`, `events.json`, and `summary.md` under a generated
+checkpoint directory such as `.review-gauntlet/checkpoints/<checkpoint_id>/`, then updates
+`.review-gauntlet/checkpoints/latest` as a pointer to that checkpoint and clears the
+active session so the next command is `review-gauntlet init`. There is intentionally
+no separate checkpoint command.
 
 `review --concurrency` defaults to `8` and must be a positive integer. `--budget`
 still caps the total cells selected for one review run; `--concurrency` only limits
@@ -328,7 +333,7 @@ Minimal JSONC configuration for opencode file-json verdicts:
   "adapter": {
     "type": "command",
     "command": "opencode",
-    "args": ["run", "--dangerously-skip-permissions", "{prompt}"],
+    "args": ["run", "{prompt}"],
     "output": {"mode": "file-json", "path": "{output_file}"}
   }
 }
