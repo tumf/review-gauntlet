@@ -20,7 +20,17 @@ from review_gauntlet.checkpoint import (
     target_from_latest_checkpoint,
     write_latest_checkpoint,
 )
-from review_gauntlet.config import ConfigError, load_config
+from review_gauntlet.config import (
+    ConfigError,
+    default_global_config_path,
+    default_project_config_path,
+    list_presets,
+    load_config,
+    read_preset,
+    resolve_effective_config,
+    resolve_explicit_config_path,
+    validate_config_text,
+)
 from review_gauntlet.findings import FindingState, normalize_ocr_comment
 from review_gauntlet.inventory import (
     UnsafeRepositoryPathError,
@@ -232,6 +242,35 @@ def build_parser() -> argparse.ArgumentParser:
     _output_format_arg(finalize)
     _allow_non_review_dirty_arg(finalize)
 
+    config = subparsers.add_parser("config")
+    config_subparsers = config.add_subparsers(
+        dest="config_command", required=True, parser_class=UsageArgumentParser
+    )
+    config_init = config_subparsers.add_parser("init")
+    config_init.add_argument("root", nargs="?", default=".", help="Repository root (default: .)")
+    config_init.add_argument("--preset", choices=list_presets(), default="opencode")
+    config_init.add_argument("--global", dest="global_config", action="store_true")
+    config_init.add_argument("--force", action="store_true")
+    config_init.add_argument("--dry-run", action="store_true")
+    config_init.add_argument("--output", type=Path)
+    _output_format_arg(config_init)
+    config_list = config_subparsers.add_parser("list")
+    _output_format_arg(config_list)
+    config_show = config_subparsers.add_parser("show")
+    config_show.add_argument("preset", choices=list_presets())
+    config_validate = config_subparsers.add_parser("validate")
+    config_validate.add_argument(
+        "root", nargs="?", default=".", help="Repository root (default: .)"
+    )
+    config_validate.add_argument("--config", type=Path)
+    _output_format_arg(config_validate)
+    config_effective = config_subparsers.add_parser("effective")
+    config_effective.add_argument(
+        "root", nargs="?", default=".", help="Repository root (default: .)"
+    )
+    config_effective.add_argument("--config", type=Path)
+    _output_format_arg(config_effective)
+
     validate_verdict = subparsers.add_parser("validate-verdict")
     validate_verdict.add_argument("path", type=Path)
     _output_format_arg(validate_verdict)
@@ -410,6 +449,12 @@ def main(argv: list[str] | None = None) -> None:
     if args.command == "validate-verdict":
         _cmd_validate_verdict(args)
         return
+    if args.command == "config":
+        try:
+            _cmd_config(args)
+        except ConfigError as exc:
+            fail(str(exc))
+        return
 
     root = Path(args.root)
     if not root.is_dir():
@@ -426,6 +471,123 @@ def main(argv: list[str] | None = None) -> None:
         fail(str(exc))
     except LookupError as exc:
         fail(str(exc), code=1)
+
+
+def _cmd_config(args: argparse.Namespace) -> None:
+    command = str(args.config_command)
+    if command == "list":
+        if args.format == "json":
+            print(json.dumps({"presets": list(list_presets())}, indent=2, sort_keys=True))
+        else:
+            for preset in list_presets():
+                print(preset)
+        return
+    if command == "show":
+        print(read_preset(str(args.preset)), end="")
+        return
+    root = Path(args.root)
+    if command in {"init", "validate", "effective"} and not root.is_dir():
+        fail(f"root does not exist or is not a directory: {root}")
+    if command == "init":
+        _cmd_config_init(args, root)
+        return
+    if command == "validate":
+        _cmd_config_validate(args, root)
+        return
+    if command == "effective":
+        _cmd_config_effective(args, root)
+        return
+    raise ValueError(f"unsupported config command: {command}")
+
+
+def _cmd_config_init(args: argparse.Namespace, root: Path) -> None:
+    text = read_preset(str(args.preset))
+    validate_config_text(text, source=f"preset {args.preset}")
+    output_path = _config_init_output_path(args, root)
+    result: dict[str, object] = {
+        "preset": str(args.preset),
+        "path": str(output_path),
+        "global": bool(args.global_config),
+        "dry_run": bool(args.dry_run),
+        "written": False,
+    }
+    if args.dry_run:
+        result["contents"] = text
+    if output_path.exists() and not args.force and not args.dry_run:
+        raise ConfigError(f"config file already exists: {output_path}; use --force to overwrite")
+    if not args.dry_run:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(text, encoding="utf-8")
+        result["written"] = True
+    if args.format == "json":
+        print(json.dumps(result, indent=2, sort_keys=True))
+    else:
+        action = "would write" if args.dry_run else "wrote"
+        print(f"{action} {args.preset} config to {output_path}")
+        if args.dry_run:
+            print("--- config contents ---")
+            print(text, end="" if text.endswith("\n") else "\n")
+
+
+def _config_init_output_path(args: argparse.Namespace, root: Path) -> Path:
+    if args.output is not None:
+        return (
+            args.output.expanduser().resolve()
+            if args.output.is_absolute()
+            else (root / args.output).resolve()
+        )
+    if args.global_config:
+        return default_global_config_path()
+    return default_project_config_path(root)
+
+
+def _cmd_config_validate(args: argparse.Namespace, root: Path) -> None:
+    if args.config is not None:
+        path = resolve_explicit_config_path(root, args.config)
+        config = validate_config_text(path.read_text(encoding="utf-8"), source=str(path))
+        _emit(
+            {"valid": True, "path": str(path), "adapter_command": config.adapter.command},
+            args.format,
+        )
+        return
+    resolved = resolve_effective_config(root)
+    if resolved is None:
+        raise ConfigError(_missing_config_guidance("config validate"))
+    _emit(
+        {
+            "valid": True,
+            "path": str(resolved.path),
+            "sources": [str(source) for source in resolved.sources],
+            "adapter_command": resolved.config.adapter.command,
+        },
+        args.format,
+    )
+
+
+def _cmd_config_effective(args: argparse.Namespace, root: Path) -> None:
+    resolved = resolve_effective_config(root, args.config)
+    if resolved is None:
+        raise ConfigError(_missing_config_guidance("config effective"))
+    payload = resolved.config.model_dump(mode="json")
+    if args.format == "json":
+        print(
+            json.dumps(
+                {"sources": [str(source) for source in resolved.sources], **payload},
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return
+    _emit({"sources": [str(source) for source in resolved.sources], **payload}, args.format)
+
+
+def _missing_config_guidance(command: str) -> str:
+    return (
+        f"{command} requires a command adapter config. Create one with "
+        "`review-gauntlet config init --preset opencode`, create a global default with "
+        "`review-gauntlet config init --global --preset opencode`, or inspect presets with "
+        "`review-gauntlet config list`."
+    )
 
 
 def _cmd_validate_verdict(args: argparse.Namespace) -> None:
@@ -629,7 +791,7 @@ def _cmd_review(args: argparse.Namespace, root: Path, store: SessionStore) -> No
             ruleset=ruleset,
         )
     else:
-        raise ValueError("review requires --fixture or a command adapter config")
+        raise ValueError(_missing_config_guidance("review"))
     reporter = ReviewProgressReporter(enabled=args.audience == "human")
     reporter.run_start(
         session_id=session_id,
@@ -747,7 +909,7 @@ def _cmd_verify_fixes(args: argparse.Namespace, root: Path, store: SessionStore)
             ruleset=ruleset,
         )
     else:
-        raise ValueError("verify-fixes requires --fixture or a command adapter config")
+        raise ValueError(_missing_config_guidance("verify-fixes"))
     reporter = ReviewProgressReporter(enabled=args.audience == "human")
     reporter.run_start(
         session_id=session_id,

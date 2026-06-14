@@ -1,0 +1,14 @@
+{
+  // Sample command adapter for Claude Code CLI.
+  // The -p flag runs a non-interactive prompt.
+  // Command adapters default to file-json output; the prompt tells Claude to
+  // write OCR-style verdict JSON to {output_file}.
+  "adapter": {
+    "type": "command",
+    "command": "claude",
+    "args": [
+      "-p",
+      "{prompt}"
+    ]
+  }
+}

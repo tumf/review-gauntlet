@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import copy
 import json
 import math
 import os
 import re
 from enum import StrEnum
+from importlib import resources
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -19,10 +21,14 @@ CONFIG_DISCOVERY_NAMES = (
     "review-gauntlet.jsonc",
     "review-gauntlet.json",
 )
+PROJECT_CONFIG_PATH = Path(".review-gauntlet/config.jsonc")
+GLOBAL_CONFIG_PATH = Path("review-gauntlet/config.jsonc")
 XDG_CONFIG_DISCOVERY_NAMES = (
     "config.jsonc",
     "config.json",
 )
+PRESET_NAMES = ("claude", "opencode", "codex")
+BUILTIN_DEFAULT_CONFIG: dict[str, Any] = {}
 SUPPORTED_TEMPLATE_VARIABLES = frozenset(
     {
         "repo_root",
@@ -137,26 +143,55 @@ class ReviewGauntletConfig(BaseModel):
 def discover_config_path(root: Path, explicit: Path | None = None) -> Path | None:
     repo_root = root.resolve()
     if explicit is not None:
-        resolved = (
-            (repo_root / explicit).resolve() if not explicit.is_absolute() else explicit.resolve()
-        )
-        try:
-            resolved.relative_to(repo_root)
-        except ValueError as exc:
-            raise ConfigError(f"review config must be inside repository root: {explicit}") from exc
-        if not resolved.is_file():
-            raise ConfigError(f"review config does not exist: {explicit}")
-        return resolved
+        return resolve_explicit_config_path(repo_root, explicit)
+    project_path = discover_project_config_path(repo_root)
+    if project_path is not None:
+        return project_path
+    return discover_global_config_path()
+
+
+def discover_project_config_path(root: Path) -> Path | None:
+    repo_root = root.resolve()
     for name in CONFIG_DISCOVERY_NAMES:
         candidate = repo_root / name
         if candidate.is_file():
             return candidate
-    xdg_config_dir = _xdg_config_home() / "review-gauntlet"
+    return None
+
+
+def discover_global_config_path() -> Path | None:
+    xdg_config_dir = global_config_dir()
     for name in XDG_CONFIG_DISCOVERY_NAMES:
         candidate = xdg_config_dir / name
         if candidate.is_file():
             return candidate
     return None
+
+
+def resolve_explicit_config_path(root: Path, explicit: Path) -> Path:
+    repo_root = root.resolve()
+    resolved = (
+        explicit.expanduser().resolve()
+        if explicit.is_absolute()
+        else (repo_root / explicit).resolve()
+    )
+    if not resolved.exists():
+        raise ConfigError(f"review config does not exist: {explicit}")
+    if not resolved.is_file():
+        raise ConfigError(f"review config is not a file: {explicit}")
+    return resolved
+
+
+def global_config_dir() -> Path:
+    return _xdg_config_home() / "review-gauntlet"
+
+
+def default_global_config_path() -> Path:
+    return _xdg_config_home() / GLOBAL_CONFIG_PATH
+
+
+def default_project_config_path(root: Path) -> Path:
+    return root.resolve() / PROJECT_CONFIG_PATH
 
 
 def _xdg_config_home() -> Path:
@@ -169,15 +204,94 @@ def _xdg_config_home() -> Path:
 def load_config(
     root: Path, explicit: Path | None = None
 ) -> tuple[Path, ReviewGauntletConfig] | None:
-    path = discover_config_path(root, explicit)
-    if path is None:
+    resolved = resolve_effective_config(root, explicit)
+    if resolved is None or resolved.path is None:
         return None
+    return resolved.path, resolved.config
+
+
+class EffectiveConfig(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    path: Path | None
+    sources: tuple[Path, ...]
+    config: ReviewGauntletConfig
+
+
+def resolve_effective_config(root: Path, explicit: Path | None = None) -> EffectiveConfig | None:
+    repo_root = root.resolve()
+    sources: list[Path] = []
+    merged: dict[str, Any] = copy.deepcopy(BUILTIN_DEFAULT_CONFIG)
+    if explicit is None:
+        global_path = discover_global_config_path()
+        if global_path is not None:
+            merged = deep_merge(merged, load_raw_config(global_path))
+            sources.append(global_path)
+        project_path = discover_project_config_path(repo_root)
+        if project_path is not None:
+            merged = deep_merge(merged, load_raw_config(project_path))
+            sources.append(project_path)
+    else:
+        explicit_path = resolve_explicit_config_path(repo_root, explicit)
+        merged = deep_merge(merged, load_raw_config(explicit_path))
+        sources.append(explicit_path)
+    if not merged:
+        return None
+    try:
+        return EffectiveConfig(
+            path=sources[-1] if sources else None,
+            sources=tuple(sources),
+            config=ReviewGauntletConfig.model_validate(merged),
+        )
+    except Exception as exc:
+        source_text = ", ".join(str(source) for source in sources) or "built-in defaults"
+        raise ConfigError(
+            f"invalid review config from effective sources {source_text}: {exc}"
+        ) from exc
+
+
+def load_raw_config(path: Path) -> dict[str, Any]:
     text = path.read_text(encoding="utf-8")
     try:
         raw = json.loads(_strip_jsonc(text))
-        return path, ReviewGauntletConfig.model_validate(raw)
     except Exception as exc:
         raise ConfigError(f"invalid review config {path}: {exc}") from exc
+    if not isinstance(raw, dict):
+        raise ConfigError(f"invalid review config {path}: top-level value must be an object")
+    return cast(dict[str, Any], raw)
+
+
+def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    result = copy.deepcopy(base)
+    for key, value in override.items():
+        existing = result.get(key)
+        if isinstance(existing, dict) and isinstance(value, dict):
+            result[key] = deep_merge(cast(dict[str, Any], existing), cast(dict[str, Any], value))
+        else:
+            result[key] = copy.deepcopy(value)
+    return result
+
+
+def list_presets() -> tuple[str, ...]:
+    return PRESET_NAMES
+
+
+def read_preset(name: str) -> str:
+    if name not in PRESET_NAMES:
+        raise ConfigError(f"unknown config preset: {name}")
+    return (
+        resources.files("review_gauntlet.presets")
+        .joinpath(f"{name}.jsonc")
+        .read_text(encoding="utf-8")
+    )
+
+
+def validate_config_text(text: str, *, source: str) -> ReviewGauntletConfig:
+    try:
+        raw = json.loads(_strip_jsonc(text))
+        return ReviewGauntletConfig.model_validate(raw)
+    except Exception as exc:
+        raise ConfigError(f"invalid review config {source}: {exc}") from exc
 
 
 def _validate_template_string(value: str) -> None:

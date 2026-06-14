@@ -1,0 +1,14 @@
+{
+  // Sample command adapter for opencode.
+  // The generated review prompt is expanded into one argv element at {prompt}.
+  // Command adapters default to file-json output; the prompt tells opencode to
+  // write OCR-style verdict JSON to {output_file}.
+  "adapter": {
+    "type": "command",
+    "command": "opencode",
+    "args": [
+      "run",
+      "{prompt}"
+    ]
+  }
+}
