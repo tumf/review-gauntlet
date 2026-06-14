@@ -183,7 +183,7 @@ def test_ready_priority_order_is_deterministic(
 
     prompt = _ready_json(tmp_path, capsys)["prompt"]
     assert prompt is not None
-    assert "Review stale review cells" in prompt
+    assert "Re-triage reopened findings" in prompt
 
     _set_all_cells(tmp_path, CellState.PENDING)
     assert "Review pending review cells" in _ready_prompt(tmp_path, capsys)
@@ -302,7 +302,7 @@ def test_status_prioritizes_pending_review_cells_before_confirmed_findings(
     ]
 
 
-def test_status_prioritizes_stale_review_cells_before_confirmed_findings(
+def test_status_prioritizes_confirmed_findings_before_stale_review_cells(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _init_session(tmp_path, capsys)
@@ -314,12 +314,82 @@ def test_status_prioritizes_stale_review_cells_before_confirmed_findings(
     data = json.loads(capsys.readouterr().out)
     assert data["coverage"] == {CellState.STALE.value: 1}
     assert data["finding_state_counts"] == {FindingState.CONFIRMED.value: 1}
-    assert data["next_required_action"] == "run_review"
+    assert data["next_required_action"] == "fix_confirmed_findings"
     assert data["finalize_blockers"] == [
         "review cells are stale after target changes",
         "findings remain confirmed",
         "no review run has been completed",
     ]
+
+
+def test_status_prioritizes_untriaged_findings_before_stale_review_cells(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_session(tmp_path, capsys)
+    _set_all_cells(tmp_path, CellState.STALE)
+    _insert_finding(tmp_path, FindingState.UNTRIAGED, 1)
+
+    main(["status", str(tmp_path), "--format", "json"])
+
+    data = json.loads(capsys.readouterr().out)
+    assert data["coverage"] == {CellState.STALE.value: 1}
+    assert data["finding_state_counts"] == {FindingState.UNTRIAGED.value: 1}
+    assert data["next_required_action"] == "triage_findings"
+    assert data["finalize_blockers"] == [
+        "review cells are stale after target changes",
+        "findings remain untriaged",
+        "no review run has been completed",
+    ]
+
+
+def test_status_prioritizes_reopened_findings_before_stale_review_cells(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_session(tmp_path, capsys)
+    _set_all_cells(tmp_path, CellState.STALE)
+    _insert_finding(tmp_path, FindingState.REOPENED, 1)
+
+    main(["status", str(tmp_path), "--format", "json"])
+
+    data = json.loads(capsys.readouterr().out)
+    assert data["coverage"] == {CellState.STALE.value: 1}
+    assert data["finding_state_counts"] == {FindingState.REOPENED.value: 1}
+    assert data["next_required_action"] == "triage_findings"
+    assert data["finalize_blockers"] == [
+        "review cells are stale after target changes",
+        "findings remain reopened",
+        "no review run has been completed",
+    ]
+
+
+def test_status_keeps_stale_only_review_cells_reachable(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_session(tmp_path, capsys)
+    _set_all_cells(tmp_path, CellState.STALE)
+
+    main(["status", str(tmp_path), "--format", "json"])
+
+    data = json.loads(capsys.readouterr().out)
+    assert data["coverage"] == {CellState.STALE.value: 1}
+    assert data["finding_state_counts"] == {}
+    assert data["next_required_action"] == "run_review"
+    assert data["finalize_blockers"] == [
+        "review cells are stale after target changes",
+        "no review run has been completed",
+    ]
+
+
+def test_ready_keeps_stale_only_review_cells_reachable(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_session(tmp_path, capsys)
+    _set_all_cells(tmp_path, CellState.STALE)
+
+    prompt = _ready_json(tmp_path, capsys)["prompt"]
+
+    assert prompt is not None
+    _assert_skill_directed_short_prompt(prompt, "Review stale review cells")
 
 
 def test_status_keeps_digest_drift_as_finalize_blocker_when_coverage_is_complete(
@@ -362,7 +432,7 @@ def test_status_prioritizes_pending_review_cells_before_fixed_pending_findings(
     ]
 
 
-def test_status_prioritizes_stale_review_cells_before_fixed_pending_findings(
+def test_status_prioritizes_fixed_pending_findings_before_stale_review_cells(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _init_session(tmp_path, capsys)
@@ -374,7 +444,7 @@ def test_status_prioritizes_stale_review_cells_before_fixed_pending_findings(
     data = json.loads(capsys.readouterr().out)
     assert data["coverage"] == {CellState.STALE.value: 1}
     assert data["finding_state_counts"] == {FindingState.FIXED_PENDING_VERIFICATION.value: 1}
-    assert data["next_required_action"] == "run_review"
+    assert data["next_required_action"] == "run_verify_fixes"
     assert data["finalize_blockers"] == [
         "review cells are stale after target changes",
         "fixed findings require verification",
@@ -482,8 +552,8 @@ def test_ready_prompts_review_for_incomplete_coverage_before_confirmed_findings(
     _set_all_cells(tmp_path, CellState.STALE)
     stale_prompt = _ready_json(tmp_path, capsys)["prompt"]
     assert stale_prompt is not None
-    _assert_skill_directed_short_prompt(stale_prompt, "Review stale review cells")
-    assert "Fix the next confirmed finding" not in stale_prompt
+    _assert_skill_directed_short_prompt(stale_prompt, "Fix the next confirmed finding")
+    assert "Review stale review cells" not in stale_prompt
 
 
 def test_ready_prompts_review_for_incomplete_coverage_before_fixed_pending_findings(
@@ -500,8 +570,8 @@ def test_ready_prompts_review_for_incomplete_coverage_before_fixed_pending_findi
     _set_all_cells(tmp_path, CellState.STALE)
     stale_prompt = _ready_json(tmp_path, capsys)["prompt"]
     assert stale_prompt is not None
-    _assert_skill_directed_short_prompt(stale_prompt, "Review stale review cells")
-    assert "Verify fixed-pending findings" not in stale_prompt
+    _assert_skill_directed_short_prompt(stale_prompt, "Verify fixed-pending findings")
+    assert "Review stale review cells" not in stale_prompt
 
 
 def test_ready_prompts_verify_fixes_when_only_whole_digest_drifted(

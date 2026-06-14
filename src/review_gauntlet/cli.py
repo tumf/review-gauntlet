@@ -192,6 +192,17 @@ def build_parser() -> argparse.ArgumentParser:
         "--all", action="store_true", help="Include terminal findings (default: false)"
     )
     findings.add_argument(
+        "--limit",
+        type=_positive_int,
+        default=None,
+        help="Maximum findings to return (default: 10)",
+    )
+    findings.add_argument(
+        "--all-findings",
+        action="store_true",
+        help="Return all findings after visibility and filter rules (default: false)",
+    )
+    findings.add_argument(
         "--path", action="append", default=[], help="Filter by finding path (default: none)"
     )
     findings.add_argument(
@@ -244,6 +255,13 @@ def _concurrency_arg(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--concurrency", type=int, default=8, help="Review concurrency (default: 8)"
     )
+
+
+def _positive_int(value: str) -> int:
+    parsed = int(value)
+    if parsed < 1:
+        raise argparse.ArgumentTypeError("must be a positive integer")
+    return parsed
 
 
 def _audience_arg(parser: argparse.ArgumentParser) -> None:
@@ -384,6 +402,8 @@ def main(argv: list[str] | None = None) -> None:
 
     parser = build_parser()
     args = parser.parse_args(argv)
+    if args.command == "findings" and args.all_findings and args.limit is not None:
+        fail("findings --limit cannot be combined with --all-findings")
     if args.command == "completion":
         print(_completion_script(parser, args.shell), end="")
         return
@@ -491,6 +511,7 @@ def _run_session_command(args: argparse.Namespace, root: Path) -> None:
                 include_all=bool(args.all),
                 path_filters=tuple(args.path),
                 mark_filters=tuple(args.mark),
+                limit=None if bool(args.all_findings) else int(args.limit or 10),
             ),
             args.format,
         )
@@ -1056,8 +1077,6 @@ def _ready_prompt(store: SessionStore, root: Path) -> str | None:
     current_coverage_requires_review = _current_review_coverage_requires_review(
         store, session_id, root
     )
-    if cell_counts.get(CellState.STALE.value, 0):
-        return _READY_PROMPTS["stale_review_cell"]
     if cell_counts.get(CellState.PENDING.value, 0):
         return _READY_PROMPTS["pending_review_cell"]
     finalize_reasons = _finalize_reasons(
@@ -1076,6 +1095,8 @@ def _ready_prompt(store: SessionStore, root: Path) -> str | None:
         return _READY_PROMPTS["confirmed"]
     if finding_counts.get(FindingState.FIXED_PENDING_VERIFICATION.value, 0):
         return _READY_PROMPTS["fixed_pending_verification"]
+    if cell_counts.get(CellState.STALE.value, 0):
+        return _READY_PROMPTS["stale_review_cell"]
     if not finalize_reasons or _finalize_blockers_are_commit_resolvable(finalize_reasons):
         return _READY_PROMPTS["finalize"]
     return None
@@ -1202,21 +1223,72 @@ def _findings(
     include_all: bool,
     path_filters: tuple[str, ...] = (),
     mark_filters: tuple[str, ...] = (),
+    limit: int | None = 10,
 ) -> dict[str, object]:
+    if limit is not None and limit < 1:
+        raise ValueError("findings --limit must be a positive integer")
     session_id = store.active_session_id()
     terminal = {state.value for state in _terminal_finding_states()}
     requested_states = {_FINDING_MARK_TO_STATE[mark].value for mark in mark_filters}
     normalized_path_filters = tuple(_normalize_finding_path(path) for path in path_filters)
     with store.connect() as conn:
-        rows = list(conn.execute("select * from findings where session_id = ?", (session_id,)))
-    findings = [
-        dict(row)
-        for row in rows
-        if (include_all or row["state"] not in terminal)
-        and (not requested_states or row["state"] in requested_states)
-        and _matches_finding_path_filters(str(row["path"]), normalized_path_filters)
-    ]
-    return {"session_id": session_id, "findings": findings}
+        rows = list(
+            conn.execute(
+                """
+                select
+                  f.*,
+                  coalesce(o.start_line, 0) as start_line,
+                  coalesce(o.end_line, 0) as end_line,
+                  coalesce(o.imprecise, 1) as imprecise
+                from findings f
+                left join (
+                  select fo.*
+                  from finding_occurrences fo
+                  join (
+                    select finding_id, max(occurrence_id) as occurrence_id
+                    from finding_occurrences
+                    group by finding_id
+                  ) latest
+                    on latest.finding_id = fo.finding_id
+                   and latest.occurrence_id = fo.occurrence_id
+                ) o on o.finding_id = f.finding_id
+                where f.session_id = ?
+                """,
+                (session_id,),
+            )
+        )
+    findings = sorted(
+        (
+            dict(row)
+            for row in rows
+            if (include_all or row["state"] not in terminal)
+            and (not requested_states or row["state"] in requested_states)
+            and _matches_finding_path_filters(str(row["path"]), normalized_path_filters)
+        ),
+        key=_finding_sort_key,
+    )
+    total = len(findings)
+    limited_findings = findings if limit is None else findings[:limit]
+    return {
+        "session_id": session_id,
+        "total": total,
+        "returned": len(limited_findings),
+        "findings": limited_findings,
+    }
+
+
+def _finding_sort_key(finding: dict[str, object]) -> tuple[str, int, int, str]:
+    return (
+        str(finding.get("path", "")),
+        _finding_int_field(finding, "start_line"),
+        _finding_int_field(finding, "end_line"),
+        str(finding.get("finding_id", "")),
+    )
+
+
+def _finding_int_field(finding: dict[str, object], key: str) -> int:
+    value = finding.get(key)
+    return int(value) if isinstance(value, int | str) else 0
 
 
 def _terminal_finding_states() -> set[FindingState]:
@@ -1376,7 +1448,7 @@ def _next_action(
     reasons: list[str],
     current_coverage_requires_review: bool,
 ) -> str:
-    if cell_counts.get("pending", 0) or cell_counts.get("stale", 0):
+    if cell_counts.get("pending", 0):
         return "run_review"
     if _finalize_blockers_include_target_digest_drift(reasons) and current_coverage_requires_review:
         return "run_review"
@@ -1386,6 +1458,8 @@ def _next_action(
         return "fix_confirmed_findings"
     if finding_counts.get("fixed_pending_verification", 0):
         return "run_verify_fixes"
+    if cell_counts.get("stale", 0):
+        return "run_review"
     if reasons:
         return "resolve_finalize_blockers"
     return "finalize"

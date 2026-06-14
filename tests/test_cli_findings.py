@@ -87,7 +87,9 @@ def test_findings_filters_by_single_file_path(
 
     data = json.loads(capsys.readouterr().out)
     assert [finding["finding_id"] for finding in data["findings"]] == ["RGF-config"]
-    assert set(data) == {"session_id", "findings"}
+    assert data["total"] == 1
+    assert data["returned"] == 1
+    assert set(data) == {"session_id", "total", "returned", "findings"}
 
 
 def test_findings_filters_by_directory_style_path_prefix(
@@ -296,6 +298,126 @@ def test_filtered_findings_does_not_mutate_runs_or_finding_events(
     after = _count_runs_and_finding_events(tmp_path)
 
     assert after == before
+
+
+def test_findings_default_limits_to_ten_after_filtering(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _create_session_with_numbered_findings(tmp_path, capsys, count=12)
+
+    main(["findings", str(tmp_path), "--format", "json"])
+
+    data = json.loads(capsys.readouterr().out)
+    assert data["total"] == 12
+    assert data["returned"] == 10
+    assert len(data["findings"]) == 10
+
+
+def test_findings_explicit_limit_slices_sorted_results(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _create_session_with_numbered_findings(tmp_path, capsys, count=6)
+
+    main(["findings", str(tmp_path), "--limit", "3", "--format", "json"])
+
+    data = json.loads(capsys.readouterr().out)
+    assert data["total"] == 6
+    assert data["returned"] == 3
+    assert [finding["finding_id"] for finding in data["findings"]] == [
+        "RGF-002",
+        "RGF-003",
+        "RGF-001",
+    ]
+
+
+def test_findings_all_findings_disables_result_limit(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _create_session_with_numbered_findings(tmp_path, capsys, count=12)
+
+    main(["findings", str(tmp_path), "--all-findings", "--format", "json"])
+
+    data = json.loads(capsys.readouterr().out)
+    assert data["total"] == 12
+    assert data["returned"] == 12
+    assert len(data["findings"]) == 12
+
+
+def test_findings_all_and_all_findings_are_independent(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _create_session_with_numbered_findings(tmp_path, capsys, count=12)
+    _insert_numbered_finding(tmp_path, index=99, state="fixed_verified")
+
+    main(["findings", str(tmp_path), "--all-findings", "--format", "json"])
+    all_findings_data = json.loads(capsys.readouterr().out)
+    main(["findings", str(tmp_path), "--all", "--all-findings", "--format", "json"])
+    all_visible_data = json.loads(capsys.readouterr().out)
+
+    assert all_findings_data["total"] == 12
+    assert "RGF-099" not in {finding["finding_id"] for finding in all_findings_data["findings"]}
+    assert all_visible_data["total"] == 13
+    assert "RGF-099" in {finding["finding_id"] for finding in all_visible_data["findings"]}
+
+
+def test_findings_rejects_limit_with_all_findings(tmp_path: Path) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        main(["findings", str(tmp_path), "--limit", "3", "--all-findings"])
+
+    assert exc_info.value.code == 64
+
+
+def test_findings_rejects_non_positive_limit() -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        main(["findings", ".", "--limit", "0"])
+
+    assert exc_info.value.code == 64
+
+
+def _create_session_with_numbered_findings(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], *, count: int
+) -> None:
+    (tmp_path / "README.md").write_text("# docs\n", encoding="utf-8")
+    main(["init", str(tmp_path), "--worktree", "--format", "json"])
+    capsys.readouterr()
+    for index in range(1, count + 1):
+        _insert_numbered_finding(tmp_path, index=index, state="confirmed")
+
+
+def _insert_numbered_finding(tmp_path: Path, *, index: int, state: str) -> None:
+    session_id = json.loads((tmp_path / ".review-gauntlet" / "active-session.json").read_text())[
+        "session_id"
+    ]
+    finding_id = f"RGF-{index:03d}"
+    path, start_line, end_line = _numbered_finding_location(index)
+    with sqlite3.connect(tmp_path / ".review-gauntlet" / "ledger.sqlite") as conn:
+        conn.execute(
+            """
+            insert into findings(
+                session_id, finding_id, fingerprint, state, path, rule_id, content, metadata
+            )
+            values (?, ?, ?, ?, ?, 'docs', 'content', '{}')
+            """,
+            (session_id, finding_id, f"fp-{index:03d}", state, path),
+        )
+        conn.execute(
+            """
+            insert into finding_occurrences(
+                finding_id, run_id, cell_id, path, start_line, end_line, imprecise
+            )
+            values (?, 1, 'cell', ?, ?, ?, 0)
+            """,
+            (finding_id, path, start_line, end_line),
+        )
+
+
+def _numbered_finding_location(index: int) -> tuple[str, int, int]:
+    locations = {
+        1: ("a.py", 2, 2),
+        2: ("a.py", 1, 1),
+        3: ("a.py", 2, 1),
+    }
+    return locations.get(index, (f"b/{index:03d}.py", index, index))
 
 
 def _create_session_with_findings(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
