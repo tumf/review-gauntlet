@@ -17,23 +17,45 @@ which rules.
 
 The fastest way to review a repository:
 
+Review Gauntlet is not a standalone reviewer. Before starting, install and
+authenticate an external review agent CLI such as opencode, install the matching
+Review Gauntlet skill or prompt guidance for that agent, and create an adapter
+config that tells Review Gauntlet how to call it.
+
 ```bash
 # 1. Install the CLI (skip if already installed)
 uv tool install review-gauntlet
 
-# 2. Create an adapter config (uses bundled presets — no clone required)
+# 2. Install/configure the external review agent separately, then create an adapter config
 uvx review-gauntlet config init --preset opencode
 
-# 3. Run the review pipeline
+# 3. Start a review session for the current repository
 review-gauntlet init
+
+# 4. Run one review batch through the configured adapter
+review-gauntlet review
+
+# 5. Check coverage, findings, and the next required action
+review-gauntlet status
+review-gauntlet findings
+
+# 6. Keep reviewing until coverage has no pending or stale cells
 review-gauntlet review
 review-gauntlet status
+
+# 7. Triage or fix live findings. Mark fixed items, then re-run the verifier.
+review-gauntlet mark <finding-id> fixed --reason "fixed in follow-up"
+review-gauntlet verify-fixes --config review-gauntlet.jsonc
+review-gauntlet status
+
+# 8. Finalize only after status reports can_finalize: true
 review-gauntlet finalize
 ```
 
-Review Gauntlet builds a files × rules coverage matrix, runs the configured
-reviewer against each cell, records evidence, and only finalizes when all
-required coverage is complete.
+`review` advances only one batch at a time. `verify-fixes` re-checks findings marked
+`fixed_pending_verification` and moves them to `fixed_verified` or `reopened`.
+`finalize` succeeds only after required coverage is complete, live findings are
+closed, and `status` reports `can_finalize: true`.
 
 ## How is this different from AI review tools?
 
