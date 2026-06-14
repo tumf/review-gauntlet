@@ -185,17 +185,41 @@ command with `uv tool install --reinstall .`.
 
 ## Basic usage
 
-Start normal use by initializing a review session, then run exactly one review step
-with a configured external CLI adapter:
+Start by choosing an explicit review target, then repeat review steps until
+coverage is complete:
 
 ```bash
-review-gauntlet init
+# Review the current workspace diff.
+review-gauntlet init --worktree
+
+# Or review a branch/range.
+review-gauntlet init --from main --to HEAD
+
+# Or review the full repository.
+review-gauntlet init --all
+
+# Run one review step. Repeat this until status has no pending or stale coverage.
 review-gauntlet review
 review-gauntlet status
+
+# Inspect live findings and record triage decisions.
 review-gauntlet findings
+review-gauntlet mark <finding-id> confirmed --reason "valid issue"
+review-gauntlet mark <finding-id> false-positive --reason "not applicable"
+review-gauntlet mark <finding-id> fixed --reason "fixed in follow-up"
+
+# Re-check fixed findings, then inspect status again.
 review-gauntlet verify-fixes
+review-gauntlet status
+
+# Finalize only after coverage is complete, live findings are closed,
+# and status reports can_finalize: true.
 review-gauntlet finalize
 ```
+
+`review` advances exactly one step per invocation. `finalize` is a gate, not a
+cleanup command: it fails until required coverage is complete and live findings are
+closed.
 
 ### Convenient `ready` usage
 
