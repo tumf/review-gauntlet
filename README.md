@@ -21,28 +21,72 @@ Reviewers find issues. Review Gauntlet proves what was reviewed.
 
 Review Gauntlet is designed to work with reviewers, not compete with them.
 
-## Commands
+## Prerequisites
+
+Review Gauntlet requires a configured external review agent before use. Install and
+configure the agent CLI you want to use, then install the matching agent skill or
+prompt guidance for that agent.
+
+For example, with opencode:
 
 ```bash
-uv sync
-make check
+opencode --help
 ```
 
-Run the published CLI without installing it permanently:
+Then create a `review-gauntlet.jsonc` adapter configuration that invokes that agent.
+Review Gauntlet tracks coverage and evidence; the configured agent performs the
+actual code review.
+
+## Quick start
+
+Run Review Gauntlet without installing it permanently:
 
 ```bash
 uvx review-gauntlet --help
+uvx review-gauntlet init
+uvx review-gauntlet review --config review-gauntlet.jsonc
+uvx review-gauntlet status
 ```
 
-Install the local CLI as the canonical `review-gauntlet` command when you want to
-run it outside `uv run`:
+## Installation
+
+For regular use, install the CLI as `review-gauntlet`:
 
 ```bash
+uv tool install review-gauntlet
+review-gauntlet --help
+```
+
+## Install from source
+
+Use this when you want the latest GitHub version or want to contribute:
+
+```bash
+git clone https://github.com/tumf/review-gauntlet.git
+cd review-gauntlet
+uv sync
 make install
 review-gauntlet --help
 ```
 
-### Shell completion
+`make install` installs the local package as the canonical `review-gauntlet`
+command with `uv tool install --reinstall .`.
+
+## Basic usage
+
+Start normal use by initializing a review session, then run exactly one review step
+with a configured external CLI adapter:
+
+```bash
+review-gauntlet init
+review-gauntlet review --config review-gauntlet.jsonc
+review-gauntlet status
+review-gauntlet findings
+review-gauntlet verify-fixes --config review-gauntlet.jsonc
+review-gauntlet finalize
+```
+
+## Shell completion
 
 The installed `review-gauntlet` command can generate completion scripts for common
 interactive shells. Evaluate the script for the current session, or write it to the
@@ -67,13 +111,7 @@ Fish:
 review-gauntlet completion fish > ~/.config/fish/completions/review-gauntlet.fish
 ```
 
-Start normal use by initializing a review session, then run exactly one review step
-with a configured external CLI adapter:
-
-```bash
-uv run review-gauntlet init
-uv run review-gauntlet review --config review-gauntlet.jsonc
-```
+## Commands
 
 Target selection happens on `init`; `review` only advances the active session once.
 A bare `init` now uses `.review-gauntlet/checkpoints/latest/status.json` when a
@@ -84,36 +122,36 @@ OCR-compatible target mappings are:
 
 ```bash
 # Default review: latest finalized checkpoint -> HEAD, or all files for first review.
-uv run review-gauntlet init
+review-gauntlet init
 
 # OCR workspace diff review: staged, unstaged, and untracked non-ignored files.
-uv run review-gauntlet init --worktree
+review-gauntlet init --worktree
 
 # OCR branch/range review: files changed between two refs.
-uv run review-gauntlet init --from main --to HEAD
+review-gauntlet init --from main --to HEAD
 
 # OCR single-commit review: files changed by one commit.
-uv run review-gauntlet init --commit <commit-oid>
+review-gauntlet init --commit <commit-oid>
 
 # review-gauntlet-only full repository review: every eligible inventory file.
-uv run review-gauntlet init --all
+review-gauntlet init --all
 
 # Execute exactly one review step for the initialized session.
-uv run review-gauntlet review --config review-gauntlet.jsonc
+review-gauntlet review --config review-gauntlet.jsonc
 
 # Select at most 20 cells for this run and execute up to 4 adapter calls at once.
-uv run review-gauntlet review --budget 20 --concurrency 4
+review-gauntlet review --budget 20 --concurrency 4
 ```
 
 After a review step, inspect session state and findings, optionally record human
 finding decisions, and finalize only when both coverage and findings are closed:
 
 ```bash
-uv run review-gauntlet status
-uv run review-gauntlet findings
-uv run review-gauntlet mark <finding-id> fixed --reason "fixed in follow-up"
-uv run review-gauntlet verify-fixes --config review-gauntlet.jsonc
-uv run review-gauntlet finalize
+review-gauntlet status
+review-gauntlet findings
+review-gauntlet mark <finding-id> fixed --reason "fixed in follow-up"
+review-gauntlet verify-fixes --config review-gauntlet.jsonc
+review-gauntlet finalize
 # Finalize writes Git-reviewable JSON/Markdown snapshots atomically.
 git add .review-gauntlet/checkpoints/latest
 ```
@@ -140,19 +178,19 @@ rendering; they are not the normal day-to-day review lifecycle.
 Inspect the current repository inventory and classification:
 
 ```bash
-uv run review-gauntlet inventory
+review-gauntlet inventory
 ```
 
 Inspect the legacy review plan with slices and required checks:
 
 ```bash
-uv run review-gauntlet plan
+review-gauntlet plan
 ```
 
 Render the legacy markdown matrix report:
 
 ```bash
-uv run review-gauntlet report
+review-gauntlet report
 ```
 
 ## Default file filtering
@@ -228,9 +266,11 @@ Supported template variables include `{repo_root}`, `{state_dir}`, `{run_id}`,
 `{run_dir}`, `{cell_id}`, `{cell_dir}`, `{prompt}`, `{output_file}`,
 `{file_path}`, and `{rule_id}`.
 
-## Developer Workflow
+## Developer workflow
 
 ```bash
+uv sync
+make check
 make format
 make lint
 make typecheck
