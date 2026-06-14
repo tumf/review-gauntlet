@@ -1,0 +1,68 @@
+{
+  "checkpoint_id": "RGC-ca9c2318c407-RGS-cbea04d7806f",
+  "findings": [
+    {
+      "checkpoint_id": "RGC-ca9c2318c407-RGS-cbea04d7806f",
+      "content": "`review` reports success even when some selected cells never produce a result. `review_cells_concurrently` can return without entries for futures that are cancelled during executor shutdown or fail to be tracked in an unexpected path, and `_cmd_review` indexes `results[selected.id]` directly. That raises an uncaught `KeyError`, bypassing the CLI's structured failure response and exit handling. Treat missing results as adapter failures so the CLI contract remains stable.",
+      "finding_id": "RGF-0083",
+      "fingerprint": "025d2eb8ad06eef52f48ab03cb75a3fe802c9c251a19370998419240768b4d76",
+      "latest_occurrence": {
+        "cell_id": "RGC-98d51e4d6441e1d7",
+        "end_line": 654,
+        "finding_id": "RGF-0083",
+        "imprecise": 0,
+        "occurrence_id": 83,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 71,
+        "start_line": 653
+      },
+      "metadata": "{\"fingerprint\":\"025d2eb8ad06eef52f48ab03cb75a3fe802c9c251a19370998419240768b4d76\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"cli-contract\",\"content\":\"`review` reports success even when some selected cells never produce a result. `review_cells_concurrently` can return without entries for futures that are cancelled during executor shutdown or fail to be tracked in an unexpected path, and `_cmd_review` indexes `results[selected.id]` directly. That raises an uncaught `KeyError`, bypassing the CLI's structured failure response and exit handling. Treat missing results as adapter failures so the CLI contract remains stable.\",\"suggestion_code\":\"    for selected in selected_cells:\\n        outcome = results.get(selected.id)\\n        if outcome is None:\\n            outcome = ReviewAdapterError(\\n                f\\\"review cell produced no result: {selected.id}\\\",\\n                failure={\\\"error\\\": \\\"missing review result\\\", \\\"cell_id\\\": selected.id},\\n            )\",\"existing_code\":\"    for selected in selected_cells:\\n        outcome = results[selected.id]\",\"start_line\":653,\"end_line\":654,\"thinking\":\"CLI review commands should convert adapter execution anomalies into the documented failure payload rather than leaking KeyError.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "cli-contract",
+      "session_id": "RGS-cbea04d7806f",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ca9c2318c407-RGS-cbea04d7806f",
+      "content": "`verify-fixes` has the same direct lookup of concurrent review results. If a selected cell is missing from `results`, the command crashes with `KeyError` before emitting the verification summary, so callers lose `targeted_finding_ids`, reopened/unverifiable state, and the expected non-zero CLI response. Mirror the defensive handling used for review results.",
+      "finding_id": "RGF-0084",
+      "fingerprint": "0da9b75ac0e1b226831e8819790ff11dc0f76b943d449787543aead7a092d772",
+      "latest_occurrence": {
+        "cell_id": "RGC-98d51e4d6441e1d7",
+        "end_line": 771,
+        "finding_id": "RGF-0084",
+        "imprecise": 0,
+        "occurrence_id": 84,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 71,
+        "start_line": 770
+      },
+      "metadata": "{\"fingerprint\":\"0da9b75ac0e1b226831e8819790ff11dc0f76b943d449787543aead7a092d772\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"cli-contract\",\"content\":\"`verify-fixes` has the same direct lookup of concurrent review results. If a selected cell is missing from `results`, the command crashes with `KeyError` before emitting the verification summary, so callers lose `targeted_finding_ids`, reopened/unverifiable state, and the expected non-zero CLI response. Mirror the defensive handling used for review results.\",\"suggestion_code\":\"    for selected in selected_cells:\\n        outcome = results.get(selected.id)\\n        if outcome is None:\\n            outcome = ReviewAdapterError(\\n                f\\\"review cell produced no result: {selected.id}\\\",\\n                failure={\\\"error\\\": \\\"missing review result\\\", \\\"cell_id\\\": selected.id},\\n            )\",\"existing_code\":\"    for selected in selected_cells:\\n        outcome = results[selected.id]\",\"start_line\":770,\"end_line\":771,\"thinking\":\"The same concurrency boundary should preserve verify-fixes' structured output contract.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "cli-contract",
+      "session_id": "RGS-cbea04d7806f",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ca9c2318c407-RGS-cbea04d7806f",
+      "content": "Expired accepted-risk decisions are never detected because the SQL filter uses the dashed state value 'accepted-risk', while persisted FindingState.ACCEPTED_RISK values are 'accepted_risk'. This lets expired accepted-risk findings pass finalize validation.",
+      "finding_id": "RGF-0085",
+      "fingerprint": "013a6baf40aef7e2b3f2f03b8f86d9fd463b336acf777f0835f39451a8f5be3a",
+      "latest_occurrence": {
+        "cell_id": "RGC-6cefdd41be393570",
+        "end_line": 1424,
+        "finding_id": "RGF-0085",
+        "imprecise": 0,
+        "occurrence_id": 85,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 72,
+        "start_line": 1423
+      },
+      "metadata": "{\"fingerprint\":\"013a6baf40aef7e2b3f2f03b8f86d9fd463b336acf777f0835f39451a8f5be3a\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"data-validation\",\"content\":\"Expired accepted-risk decisions are never detected because the SQL filter uses the dashed state value 'accepted-risk', while persisted FindingState.ACCEPTED_RISK values are 'accepted_risk'. This lets expired accepted-risk findings pass finalize validation.\",\"suggestion_code\":\"            where session_id = ? and state in ('waived', 'accepted_risk')\",\"existing_code\":\"            where session_id = ? and state in ('waived', 'accepted-risk')\",\"start_line\":1423,\"end_line\":1424,\"thinking\":\"FindingState.ACCEPTED_RISK is defined as 'accepted_risk', and _terminal_finding_states also relies on that value. The current literal only matches the CLI marker spelling, not stored state.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-cbea04d7806f",
+      "state": "fixed_verified"
+    }
+  ]
+}
