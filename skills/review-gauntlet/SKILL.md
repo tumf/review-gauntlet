@@ -34,12 +34,14 @@ Use this sequence when the user asks you to perform a review:
 1. `review-gauntlet init` — choose the review target and create the session.
 2. `review-gauntlet review` — advance one step.
 3. `review-gauntlet status` — inspect coverage state.
-4. `review-gauntlet findings` — inspect findings.
+4. `review-gauntlet findings --format json` — inspect the bounded default findings page.
 5. `review-gauntlet mark <id> <state> --reason "..."` — record a human decision.
 6. `review-gauntlet verify-fixes` — verify fixed-pending findings.
 7. `review-gauntlet finalize` — confirm both coverage and findings are closed.
 
-Use `--format json` for all session-scoped commands (`init`, `status`, `review`, `verify-fixes`, `finalize`) so the agent can parse structured output. Use `--audience agent` on `review` and `verify-fixes` when the adapter runs without human interaction.
+Use `--format json` for all session-scoped commands (`init`, `status`, `review`, `findings`, `verify-fixes`, `finalize`) so the agent can parse structured output. Use `--audience agent` on `review` and `verify-fixes` when the adapter runs without human interaction.
+
+`findings` is intentionally bounded to 10 returned findings by default and reports both `total` and `returned`. Treat `returned < total` as explicit incompleteness: narrow with `--path`, `--mark`, or `--limit N` when working on a subset. Use `--all-findings` only when the workflow explicitly needs the entire filtered result set in one response. Do not confuse `--all` with `--all-findings`: `--all` includes terminal findings in visibility, while `--all-findings` disables result-size limiting.
 
 Run one `review` step at a time. Wait for human action between steps.
 
