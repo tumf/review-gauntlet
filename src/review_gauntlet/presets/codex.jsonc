@@ -1,0 +1,14 @@
+{
+  // Sample command adapter for Codex CLI.
+  // Adjust args if your local Codex command uses a different non-interactive mode.
+  // Command adapters default to file-json output; the prompt tells Codex to write
+  // OCR-style verdict JSON to {output_file}.
+  "adapter": {
+    "type": "command",
+    "command": "codex",
+    "args": [
+      "exec",
+      "{prompt}"
+    ]
+  }
+}

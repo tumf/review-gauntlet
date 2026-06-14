@@ -89,31 +89,50 @@ npx skills add tumf/review-gauntlet
 
 Review Gauntlet discovers config automatically from
 `.review-gauntlet/config.jsonc`, `review-gauntlet.jsonc`, or the XDG user config
-directory. The repository ships sample configs under `configs/`.
+directory. Starter presets are bundled in the installed package, so first-time users
+do not need to clone this repository to create a config.
 
-Copy the sample for your agent:
+Create a project config for opencode:
 
 ```bash
-cp configs/review-gauntlet-opencode.jsonc review-gauntlet.jsonc
-# or: cp configs/review-gauntlet-codex.jsonc review-gauntlet.jsonc
-# or: cp configs/review-gauntlet-claude.jsonc review-gauntlet.jsonc
+uvx review-gauntlet config init --preset opencode
+# or: review-gauntlet config init --preset codex
+# or: review-gauntlet config init --preset claude
 ```
 
-Edit `review-gauntlet.jsonc` if your agent command or arguments differ, then verify
-that `review-gauntlet review` runs end-to-end.
+Create a global default config instead:
+
+```bash
+review-gauntlet config init --global --preset opencode
+```
+
+Inspect available presets and validate the effective config:
+
+```bash
+review-gauntlet config list
+review-gauntlet config show opencode
+review-gauntlet config validate
+review-gauntlet config effective --format json
+```
+
+Use `--force` to overwrite an existing generated config, `--dry-run` to preview the
+write target without creating files, and `--output <path>` to write to a custom
+path. Edit the generated JSONC if your agent command or arguments differ, then
+verify that `review-gauntlet review` runs end-to-end.
 
 ---
 
 ```bash
-uv tool install review-gauntlet
-# (install the skill and adapter config as described above)
+uvx review-gauntlet config init --preset opencode
+# (install and authenticate the matching external review agent separately)
 review-gauntlet init
 review-gauntlet review
 review-gauntlet status
 ```
 
-Use `uvx review-gauntlet --help` only for a temporary CLI inspection; it does not
-install the agent skill or adapter config needed for review sessions.
+`uvx review-gauntlet config init --preset opencode` is the clone-free starter flow.
+For regular use, install the CLI with `uv tool install review-gauntlet` so the same
+command is available as `review-gauntlet`.
 
 ## Installation
 

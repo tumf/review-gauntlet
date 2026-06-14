@@ -6,8 +6,11 @@ import pytest
 from review_gauntlet.config import (
     CommandAdapterConfig,
     ConfigError,
+    deep_merge,
     discover_config_path,
     load_config,
+    read_preset,
+    resolve_effective_config,
 )
 
 CONFIG_PAYLOAD = '{"adapter":{"type":"command","command":"tool"}}'
@@ -96,12 +99,20 @@ def test_unset_xdg_config_home_falls_back_to_home_config(
     assert config.adapter.command == "home-tool"
 
 
-def test_explicit_config_rejects_out_of_repo_path(tmp_path: Path) -> None:
+def test_explicit_config_accepts_absolute_out_of_repo_path(tmp_path: Path) -> None:
     outside = tmp_path.parent / "outside-review-gauntlet.json"
     outside.write_text('{"adapter":{"type":"command","command":"tool"}}', encoding="utf-8")
 
-    with pytest.raises(ConfigError, match="inside repository root"):
-        load_config(tmp_path, outside)
+    loaded = load_config(tmp_path, outside)
+
+    assert loaded is not None
+    assert loaded[0] == outside.resolve()
+    assert loaded[1].adapter.command == "tool"
+
+
+def test_explicit_config_rejects_missing_path(tmp_path: Path) -> None:
+    with pytest.raises(ConfigError, match="does not exist"):
+        load_config(tmp_path, tmp_path / "missing.jsonc")
 
 
 def test_explicit_config_takes_precedence(tmp_path: Path) -> None:
@@ -258,3 +269,48 @@ def test_command_adapter_config_rejects_prompt_in_output_path_but_not_args_or_en
     )
     assert config.args == ("{prompt}",)
     assert config.env == {"PROMPT": "{prompt}"}
+
+
+def test_packaged_preset_lookup_validates_without_repo_configs() -> None:
+    text = read_preset("opencode")
+
+    assert '"command": "opencode"' in text
+    assert CommandAdapterConfig.model_validate({"type": "command", "command": "opencode"})
+
+
+def test_deep_merge_replaces_arrays_and_merges_objects() -> None:
+    base = {"adapter": {"args": ["old"], "env": {"A": "1", "B": "2"}, "command": "base"}}
+    override = {"adapter": {"args": ["new"], "env": {"B": "3"}}}
+
+    merged = deep_merge(base, override)
+
+    assert merged == {"adapter": {"args": ["new"], "env": {"A": "1", "B": "3"}, "command": "base"}}
+
+
+def test_effective_config_merges_global_then_project(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    xdg_home = tmp_path / "xdg-config"
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg_home))
+    global_config = xdg_home / "review-gauntlet" / "config.jsonc"
+    global_config.parent.mkdir(parents=True)
+    global_config.write_text(
+        '{"adapter":{"type":"command","command":"global","args":["old"],'
+        '"env":{"A":"1"},"timeout_seconds":10}}',
+        encoding="utf-8",
+    )
+    project_config = tmp_path / ".review-gauntlet" / "config.jsonc"
+    project_config.parent.mkdir(parents=True)
+    project_config.write_text(
+        '{"adapter":{"command":"project","args":["new"],"env":{"B":"2"}}}',
+        encoding="utf-8",
+    )
+
+    resolved = resolve_effective_config(tmp_path)
+
+    assert resolved is not None
+    assert resolved.config.adapter.command == "project"
+    assert resolved.config.adapter.args == ("new",)
+    assert resolved.config.adapter.env == {"A": "1", "B": "2"}
+    assert resolved.config.adapter.timeout_seconds == 10
+    assert resolved.sources == (global_config, project_config)

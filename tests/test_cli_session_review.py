@@ -388,6 +388,36 @@ def test_command_adapter_review_with_discovered_config(
     assert data["run_count"] == 1
 
 
+def test_command_adapter_review_accepts_absolute_config_outside_repo(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_session(tmp_path, capsys)
+    script = "import json; print(json.dumps({'comments':[]}))"
+    config = _command_config(tmp_path.parent, script, name="outside-review-gauntlet.jsonc")
+
+    main(["review", str(tmp_path), "--config", str(config), "--budget", "1", "--format", "json"])
+
+    data = json.loads(capsys.readouterr().out)
+    assert data["reviewed_cells"] == 1
+    assert data["run_count"] == 1
+
+
+def test_review_without_fixture_or_config_prints_actionable_config_guidance(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "missing-xdg-config"))
+    _init_session(tmp_path, capsys)
+
+    with pytest.raises(SystemExit) as exc_info:
+        main(["review", str(tmp_path), "--budget", "1"])
+
+    assert exc_info.value.code == 64
+    error = capsys.readouterr().err
+    assert "review-gauntlet config init --preset opencode" in error
+    assert "review-gauntlet config init --global --preset opencode" in error
+    assert "review-gauntlet config list" in error
+
+
 def test_command_adapter_reviews_selected_cells_concurrently_with_isolated_artifacts(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -613,7 +643,10 @@ def test_review_without_fixture_or_config_fails(
         main(["review", str(tmp_path), "--format", "json"])
 
     assert excinfo.value.code == 64
-    assert "requires --fixture or a command adapter config" in capsys.readouterr().err
+    error = capsys.readouterr().err
+    assert "review-gauntlet config init --preset opencode" in error
+    assert "review-gauntlet config init --global --preset opencode" in error
+    assert "review-gauntlet config list" in error
 
 
 def test_command_adapter_invalid_verdict_cli_failure_includes_diagnostics(
