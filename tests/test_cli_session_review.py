@@ -334,7 +334,7 @@ def test_pending_review_cells_remain_before_finding_work(
     assert status["next_required_action"] == "run_review"
 
 
-def test_fixed_finding_is_verified_only_when_relevant_path_is_reviewed(
+def test_fixed_finding_is_verified_when_relevant_path_is_reviewed(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _init_session(tmp_path, capsys)
@@ -354,7 +354,7 @@ def test_fixed_finding_is_verified_only_when_relevant_path_is_reviewed(
     empty_fixture.write_text("{}", encoding="utf-8")
     main(["review", str(tmp_path), "--fixture", str(empty_fixture), "--format", "json"])
     capsys.readouterr()
-    assert _finding_state(tmp_path) == "fixed_pending_verification"
+    assert _finding_state(tmp_path) == "fixed_verified"
 
 
 def test_partial_failure_verifies_fixed_findings_only_for_successful_paths(
@@ -432,7 +432,7 @@ def test_partial_failure_verifies_fixed_findings_only_for_successful_paths(
     assert data["failed_cell_id"] == readme_cell
     assert _finding_states_by_path(tmp_path) == {
         "README.md": "fixed_pending_verification",
-        "app.py": "fixed_pending_verification",
+        "app.py": "fixed_verified",
     }
 
 

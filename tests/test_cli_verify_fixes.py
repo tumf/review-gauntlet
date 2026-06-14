@@ -155,7 +155,7 @@ def test_verify_fixes_success_json_and_filters_only_fixed_pending(
     }
 
 
-def test_verify_fixes_redetection_reopens_and_exits_nonzero(
+def test_verify_fixes_redetection_reopens_without_command_failure(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     ids = _seed_two_fixed_findings(tmp_path, capsys)
@@ -175,11 +175,9 @@ def test_verify_fixes_redetection_reopens_and_exits_nonzero(
         },
     )
 
-    with pytest.raises(SystemExit) as exc_info:
-        main(["verify-fixes", str(tmp_path), "--fixture", str(fixture), "--format", "json"])
+    main(["verify-fixes", str(tmp_path), "--fixture", str(fixture), "--format", "json"])
 
     data = json.loads(capsys.readouterr().out)
-    assert exc_info.value.code == 1
     assert ids["README.md"] in data["reopened_ids"]
     assert _states_by_path(tmp_path)["README.md"] == "reopened"
 

@@ -1,0 +1,257 @@
+{
+  "checkpoint_id": "RGC-9e5f6db07104-RGS-bf5d11c1d8ec",
+  "findings": [
+    {
+      "checkpoint_id": "RGC-9e5f6db07104-RGS-bf5d11c1d8ec",
+      "content": "`make check` is documented as the CI-equivalent check, but it omits the coverage target even though CI runs `make coverage` after `make test`. This means a local `make check` can pass while the configured CI still fails in coverage collection/reporting, reducing reproducibility between local and CI validation.",
+      "finding_id": "RGF-0086",
+      "fingerprint": "7659f4f0820f3dca2cb001536a770084e7471246272ddd533b6e681e83f6fcb1",
+      "latest_occurrence": {
+        "cell_id": "RGC-1460e96899f5c625",
+        "end_line": 21,
+        "finding_id": "RGF-0086",
+        "imprecise": 0,
+        "occurrence_id": 86,
+        "path": "Makefile",
+        "run_id": 74,
+        "start_line": 21
+      },
+      "metadata": "{\"fingerprint\":\"7659f4f0820f3dca2cb001536a770084e7471246272ddd533b6e681e83f6fcb1\",\"path\":\"Makefile\",\"rule_id\":\"ci-reproducibility\",\"content\":\"`make check` is documented as the CI-equivalent check, but it omits the coverage target even though CI runs `make coverage` after `make test`. This means a local `make check` can pass while the configured CI still fails in coverage collection/reporting, reducing reproducibility between local and CI validation.\",\"suggestion_code\":\"check: format-check lint typecheck test coverage\",\"existing_code\":\"check: format-check lint typecheck test\",\"start_line\":21,\"end_line\":21,\"thinking\":\"CI runs format-check, lint, typecheck, test, and coverage. The Makefile check aggregate should include the same targets if it is intended to reproduce CI locally.\",\"imprecise\":false}",
+      "path": "Makefile",
+      "rule_id": "ci-reproducibility",
+      "session_id": "RGS-bf5d11c1d8ec",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-9e5f6db07104-RGS-bf5d11c1d8ec",
+      "content": "GitHub-hosted runner image is not pinned. `ubuntu-latest` can move to a new Ubuntu release and change system packages or Python/uv behavior, making CI failures non-reproducible. Pin the runner to a concrete image version.",
+      "finding_id": "RGF-0087",
+      "fingerprint": "74b0c0356c3b3a1a2f3a7e36a3d90b17f795ddcb048b7c76d6a2ca508c90607e",
+      "latest_occurrence": {
+        "cell_id": "RGC-28c8daef87e0bafa",
+        "end_line": 11,
+        "finding_id": "RGF-0087",
+        "imprecise": 0,
+        "occurrence_id": 87,
+        "path": ".github/workflows/ci.yml",
+        "run_id": 74,
+        "start_line": 11
+      },
+      "metadata": "{\"fingerprint\":\"74b0c0356c3b3a1a2f3a7e36a3d90b17f795ddcb048b7c76d6a2ca508c90607e\",\"path\":\".github/workflows/ci.yml\",\"rule_id\":\"ci-reproducibility\",\"content\":\"GitHub-hosted runner image is not pinned. `ubuntu-latest` can move to a new Ubuntu release and change system packages or Python/uv behavior, making CI failures non-reproducible. Pin the runner to a concrete image version.\",\"suggestion_code\":\"    runs-on: ubuntu-24.04\",\"existing_code\":\"    runs-on: ubuntu-latest\",\"start_line\":11,\"end_line\":11,\"thinking\":\"The selected rule is ci-reproducibility; runner drift is a direct reproducibility risk in this workflow.\",\"imprecise\":false}",
+      "path": ".github/workflows/ci.yml",
+      "rule_id": "ci-reproducibility",
+      "session_id": "RGS-bf5d11c1d8ec",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-9e5f6db07104-RGS-bf5d11c1d8ec",
+      "content": "The `setup-uv` action is referenced by a moving tag rather than an immutable commit SHA. If the tag is retargeted or the action changes behavior, this CI job may no longer be reproducible. Pin the action to a reviewed commit SHA.",
+      "finding_id": "RGF-0088",
+      "fingerprint": "7d6550c4406896250d99129ff308dbded330b6b33368ec81ca617f8987dbbd46",
+      "latest_occurrence": {
+        "cell_id": "RGC-28c8daef87e0bafa",
+        "end_line": 18,
+        "finding_id": "RGF-0088",
+        "imprecise": 0,
+        "occurrence_id": 88,
+        "path": ".github/workflows/ci.yml",
+        "run_id": 74,
+        "start_line": 18
+      },
+      "metadata": "{\"fingerprint\":\"7d6550c4406896250d99129ff308dbded330b6b33368ec81ca617f8987dbbd46\",\"path\":\".github/workflows/ci.yml\",\"rule_id\":\"ci-reproducibility\",\"content\":\"The `setup-uv` action is referenced by a moving tag rather than an immutable commit SHA. If the tag is retargeted or the action changes behavior, this CI job may no longer be reproducible. Pin the action to a reviewed commit SHA.\",\"suggestion_code\":\"        uses: astral-sh/setup-uv@<commit-sha>\",\"existing_code\":\"        uses: astral-sh/setup-uv@v6\",\"start_line\":18,\"end_line\":18,\"thinking\":\"Third-party actions are executable dependencies; pinning to immutable SHAs improves CI reproducibility and supply-chain determinism.\",\"imprecise\":false}",
+      "path": ".github/workflows/ci.yml",
+      "rule_id": "ci-reproducibility",
+      "session_id": "RGS-bf5d11c1d8ec",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-9e5f6db07104-RGS-bf5d11c1d8ec",
+      "content": "The project advertises Python 3.12 and 3.13 support in its package metadata, but the repository's CI only installs and tests Python 3.11 and Pyright is configured for Python 3.11. This makes the published compatibility claim unreproducible from CI and can let unsupported-version breakage ship unnoticed.",
+      "finding_id": "RGF-0089",
+      "fingerprint": "7454bf99dd475cff9c08284ae0f666a9e7108259f7e69021d03ffa50bbd5837d",
+      "latest_occurrence": {
+        "cell_id": "RGC-9fb153e49558bbfb",
+        "end_line": 21,
+        "finding_id": "RGF-0089",
+        "imprecise": 0,
+        "occurrence_id": 89,
+        "path": "pyproject.toml",
+        "run_id": 74,
+        "start_line": 20
+      },
+      "metadata": "{\"fingerprint\":\"7454bf99dd475cff9c08284ae0f666a9e7108259f7e69021d03ffa50bbd5837d\",\"path\":\"pyproject.toml\",\"rule_id\":\"ci-reproducibility\",\"content\":\"The project advertises Python 3.12 and 3.13 support in its package metadata, but the repository's CI only installs and tests Python 3.11 and Pyright is configured for Python 3.11. This makes the published compatibility claim unreproducible from CI and can let unsupported-version breakage ship unnoticed.\",\"suggestion_code\":\"\",\"existing_code\":\"    \\\"Programming Language :: Python :: 3.12\\\",\\n    \\\"Programming Language :: Python :: 3.13\\\",\",\"start_line\":20,\"end_line\":21,\"thinking\":\"Keep package classifiers aligned with the tested CI matrix, or add CI jobs for these Python versions before advertising support. Since this review cell is limited to pyproject.toml, the local fix is to remove the untested classifiers.\",\"imprecise\":false}",
+      "path": "pyproject.toml",
+      "rule_id": "ci-reproducibility",
+      "session_id": "RGS-bf5d11c1d8ec",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-9e5f6db07104-RGS-bf5d11c1d8ec",
+      "content": "The opencode example does not match the bundled opencode preset created by `review-gauntlet config init --preset opencode`. The preset invokes `opencode run {prompt}` without `--dangerously-skip-permissions`, so readers following the generated-config flow will see different args than this documented minimal configuration.",
+      "finding_id": "RGF-0090",
+      "fingerprint": "d4ec6e61df261db29f285859b1baa52cc29a404be6fc92380acee7dcef2fa4a1",
+      "latest_occurrence": {
+        "cell_id": "RGC-ffab214411391d8c",
+        "end_line": 334,
+        "finding_id": "RGF-0090",
+        "imprecise": 0,
+        "occurrence_id": 90,
+        "path": "README.md",
+        "run_id": 74,
+        "start_line": 324
+      },
+      "metadata": "{\"fingerprint\":\"d4ec6e61df261db29f285859b1baa52cc29a404be6fc92380acee7dcef2fa4a1\",\"path\":\"README.md\",\"rule_id\":\"docs-accuracy\",\"content\":\"The opencode example does not match the bundled opencode preset created by `review-gauntlet config init --preset opencode`. The preset invokes `opencode run {prompt}` without `--dangerously-skip-permissions`, so readers following the generated-config flow will see different args than this documented minimal configuration.\",\"suggestion_code\":\"Minimal JSONC configuration for opencode file-json verdicts:\\n\\n```jsonc\\n{\\n  \\\"adapter\\\": {\\n    \\\"type\\\": \\\"command\\\",\\n    \\\"command\\\": \\\"opencode\\\",\\n    \\\"args\\\": [\\\"run\\\", \\\"{prompt}\\\"],\\n    \\\"output\\\": {\\\"mode\\\": \\\"file-json\\\", \\\"path\\\": \\\"{output_file}\\\"}\\n  }\\n}\\n```\",\"existing_code\":\"Minimal JSONC configuration for opencode file-json verdicts:\\n\\n```jsonc\\n{\\n  \\\"adapter\\\": {\\n    \\\"type\\\": \\\"command\\\",\\n    \\\"command\\\": \\\"opencode\\\",\\n    \\\"args\\\": [\\\"run\\\", \\\"--dangerously-skip-permissions\\\", \\\"{prompt}\\\"],\\n    \\\"output\\\": {\\\"mode\\\": \\\"file-json\\\", \\\"path\\\": \\\"{output_file}\\\"}\\n  }\\n}\\n```\",\"start_line\":324,\"end_line\":334,\"thinking\":\"src/review_gauntlet/presets/opencode.jsonc defines args as [\\\"run\\\", \\\"{prompt}\\\"], while this README example documents an additional flag. The config is still structurally valid, but it is inaccurate as a minimal example for the packaged starter flow.\",\"imprecise\":false}",
+      "path": "README.md",
+      "rule_id": "docs-accuracy",
+      "session_id": "RGS-bf5d11c1d8ec",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-9e5f6db07104-RGS-bf5d11c1d8ec",
+      "content": "CI only installs and tests Python 3.11 even though the package metadata advertises support for Python 3.12 and 3.13. This can let incompatibilities in the declared supported versions ship unnoticed; use a matrix to run the same checks across each advertised Python version, or narrow the classifiers if only 3.11 is intended.",
+      "finding_id": "RGF-0091",
+      "fingerprint": "1d80a118662e5953252b4d7548828e10d1b97feea6b87ab9d92775b90e72caef",
+      "latest_occurrence": {
+        "cell_id": "RGC-28c8daef87e0bafa",
+        "end_line": 21,
+        "finding_id": "RGF-0091",
+        "imprecise": 0,
+        "occurrence_id": 91,
+        "path": ".github/workflows/ci.yml",
+        "run_id": 75,
+        "start_line": 20
+      },
+      "metadata": "{\"fingerprint\":\"1d80a118662e5953252b4d7548828e10d1b97feea6b87ab9d92775b90e72caef\",\"path\":\".github/workflows/ci.yml\",\"rule_id\":\"ci-reproducibility\",\"content\":\"CI only installs and tests Python 3.11 even though the package metadata advertises support for Python 3.12 and 3.13. This can let incompatibilities in the declared supported versions ship unnoticed; use a matrix to run the same checks across each advertised Python version, or narrow the classifiers if only 3.11 is intended.\",\"suggestion_code\":\"    strategy:\\n      fail-fast: false\\n      matrix:\\n        python-version: [\\\"3.11\\\", \\\"3.12\\\", \\\"3.13\\\"]\\n\\n    steps:\\n      - name: Checkout\\n        uses: actions/checkout@v4\\n\\n      - name: Install uv\\n        uses: astral-sh/setup-uv@v6\\n\\n      - name: Set up Python\\n        run: uv python install ${{ matrix.python-version }}\",\"existing_code\":\"      - name: Set up Python\\n        run: uv python install 3.11\",\"start_line\":20,\"end_line\":21,\"thinking\":\"pyproject.toml declares classifiers for Python 3.11, 3.12, and 3.13 while pyright is configured for 3.11. The CI workflow hardcodes only 3.11, so the workflow is not reproducible across the advertised support matrix.\",\"imprecise\":false}",
+      "path": ".github/workflows/ci.yml",
+      "rule_id": "ci-reproducibility",
+      "session_id": "RGS-bf5d11c1d8ec",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-9e5f6db07104-RGS-bf5d11c1d8ec",
+      "content": "`actions/checkout@v4` is pinned only to a mutable version tag, while the workflow already pins `astral-sh/setup-uv` to a commit SHA. For reproducible CI and to reduce supply-chain drift, pin checkout to a full commit SHA as well.",
+      "finding_id": "RGF-0092",
+      "fingerprint": "2b7f483e01bcbf037b3111d3c2ea0f99a897ce3684e0f78dbc1b76a71ac2caff",
+      "latest_occurrence": {
+        "cell_id": "RGC-28c8daef87e0bafa",
+        "end_line": 15,
+        "finding_id": "RGF-0092",
+        "imprecise": 0,
+        "occurrence_id": 92,
+        "path": ".github/workflows/ci.yml",
+        "run_id": 76,
+        "start_line": 15
+      },
+      "metadata": "{\"fingerprint\":\"2b7f483e01bcbf037b3111d3c2ea0f99a897ce3684e0f78dbc1b76a71ac2caff\",\"path\":\".github/workflows/ci.yml\",\"rule_id\":\"ci-reproducibility\",\"content\":\"`actions/checkout@v4` is pinned only to a mutable version tag, while the workflow already pins `astral-sh/setup-uv` to a commit SHA. For reproducible CI and to reduce supply-chain drift, pin checkout to a full commit SHA as well.\",\"suggestion_code\":\"        uses: actions/checkout@<full-commit-sha>\",\"existing_code\":\"        uses: actions/checkout@v4\",\"start_line\":15,\"end_line\":15,\"thinking\":\"The selected rule is ci-reproducibility. Mutable action tags can change behavior over time; this workflow demonstrates the intended reproducibility pattern by pinning setup-uv to an immutable SHA.\",\"imprecise\":false}",
+      "path": ".github/workflows/ci.yml",
+      "rule_id": "ci-reproducibility",
+      "session_id": "RGS-bf5d11c1d8ec",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-9e5f6db07104-RGS-bf5d11c1d8ec",
+      "content": "CI runs `uv sync --all-groups` without enabling locked/frozen resolution, so dependency versions can drift from `uv.lock` whenever package indexes change or the lockfile is out of date. For reproducible CI, install exactly from the committed lockfile and fail when it is stale.",
+      "finding_id": "RGF-0093",
+      "fingerprint": "3bceac03c05c60c64ead947587a25c198b0758e28bac15567cf28da7ca5c4803",
+      "latest_occurrence": {
+        "cell_id": "RGC-28c8daef87e0bafa",
+        "end_line": 31,
+        "finding_id": "RGF-0093",
+        "imprecise": 0,
+        "occurrence_id": 93,
+        "path": ".github/workflows/ci.yml",
+        "run_id": 77,
+        "start_line": 30
+      },
+      "metadata": "{\"fingerprint\":\"3bceac03c05c60c64ead947587a25c198b0758e28bac15567cf28da7ca5c4803\",\"path\":\".github/workflows/ci.yml\",\"rule_id\":\"ci-reproducibility\",\"content\":\"CI runs `uv sync --all-groups` without enabling locked/frozen resolution, so dependency versions can drift from `uv.lock` whenever package indexes change or the lockfile is out of date. For reproducible CI, install exactly from the committed lockfile and fail when it is stale.\",\"suggestion_code\":\"      - name: Sync dependencies\\n        run: uv sync --all-groups --locked\",\"existing_code\":\"      - name: Sync dependencies\\n        run: uv sync --all-groups\",\"start_line\":30,\"end_line\":31,\"thinking\":\"A uv.lock file is committed and the CI reproducibility rule applies to this workflow. `uv sync` may update the environment based on resolver state instead of enforcing the checked-in lock unless `--locked` is used.\",\"imprecise\":false}",
+      "path": ".github/workflows/ci.yml",
+      "rule_id": "ci-reproducibility",
+      "session_id": "RGS-bf5d11c1d8ec",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-9e5f6db07104-RGS-bf5d11c1d8ec",
+      "content": "The aggregate check target is not CI-equivalent because it also runs coverage, while the GitHub workflow executes format-check, lint, typecheck, test, and then coverage as a separate step. This makes the documented local CI command do extra work and can make local/CI failure boundaries differ. Consider keeping check aligned with the required gates and leaving coverage as an explicit target.",
+      "finding_id": "RGF-0094",
+      "fingerprint": "def0d4dad9e200dc10410bc3833b9593802453b01838331172daf7a9751894d5",
+      "latest_occurrence": {
+        "cell_id": "RGC-1460e96899f5c625",
+        "end_line": 21,
+        "finding_id": "RGF-0094",
+        "imprecise": 0,
+        "occurrence_id": 94,
+        "path": "Makefile",
+        "run_id": 78,
+        "start_line": 21
+      },
+      "metadata": "{\"fingerprint\":\"def0d4dad9e200dc10410bc3833b9593802453b01838331172daf7a9751894d5\",\"path\":\"Makefile\",\"rule_id\":\"ci-reproducibility\",\"content\":\"The aggregate check target is not CI-equivalent because it also runs coverage, while the GitHub workflow executes format-check, lint, typecheck, test, and then coverage as a separate step. This makes the documented local CI command do extra work and can make local/CI failure boundaries differ. Consider keeping check aligned with the required gates and leaving coverage as an explicit target.\",\"suggestion_code\":\"check: format-check lint typecheck test\",\"existing_code\":\"check: format-check lint typecheck test coverage\",\"start_line\":21,\"end_line\":21,\"thinking\":\"CI reproducibility is best served when the aggregate local check target mirrors the CI gate steps rather than bundling an additional reporting target.\",\"imprecise\":false}",
+      "path": "Makefile",
+      "rule_id": "ci-reproducibility",
+      "session_id": "RGS-bf5d11c1d8ec",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-9e5f6db07104-RGS-bf5d11c1d8ec",
+      "content": "This path is documented as `.review-gauntlet/checkpoints/latest/status.json`, but `latest` is a pointer file written with the checkpoint id, while the JSON snapshots are written under `.review-gauntlet/checkpoints/<checkpoint_id>/`. Following the README literally will point users at a non-existent path after finalize.",
+      "finding_id": "RGF-0095",
+      "fingerprint": "07de19f9bdbb1d06328c43339c914192fca20c8e744701153b1a9a19c733e199",
+      "latest_occurrence": {
+        "cell_id": "RGC-ffab214411391d8c",
+        "end_line": 249,
+        "finding_id": "RGF-0095",
+        "imprecise": 0,
+        "occurrence_id": 95,
+        "path": "README.md",
+        "run_id": 78,
+        "start_line": 247
+      },
+      "metadata": "{\"fingerprint\":\"07de19f9bdbb1d06328c43339c914192fca20c8e744701153b1a9a19c733e199\",\"path\":\"README.md\",\"rule_id\":\"docs-accuracy\",\"content\":\"This path is documented as `.review-gauntlet/checkpoints/latest/status.json`, but `latest` is a pointer file written with the checkpoint id, while the JSON snapshots are written under `.review-gauntlet/checkpoints/<checkpoint_id>/`. Following the README literally will point users at a non-existent path after finalize.\",\"suggestion_code\":\"untracked eligible files block checkpoint creation. It writes\\n`status.json`, `findings.json`, `events.json`, and `summary.md` under a generated\\ncheckpoint directory such as `.review-gauntlet/checkpoints/<checkpoint_id>/`, then updates\\n`.review-gauntlet/checkpoints/latest` as a pointer to that checkpoint and clears the\\nactive session so the next command is\",\"existing_code\":\"untracked eligible files block checkpoint creation. It writes\\n`.review-gauntlet/checkpoints/latest/status.json`, `findings.json`, `events.json`,\\nand `summary.md`, then clears the active session so the next command is\",\"start_line\":247,\"end_line\":249,\"thinking\":\"checkpoint.write_latest_checkpoint writes the files into checkpoint_dir and writes the checkpoint id into .review-gauntlet/checkpoints/latest as a pointer file.\",\"imprecise\":false}",
+      "path": "README.md",
+      "rule_id": "docs-accuracy",
+      "session_id": "RGS-bf5d11c1d8ec",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-9e5f6db07104-RGS-bf5d11c1d8ec",
+      "content": "A normal `review` run intentionally selects files with `fixed_pending_verification` findings via `_select_review_cells`, but this path never calls `verify_fixed_findings`. If the reviewer no longer reports the fingerprint, the finding stays fixed-pending forever and `status`/`finalize` remain blocked unless the user separately runs `verify-fixes`, even though the evidence was already collected in this review run. Either remove fixed-pending paths from normal review selection or apply the same verification transition after evaluating those paths.",
+      "finding_id": "RGF-0096",
+      "fingerprint": "133fbd55884e1ce7cb6f1813faf3b82812e321d8ebc52d73e1fcb7c672c68f36",
+      "latest_occurrence": {
+        "cell_id": "RGC-7d47131d23a5f0ce",
+        "end_line": 846,
+        "finding_id": "RGF-0096",
+        "imprecise": 0,
+        "occurrence_id": 96,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 80,
+        "start_line": 844
+      },
+      "metadata": "{\"fingerprint\":\"133fbd55884e1ce7cb6f1813faf3b82812e321d8ebc52d73e1fcb7c672c68f36\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"test-evidence\",\"content\":\"A normal `review` run intentionally selects files with `fixed_pending_verification` findings via `_select_review_cells`, but this path never calls `verify_fixed_findings`. If the reviewer no longer reports the fingerprint, the finding stays fixed-pending forever and `status`/`finalize` remain blocked unless the user separately runs `verify-fixes`, even though the evidence was already collected in this review run. Either remove fixed-pending paths from normal review selection or apply the same verification transition after evaluating those paths.\",\"suggestion_code\":\"        store.mark_cell_reviewed(session_id, selected)\\n        reviewed += 1\\n    store.verify_fixed_findings(session_id, seen_fingerprints, evaluated_paths)\\n    status = _status(store, root)\",\"existing_code\":\"        store.mark_cell_reviewed(session_id, selected)\\n        reviewed += 1\\n    status = _status(store, root)\",\"start_line\":844,\"end_line\":846,\"thinking\":\"_cmd_review tracks `seen_fingerprints` and `evaluated_paths`, and `_select_review_cells` includes `fixed_pending_paths`, but only `_cmd_verify_fixes` consumes that evidence. This makes normal review re-check fixed-pending files without updating fixed-pending findings that disappeared.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-bf5d11c1d8ec",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-9e5f6db07104-RGS-bf5d11c1d8ec",
+      "content": "review-fixes exits with failure whenever targeted fixed-pending findings are reopened, even if the reviewer reported a fresh finding for the same issue. In that path `finding_ids` contains actionable reopened findings, but the command still returns exit 1, so automation cannot distinguish a successful verification that found regressions from an adapter/runtime failure and may treat valid test evidence as a broken review run.",
+      "finding_id": "RGF-0097",
+      "fingerprint": "2d42b8f9d0f1ea4b8124ab8ac9893ce51799d31f5f59bb4ac122dedf537d3f48",
+      "latest_occurrence": {
+        "cell_id": "RGC-7d47131d23a5f0ce",
+        "end_line": 998,
+        "finding_id": "RGF-0097",
+        "imprecise": 0,
+        "occurrence_id": 97,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 81,
+        "start_line": 997
+      },
+      "metadata": "{\"fingerprint\":\"2d42b8f9d0f1ea4b8124ab8ac9893ce51799d31f5f59bb4ac122dedf537d3f48\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"test-evidence\",\"content\":\"review-fixes exits with failure whenever targeted fixed-pending findings are reopened, even if the reviewer reported a fresh finding for the same issue. In that path `finding_ids` contains actionable reopened findings, but the command still returns exit 1, so automation cannot distinguish a successful verification that found regressions from an adapter/runtime failure and may treat valid test evidence as a broken review run.\",\"suggestion_code\":\"    if first_failure is not None or unverifiable_ids:\\n        raise SystemExit(1)\",\"existing_code\":\"    if first_failure is not None or reopened_ids or unverifiable_ids:\\n        raise SystemExit(1)\",\"start_line\":997,\"end_line\":998,\"thinking\":\"Reopened findings are a valid verification result, not a command failure. The result payload already reports reopened_ids for downstream gating.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-bf5d11c1d8ec",
+      "state": "fixed_verified"
+    }
+  ]
+}

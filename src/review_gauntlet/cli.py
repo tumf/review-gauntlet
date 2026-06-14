@@ -843,6 +843,7 @@ def _cmd_review(args: argparse.Namespace, root: Path, store: SessionStore) -> No
             finding_ids.append(store.upsert_finding(session_id, run_id, selected.id, finding))
         store.mark_cell_reviewed(session_id, selected)
         reviewed += 1
+    store.verify_fixed_findings(session_id, seen_fingerprints, evaluated_paths)
     status = _status(store, root)
     if first_failure is not None:
         failed_cell, error = first_failure
@@ -993,7 +994,7 @@ def _cmd_verify_fixes(args: argparse.Namespace, root: Path, store: SessionStore)
             {"failed_cell_id": failed_cell.id, "error": str(error), "failure": error.failure}
         )
     _emit(result, args.format)
-    if first_failure is not None or reopened_ids or unverifiable_ids:
+    if first_failure is not None or unverifiable_ids:
         raise SystemExit(1)
 
 
