@@ -504,13 +504,15 @@ def _cmd_config_init(args: argparse.Namespace, root: Path) -> None:
     text = read_preset(str(args.preset))
     validate_config_text(text, source=f"preset {args.preset}")
     output_path = _config_init_output_path(args, root)
-    result = {
+    result: dict[str, object] = {
         "preset": str(args.preset),
         "path": str(output_path),
         "global": bool(args.global_config),
         "dry_run": bool(args.dry_run),
         "written": False,
     }
+    if args.dry_run:
+        result["contents"] = text
     if output_path.exists() and not args.force and not args.dry_run:
         raise ConfigError(f"config file already exists: {output_path}; use --force to overwrite")
     if not args.dry_run:
@@ -522,6 +524,9 @@ def _cmd_config_init(args: argparse.Namespace, root: Path) -> None:
     else:
         action = "would write" if args.dry_run else "wrote"
         print(f"{action} {args.preset} config to {output_path}")
+        if args.dry_run:
+            print("--- config contents ---")
+            print(text, end="" if text.endswith("\n") else "\n")
 
 
 def _config_init_output_path(args: argparse.Namespace, root: Path) -> Path:

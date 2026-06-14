@@ -29,8 +29,12 @@ def test_config_init_project_force_and_dry_run(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     main(["config", "init", str(tmp_path), "--preset", "opencode", "--dry-run"])
-    assert "would write" in capsys.readouterr().out
-    assert not (tmp_path / ".review-gauntlet" / "config.jsonc").exists()
+    dry_run_output = capsys.readouterr().out
+    assert "would write" in dry_run_output
+    assert str(tmp_path / ".review-gauntlet" / "config.jsonc") in dry_run_output
+    assert '"command": "opencode"' in dry_run_output
+    assert "--- config contents ---" in dry_run_output
+    assert not (tmp_path / ".review-gauntlet").exists()
 
     main(["config", "init", str(tmp_path), "--preset", "opencode", "--format", "json"])
     data = json.loads(capsys.readouterr().out)
@@ -45,6 +49,30 @@ def test_config_init_project_force_and_dry_run(
 
     main(["config", "init", str(tmp_path), "--preset", "codex", "--force"])
     assert '"command": "codex"' in config_path.read_text(encoding="utf-8")
+
+
+def test_config_init_dry_run_json_includes_contents(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    main(
+        [
+            "config",
+            "init",
+            str(tmp_path),
+            "--preset",
+            "opencode",
+            "--dry-run",
+            "--format",
+            "json",
+        ]
+    )
+
+    data = json.loads(capsys.readouterr().out)
+    assert data["dry_run"] is True
+    assert data["written"] is False
+    assert str(tmp_path / ".review-gauntlet" / "config.jsonc") == data["path"]
+    assert '"command": "opencode"' in data["contents"]
+    assert not (tmp_path / ".review-gauntlet").exists()
 
 
 def test_config_init_global_and_output(

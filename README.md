@@ -116,8 +116,8 @@ review-gauntlet config effective --format json
 ```
 
 Use `--force` to overwrite an existing generated config, `--dry-run` to preview the
-write target without creating files, and `--output <path>` to write to a custom
-path. Edit the generated JSONC if your agent command or arguments differ, then
+write target and preset contents without creating files, and `--output <path>` to write
+to a custom path. Edit the generated JSONC if your agent command or arguments differ, then
 verify that `review-gauntlet review` runs end-to-end.
 
 ---
