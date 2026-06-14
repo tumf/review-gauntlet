@@ -260,6 +260,30 @@ review-gauntlet finalize
 git add .review-gauntlet/checkpoints/latest
 ```
 
+`status` reports `coverage` as counts of review cells by state:
+
+| Coverage state | Meaning |
+|---|---|
+| `pending` | The file × rule cell still needs review. |
+| `reviewed` | The cell has been reviewed against the current file digest. |
+| `stale` | The file changed after review, so the cell must be reviewed again. |
+| `superseded` | The old persisted cell is no longer part of the current target plan. |
+
+`findings` reports open findings by default; pass `--all` to include terminal
+findings. Each finding row includes:
+
+| Field | Meaning |
+|---|---|
+| `finding_id` | Stable Review Gauntlet finding id, such as `RGF-...`. |
+| `fingerprint` | Deduplication key derived from repository, target, path, rule, claim, code anchor, and ruleset. |
+| `state` | Finding lifecycle state. Open states are `untriaged`, `confirmed`, `fixed_pending_verification`, and `reopened`; terminal states are `fixed_verified`, `false_positive`, `waived`, and `accepted_risk`. |
+| `path` | Repository-relative file path for the latest occurrence. |
+| `rule_id` | Review rule that produced the finding. |
+| `content` | Reviewer-provided finding text. |
+| `metadata` | JSON metadata recorded by human decisions, such as owner or expiration. |
+| `start_line` / `end_line` | Latest line range, or `0` when no precise range is available. |
+| `imprecise` | Whether the latest location is approximate. |
+
 Successful `finalize` requires both coverage and live findings to be closed and
 review-universe files to match `HEAD`; dirty tracked, staged, unstaged, or
 untracked eligible files block checkpoint creation. It writes
