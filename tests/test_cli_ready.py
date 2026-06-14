@@ -34,6 +34,20 @@ def _init_session(root: Path, capsys: pytest.CaptureFixture[str]) -> str:
     return str(data["session_id"])
 
 
+def _init_commit_target_session(root: Path, capsys: pytest.CaptureFixture[str]) -> str:
+    _init_git_repo(root)
+    (root / "README.md").write_text("# docs\n", encoding="utf-8")
+    _git(root, "add", "README.md")
+    _git(root, "commit", "-m", "initial")
+    (root / "README.md").write_text("# docs\n\nreview target\n", encoding="utf-8")
+    _git(root, "add", "README.md")
+    _git(root, "commit", "-m", "update docs")
+    commit = _git(root, "rev-parse", "HEAD")
+    main(["init", str(root), "--commit", commit, "--format", "json"])
+    data = json.loads(capsys.readouterr().out)
+    return str(data["session_id"])
+
+
 def _ready_json(root: Path, capsys: pytest.CaptureFixture[str]) -> dict[str, str | None]:
     main(["ready", str(root), "--format", "json"])
     data = json.loads(capsys.readouterr().out)
@@ -378,20 +392,23 @@ def test_ready_keeps_stale_only_review_cells_reachable(
     _assert_skill_directed_short_prompt(prompt, "Review stale review cells")
 
 
-def test_status_treats_target_digest_drift_as_review_action(
+def test_status_keeps_digest_drift_as_finalize_blocker_when_coverage_is_complete(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    _init_session(tmp_path, capsys)
+    _init_commit_target_session(tmp_path, capsys)
     _mark_finalize_ready(tmp_path)
-    (tmp_path / "README.md").write_text("# docs\n\nchanged\n", encoding="utf-8")
+    (tmp_path / "unrelated.py").write_text("print('drift')\n", encoding="utf-8")
+    _git(tmp_path, "add", "unrelated.py")
+    _git(tmp_path, "commit", "-m", "add unrelated file")
     before = _ledger_snapshot(tmp_path)
 
     main(["status", str(tmp_path), "--format", "json"])
 
     data = json.loads(capsys.readouterr().out)
     assert data["coverage"] == {CellState.REVIEWED.value: 1}
+    assert data["can_finalize"] is False
     assert data["finalize_blockers"] == ["target digest has changed since the last review run"]
-    assert data["next_required_action"] == "run_review"
+    assert data["next_required_action"] == "resolve_finalize_blockers"
     assert _ledger_snapshot(tmp_path) == before
     assert not (tmp_path / ".review-gauntlet" / "checkpoints" / "latest").exists()
 
@@ -435,38 +452,69 @@ def test_status_prioritizes_fixed_pending_findings_before_stale_review_cells(
     ]
 
 
-def test_status_prioritizes_target_digest_drift_before_fixed_pending_findings(
+def test_status_prioritizes_review_when_current_target_cell_is_missing(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    _init_session(tmp_path, capsys)
+    _init_commit_target_session(tmp_path, capsys)
     _mark_finalize_ready(tmp_path)
     _insert_finding(tmp_path, FindingState.FIXED_PENDING_VERIFICATION, 1)
-    (tmp_path / "README.md").write_text("# docs\n\nchanged\n", encoding="utf-8")
+    (tmp_path / "unrelated.py").write_text("print('drift')\n", encoding="utf-8")
+    _git(tmp_path, "add", "unrelated.py")
+    _git(tmp_path, "commit", "-m", "add unrelated file")
+    with SessionStore(tmp_path).connect() as conn:
+        conn.execute("delete from review_cells")
+    before = _ledger_snapshot(tmp_path)
 
     main(["status", str(tmp_path), "--format", "json"])
 
     data = json.loads(capsys.readouterr().out)
-    assert data["coverage"] == {CellState.REVIEWED.value: 1}
+    assert data["coverage"] == {}
     assert data["finding_state_counts"] == {FindingState.FIXED_PENDING_VERIFICATION.value: 1}
     assert data["next_required_action"] == "run_review"
     assert data["finalize_blockers"] == [
         "fixed findings require verification",
         "target digest has changed since the last review run",
     ]
+    assert _ledger_snapshot(tmp_path) == before
 
 
-def test_ready_prompts_review_for_target_digest_drift_without_mutating_state(
+def test_status_prioritizes_fixed_pending_findings_when_only_whole_digest_drifted(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    _init_session(tmp_path, capsys)
+    _init_commit_target_session(tmp_path, capsys)
     _mark_finalize_ready(tmp_path)
-    (tmp_path / "README.md").write_text("# docs\n\nchanged\n", encoding="utf-8")
+    _insert_finding(tmp_path, FindingState.FIXED_PENDING_VERIFICATION, 1)
+    (tmp_path / "unrelated.py").write_text("print('drift')\n", encoding="utf-8")
+    _git(tmp_path, "add", "unrelated.py")
+    _git(tmp_path, "commit", "-m", "add unrelated file")
     before = _ledger_snapshot(tmp_path)
 
-    prompt = _ready_json(tmp_path, capsys)["prompt"]
+    main(["status", str(tmp_path), "--format", "json"])
 
-    assert prompt is not None
-    _assert_skill_directed_short_prompt(prompt, "Review target changes")
+    data = json.loads(capsys.readouterr().out)
+    assert data["coverage"] == {CellState.REVIEWED.value: 1}
+    assert data["finding_state_counts"] == {FindingState.FIXED_PENDING_VERIFICATION.value: 1}
+    assert data["next_required_action"] == "run_verify_fixes"
+    assert data["finalize_blockers"] == [
+        "fixed findings require verification",
+        "target digest has changed since the last review run",
+    ]
+    assert _ledger_snapshot(tmp_path) == before
+
+
+def test_ready_has_no_task_for_digest_drift_only_blocker_without_mutating_state(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_commit_target_session(tmp_path, capsys)
+    _mark_finalize_ready(tmp_path)
+    (tmp_path / "unrelated.py").write_text("print('drift')\n", encoding="utf-8")
+    _git(tmp_path, "add", "unrelated.py")
+    _git(tmp_path, "commit", "-m", "add unrelated file")
+    before = _ledger_snapshot(tmp_path)
+
+    data = _ready_json_exits(tmp_path, capsys, expected_code=1)
+
+    assert data == {"prompt": None}
     assert _ledger_snapshot(tmp_path) == before
     assert not (tmp_path / ".review-gauntlet" / "checkpoints" / "latest").exists()
 
@@ -526,19 +574,24 @@ def test_ready_prompts_review_for_incomplete_coverage_before_fixed_pending_findi
     assert "Review stale review cells" not in stale_prompt
 
 
-def test_ready_prompts_review_for_target_digest_drift_before_fixed_pending_findings(
+def test_ready_prompts_verify_fixes_when_only_whole_digest_drifted(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    _init_session(tmp_path, capsys)
+    _init_commit_target_session(tmp_path, capsys)
     _mark_finalize_ready(tmp_path)
     _insert_finding(tmp_path, FindingState.FIXED_PENDING_VERIFICATION, 1)
-    (tmp_path / "README.md").write_text("# docs\n\nchanged\n", encoding="utf-8")
+    (tmp_path / "unrelated.py").write_text("print('drift')\n", encoding="utf-8")
+    _git(tmp_path, "add", "unrelated.py")
+    _git(tmp_path, "commit", "-m", "add unrelated file")
+    before = _ledger_snapshot(tmp_path)
 
     prompt = _ready_json(tmp_path, capsys)["prompt"]
 
     assert prompt is not None
-    _assert_skill_directed_short_prompt(prompt, "Review target changes")
-    assert "Verify fixed-pending findings" not in prompt
+    _assert_skill_directed_short_prompt(prompt, "Verify fixed-pending findings")
+    assert "Review target changes" not in prompt
+    assert "target digest" not in prompt.lower()
+    assert _ledger_snapshot(tmp_path) == before
 
 
 def test_status_keeps_verify_fixes_when_coverage_is_current(
