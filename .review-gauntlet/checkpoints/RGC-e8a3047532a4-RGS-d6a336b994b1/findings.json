@@ -1,0 +1,48 @@
+{
+  "checkpoint_id": "RGC-e8a3047532a4-RGS-d6a336b994b1",
+  "findings": [
+    {
+      "checkpoint_id": "RGC-e8a3047532a4-RGS-d6a336b994b1",
+      "content": "Git path output is parsed with splitlines(), so tracked or untracked filenames containing newlines are split into bogus path fragments. That can make the dirty review-universe check miss the actual file path or report incorrect paths. Use NUL-delimited git output and split on NUL for all three path-producing commands.",
+      "finding_id": "RGF-0104",
+      "fingerprint": "8f819474714dc465c394125be2c061c20e3b5890768676a5f0fca816b8623e0b",
+      "latest_occurrence": {
+        "cell_id": "RGC-f760d63617535770",
+        "end_line": 172,
+        "finding_id": "RGF-0104",
+        "imprecise": 0,
+        "occurrence_id": 104,
+        "path": "src/review_gauntlet/checkpoint.py",
+        "run_id": 93,
+        "start_line": 170
+      },
+      "metadata": "{\"fingerprint\":\"8f819474714dc465c394125be2c061c20e3b5890768676a5f0fca816b8623e0b\",\"path\":\"src/review_gauntlet/checkpoint.py\",\"rule_id\":\"test-evidence\",\"content\":\"Git path output is parsed with splitlines(), so tracked or untracked filenames containing newlines are split into bogus path fragments. That can make the dirty review-universe check miss the actual file path or report incorrect paths. Use NUL-delimited git output and split on NUL for all three path-producing commands.\",\"suggestion_code\":\"    names = _split_nul(_git(root, \\\"diff\\\", \\\"--name-only\\\", \\\"-z\\\", \\\"--cached\\\"))\\n    names += _split_nul(_git(root, \\\"diff\\\", \\\"--name-only\\\", \\\"-z\\\"))\\n    names += _split_nul(_git(root, \\\"ls-files\\\", \\\"-z\\\", \\\"--others\\\", \\\"--exclude-standard\\\"))\",\"existing_code\":\"    names = _split(_git(root, \\\"diff\\\", \\\"--name-only\\\", \\\"--cached\\\"))\\n    names += _split(_git(root, \\\"diff\\\", \\\"--name-only\\\"))\\n    names += _split(_git(root, \\\"ls-files\\\", \\\"--others\\\", \\\"--exclude-standard\\\"))\",\"start_line\":170,\"end_line\":172,\"thinking\":\"Git path lists are not line-safe; -z is the standard way to preserve arbitrary file names.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/checkpoint.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-d6a336b994b1",
+      "state": "accepted_risk"
+    },
+    {
+      "checkpoint_id": "RGC-e8a3047532a4-RGS-d6a336b994b1",
+      "content": "This helper has the same newline-in-filename parsing problem as the review-universe check. Because classify_working_tree_dirty drives finalize blockers, a non-review dirty file with a newline in its name can be misclassified or displayed as multiple paths.",
+      "finding_id": "RGF-0105",
+      "fingerprint": "d84722f42e8f92619bc99ff99c19fbcd6ad5120699b74394b1f7a41b0567a682",
+      "latest_occurrence": {
+        "cell_id": "RGC-f760d63617535770",
+        "end_line": 183,
+        "finding_id": "RGF-0105",
+        "imprecise": 0,
+        "occurrence_id": 105,
+        "path": "src/review_gauntlet/checkpoint.py",
+        "run_id": 93,
+        "start_line": 181
+      },
+      "metadata": "{\"fingerprint\":\"d84722f42e8f92619bc99ff99c19fbcd6ad5120699b74394b1f7a41b0567a682\",\"path\":\"src/review_gauntlet/checkpoint.py\",\"rule_id\":\"test-evidence\",\"content\":\"This helper has the same newline-in-filename parsing problem as the review-universe check. Because classify_working_tree_dirty drives finalize blockers, a non-review dirty file with a newline in its name can be misclassified or displayed as multiple paths.\",\"suggestion_code\":\"    names = _split_nul(_git(root, \\\"diff\\\", \\\"--name-only\\\", \\\"-z\\\", \\\"--cached\\\"))\\n    names += _split_nul(_git(root, \\\"diff\\\", \\\"--name-only\\\", \\\"-z\\\"))\\n    names += _split_nul(_git(root, \\\"ls-files\\\", \\\"-z\\\", \\\"--others\\\", \\\"--exclude-standard\\\"))\",\"existing_code\":\"    names = _split(_git(root, \\\"diff\\\", \\\"--name-only\\\", \\\"--cached\\\"))\\n    names += _split(_git(root, \\\"diff\\\", \\\"--name-only\\\"))\\n    names += _split(_git(root, \\\"ls-files\\\", \\\"--others\\\", \\\"--exclude-standard\\\"))\",\"start_line\":181,\"end_line\":183,\"thinking\":\"All dirty-path enumeration should share NUL-safe parsing to avoid inconsistent blocker behavior.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/checkpoint.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-d6a336b994b1",
+      "state": "accepted_risk"
+    }
+  ],
+  "schema_version": 1
+}
