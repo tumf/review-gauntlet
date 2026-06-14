@@ -383,7 +383,7 @@ Command adapter output path templates SHALL be deterministic before prompt const
 **Then**: the command fails with a usage error explaining that no Review Gauntlet config was found
 **And**: the message shows how to create a project config with `review-gauntlet config init --preset opencode`
 **And**: the message shows how to create a global config with `review-gauntlet config init --global --preset opencode`
-**And**: the message points to `review-gauntlet config list` for available presets
+**And**: the message points to `review-gauntlet config preset list` for available presets
 
 #### Scenario: Adapter cwd outside repository is rejected
 

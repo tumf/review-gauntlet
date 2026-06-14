@@ -156,14 +156,14 @@ The `review-gauntlet config` command group SHALL expose bundled preset names and
 #### Scenario: Preset names are listed
 
 **Given**: an installed or `uvx` invocation of `review-gauntlet`
-**When**: the developer runs `review-gauntlet config list`
+**When**: the developer runs `review-gauntlet config preset list`
 **Then**: stdout lists exactly the preset names `claude`, `opencode`, and `codex`, one per line
 **And**: the command exits `0`
 
 #### Scenario: Preset contents are shown
 
 **Given**: an installed or `uvx` invocation of `review-gauntlet`
-**When**: the developer runs `review-gauntlet config show opencode`
+**When**: the developer runs `review-gauntlet config preset show opencode`
 **Then**: stdout contains the bundled `opencode` JSONC config contents
 **And**: the command exits `0`
 **And**: no config file is written
@@ -171,7 +171,7 @@ The `review-gauntlet config` command group SHALL expose bundled preset names and
 #### Scenario: Unknown preset is rejected
 
 **Given**: an installed or `uvx` invocation of `review-gauntlet`
-**When**: the developer runs `review-gauntlet config show custom`
+**When**: the developer runs `review-gauntlet config preset show custom`
 **Then**: the command fails with the existing CLI usage-error behavior
 **And**: stdout does not contain a fallback or dummy preset
 

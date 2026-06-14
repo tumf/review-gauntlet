@@ -123,6 +123,33 @@ def test_validate_verdict_rejects_extra_comment_keys(
     assert "Extra inputs are not permitted" in data["error"]
 
 
+def test_cli_config_preset_list_outputs_text(capsys: pytest.CaptureFixture[str]) -> None:
+    main(["config", "preset", "list"])
+
+    assert capsys.readouterr().out == "claude\nopencode\ncodex\n"
+
+
+def test_cli_config_preset_list_outputs_json(capsys: pytest.CaptureFixture[str]) -> None:
+    main(["config", "preset", "list", "--format", "json"])
+
+    assert json.loads(capsys.readouterr().out) == {"presets": ["claude", "opencode", "codex"]}
+
+
+def test_cli_config_preset_show_outputs_contents(capsys: pytest.CaptureFixture[str]) -> None:
+    main(["config", "preset", "show", "opencode"])
+
+    output = capsys.readouterr().out
+    assert '"type": "command"' in output
+    assert "opencode" in output
+
+
+def test_cli_config_preset_show_rejects_unknown_preset() -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        main(["config", "preset", "show", "custom"])
+
+    assert exc_info.value.code == 64
+
+
 def test_readme_documents_canonical_shell_completion_commands() -> None:
     readme = Path("README.md").read_text(encoding="utf-8")
 

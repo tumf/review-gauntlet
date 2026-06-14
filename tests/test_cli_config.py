@@ -11,14 +11,16 @@ def isolate_global_config(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> No
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
 
 
-def test_config_list_outputs_bundled_preset_names(capsys: pytest.CaptureFixture[str]) -> None:
-    main(["config", "list"])
+def test_config_preset_list_outputs_bundled_preset_names(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    main(["config", "preset", "list"])
 
     assert capsys.readouterr().out.splitlines() == ["claude", "opencode", "codex"]
 
 
-def test_config_show_outputs_preset_content(capsys: pytest.CaptureFixture[str]) -> None:
-    main(["config", "show", "opencode"])
+def test_config_preset_show_outputs_preset_content(capsys: pytest.CaptureFixture[str]) -> None:
+    main(["config", "preset", "show", "opencode"])
 
     output = capsys.readouterr().out
     assert '"command": "opencode"' in output

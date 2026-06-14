@@ -254,10 +254,14 @@ def build_parser() -> argparse.ArgumentParser:
     config_init.add_argument("--dry-run", action="store_true")
     config_init.add_argument("--output", type=Path)
     _output_format_arg(config_init)
-    config_list = config_subparsers.add_parser("list")
-    _output_format_arg(config_list)
-    config_show = config_subparsers.add_parser("show")
-    config_show.add_argument("preset", choices=list_presets())
+    config_preset = config_subparsers.add_parser("preset")
+    preset_subparsers = config_preset.add_subparsers(
+        dest="config_preset_command", required=True, parser_class=UsageArgumentParser
+    )
+    config_preset_list = preset_subparsers.add_parser("list")
+    _output_format_arg(config_preset_list)
+    config_preset_show = preset_subparsers.add_parser("show")
+    config_preset_show.add_argument("preset", choices=list_presets())
     config_validate = config_subparsers.add_parser("validate")
     config_validate.add_argument(
         "root", nargs="?", default=".", help="Repository root (default: .)"
@@ -475,15 +479,8 @@ def main(argv: list[str] | None = None) -> None:
 
 def _cmd_config(args: argparse.Namespace) -> None:
     command = str(args.config_command)
-    if command == "list":
-        if args.format == "json":
-            print(json.dumps({"presets": list(list_presets())}, indent=2, sort_keys=True))
-        else:
-            for preset in list_presets():
-                print(preset)
-        return
-    if command == "show":
-        print(read_preset(str(args.preset)), end="")
+    if command == "preset":
+        _cmd_config_preset(args)
         return
     root = Path(args.root)
     if command in {"init", "validate", "effective"} and not root.is_dir():
@@ -498,6 +495,21 @@ def _cmd_config(args: argparse.Namespace) -> None:
         _cmd_config_effective(args, root)
         return
     raise ValueError(f"unsupported config command: {command}")
+
+
+def _cmd_config_preset(args: argparse.Namespace) -> None:
+    command = str(args.config_preset_command)
+    if command == "list":
+        if args.format == "json":
+            print(json.dumps({"presets": list(list_presets())}, indent=2, sort_keys=True))
+        else:
+            for preset in list_presets():
+                print(preset)
+        return
+    if command == "show":
+        print(read_preset(str(args.preset)), end="")
+        return
+    raise ValueError(f"unsupported config preset command: {command}")
 
 
 def _cmd_config_init(args: argparse.Namespace, root: Path) -> None:
@@ -586,7 +598,7 @@ def _missing_config_guidance(command: str) -> str:
         f"{command} requires a command adapter config. Create one with "
         "`review-gauntlet config init --preset opencode`, create a global default with "
         "`review-gauntlet config init --global --preset opencode`, or inspect presets with "
-        "`review-gauntlet config list`."
+        "`review-gauntlet config preset list`."
     )
 
 
