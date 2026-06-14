@@ -268,6 +268,19 @@ def test_ready_prompts_commit_when_finalize_blocked_by_dirty_git_changes(
     _assert_skill_directed_short_prompt(prompt, "Commit intended git changes before finalizing")
 
 
+def test_ready_prompts_commit_when_finalize_blocked_by_dirty_review_universe(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_commit_target_session(tmp_path, capsys)
+    _mark_finalize_ready(tmp_path)
+    (tmp_path / "dirty.py").write_text("print('dirty')\n", encoding="utf-8")
+
+    prompt = _ready_json(tmp_path, capsys)["prompt"]
+
+    assert prompt is not None
+    _assert_skill_directed_short_prompt(prompt, "Commit intended git changes before finalizing")
+
+
 def test_ready_outputs_no_ready_task_when_only_non_commit_blockers_remain(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
