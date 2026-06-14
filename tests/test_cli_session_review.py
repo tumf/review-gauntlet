@@ -254,7 +254,7 @@ def test_status_prioritizes_confirmed_findings_before_stale_review(
     assert "review cells are stale after target changes" in status["finalize_blockers"]
 
 
-def test_status_prioritizes_fixed_pending_verification_before_stale_review(
+def test_status_excludes_fixed_pending_path_digest_drift_from_stale_coverage(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _init_session(tmp_path, capsys)
@@ -269,10 +269,12 @@ def test_status_prioritizes_fixed_pending_verification_before_stale_review(
     main(["status", str(tmp_path), "--format", "json"])
 
     status = json.loads(capsys.readouterr().out)
-    assert status["coverage"]["stale"] == 1
+    assert status["coverage"].get("stale", 0) == 0
+    assert status["coverage"].get("reviewed", 0) == 1
     assert status["finding_state_counts"]["fixed_pending_verification"] == 1
     assert status["next_required_action"] == "run_verify_fixes"
     assert "fixed findings require verification" in status["finalize_blockers"]
+    assert "review cells are stale after target changes" not in status["finalize_blockers"]
 
 
 def test_ready_prioritizes_confirmed_findings_before_stale_review(
