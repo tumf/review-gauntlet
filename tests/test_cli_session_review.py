@@ -233,6 +233,107 @@ def test_mark_updates_finding_without_creating_review_run(
     assert status["next_required_action"] == "fix_confirmed_findings"
 
 
+def test_status_prioritizes_confirmed_findings_before_stale_review(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_session(tmp_path, capsys)
+    fixture = _fixture(tmp_path, _cell_for_path(tmp_path, "README.md"))
+    main(["review", str(tmp_path), "--fixture", str(fixture), "--format", "json"])
+    capsys.readouterr()
+    finding_id = _finding_id(tmp_path)
+    main(["mark", str(tmp_path), finding_id, "confirmed", "--format", "json"])
+    capsys.readouterr()
+    (tmp_path / "README.md").write_text("# docs\n\nchanged\n", encoding="utf-8")
+
+    main(["status", str(tmp_path), "--format", "json"])
+
+    status = json.loads(capsys.readouterr().out)
+    assert status["coverage"]["stale"] == 1
+    assert status["finding_state_counts"]["confirmed"] == 1
+    assert status["next_required_action"] == "fix_confirmed_findings"
+    assert "review cells are stale after target changes" in status["finalize_blockers"]
+
+
+def test_status_prioritizes_fixed_pending_verification_before_stale_review(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_session(tmp_path, capsys)
+    fixture = _fixture(tmp_path, _cell_for_path(tmp_path, "README.md"))
+    main(["review", str(tmp_path), "--fixture", str(fixture), "--format", "json"])
+    capsys.readouterr()
+    finding_id = _finding_id(tmp_path)
+    main(["mark", str(tmp_path), finding_id, "fixed", "--format", "json"])
+    capsys.readouterr()
+    (tmp_path / "README.md").write_text("# docs\n\nchanged\n", encoding="utf-8")
+
+    main(["status", str(tmp_path), "--format", "json"])
+
+    status = json.loads(capsys.readouterr().out)
+    assert status["coverage"]["stale"] == 1
+    assert status["finding_state_counts"]["fixed_pending_verification"] == 1
+    assert status["next_required_action"] == "run_verify_fixes"
+    assert "fixed findings require verification" in status["finalize_blockers"]
+
+
+def test_ready_prioritizes_confirmed_findings_before_stale_review(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_session(tmp_path, capsys)
+    fixture = _fixture(tmp_path, _cell_for_path(tmp_path, "README.md"))
+    main(["review", str(tmp_path), "--fixture", str(fixture), "--format", "json"])
+    capsys.readouterr()
+    finding_id = _finding_id(tmp_path)
+    main(["mark", str(tmp_path), finding_id, "confirmed", "--format", "json"])
+    capsys.readouterr()
+    (tmp_path / "README.md").write_text("# docs\n\nchanged\n", encoding="utf-8")
+
+    main(["ready", str(tmp_path), "--format", "json"])
+
+    data = json.loads(capsys.readouterr().out)
+    assert "Fix the next confirmed finding" in data["prompt"]
+    assert "Review stale review cells" not in data["prompt"]
+
+
+def test_ready_prioritizes_fixed_pending_verification_before_stale_review(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_session(tmp_path, capsys)
+    fixture = _fixture(tmp_path, _cell_for_path(tmp_path, "README.md"))
+    main(["review", str(tmp_path), "--fixture", str(fixture), "--format", "json"])
+    capsys.readouterr()
+    finding_id = _finding_id(tmp_path)
+    main(["mark", str(tmp_path), finding_id, "fixed", "--format", "json"])
+    capsys.readouterr()
+    (tmp_path / "README.md").write_text("# docs\n\nchanged\n", encoding="utf-8")
+
+    main(["ready", str(tmp_path), "--format", "json"])
+
+    data = json.loads(capsys.readouterr().out)
+    assert "Verify fixed-pending findings" in data["prompt"]
+    assert "Review stale review cells" not in data["prompt"]
+
+
+def test_pending_review_cells_remain_before_finding_work(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "app.py").write_text("print('ok')\n", encoding="utf-8")
+    _init_session(tmp_path, capsys)
+    first_cell = str(SessionStore(tmp_path).list_cells()[0]["cell_id"])
+    fixture = _fixture(tmp_path, first_cell)
+    main(["review", str(tmp_path), "--fixture", str(fixture), "--budget", "1", "--format", "json"])
+    capsys.readouterr()
+    finding_id = _finding_id(tmp_path)
+    main(["mark", str(tmp_path), finding_id, "confirmed", "--format", "json"])
+    capsys.readouterr()
+
+    main(["status", str(tmp_path), "--format", "json"])
+
+    status = json.loads(capsys.readouterr().out)
+    assert status["coverage"]["pending"] >= 1
+    assert status["finding_state_counts"]["confirmed"] == 1
+    assert status["next_required_action"] == "run_review"
+
+
 def test_fixed_finding_is_verified_only_when_relevant_path_is_reviewed(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
