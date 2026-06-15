@@ -9,6 +9,7 @@ import pytest
 
 from review_gauntlet import run_tui
 from review_gauntlet.run_controller import (
+    AgentLifecycle,
     RunController,
     RunEvent,
     RunSnapshot,
@@ -111,6 +112,57 @@ def test_dashboard_header_contains_human_run_state_and_short_session() -> None:
     assert "agent step 4" in text
     assert "agent ⠙ running" in text
     assert "current cells" not in text
+
+
+def test_header_and_current_operation_show_quiet_timeout_and_artifact_liveness() -> None:
+    snapshot = RunSnapshot(
+        session_id="RGS-liveness-1234",
+        coverage={"reviewed": 1},
+        findings={},
+        next_ready_prompt="finalize session",
+        step=2,
+        agent_status="running",
+        command_argv=("agent",),
+        elapsed_seconds=10,
+        command_label="agent",
+        agent_lifecycle=AgentLifecycle(
+            status="quiet",
+            last_output_age_seconds=7.0,
+            timeout_remaining_seconds=53.0,
+            artifact_path="/tmp/repo/.review-gauntlet/runs/run-1/activity.jsonl",
+        ),
+    )
+    view = dashboard_state(snapshot, (), activity_frame=0)
+
+    header = run_tui.header_text(view)
+    operation = run_tui.current_operation_text(view)
+    activity = activity_text(view)
+
+    assert "last output 7s ago" in header
+    assert "quiet 7s" in header
+    assert "timeout in 53s" in header
+    assert "agent still running" in activity
+    assert "artifact .review-gauntlet/runs/run-1/activity.jsonl" in operation
+    assert "timeout in 53s" in operation
+
+
+def test_liveness_synthesizes_non_flooding_quiet_heartbeat_rows() -> None:
+    snapshot = RunSnapshot(
+        session_id="RGS-liveness",
+        coverage={"reviewed": 1},
+        findings={},
+        next_ready_prompt=None,
+        step=1,
+        agent_status="running",
+        command_argv=(),
+        elapsed_seconds=0,
+        agent_lifecycle=AgentLifecycle(status="quiet", last_output_age_seconds=9.0),
+    )
+
+    assert "agent still running" in activity_text(dashboard_state(snapshot, (), activity_frame=0))
+    assert "agent still running" not in activity_text(
+        dashboard_state(snapshot, (), activity_frame=1)
+    )
 
 
 def test_coverage_and_findings_render_dashboard_metrics_without_old_markers() -> None:

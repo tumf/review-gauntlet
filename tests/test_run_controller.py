@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from review_gauntlet.config import CommandAdapterConfig
@@ -131,6 +132,49 @@ def test_run_controller_exposes_command_label_before_command_returns(tmp_path: P
     assert result["completed"] is True
     assert labels_during_command == ["fake-agent"]
     assert agent_started_payloads == [{"command_label": "fake-agent", "step": 1}]
+
+
+def test_run_controller_synthesizes_quiet_liveness_and_timeout_remaining(
+    tmp_path: Path,
+) -> None:
+    store = _store(tmp_path)
+    snapshots: list[tuple[str, float | None, float | None]] = []
+
+    def command(
+        _config: CommandAdapterConfig, _root: Path, _state_dir: Path, _prompt: str
+    ) -> SessionCommandResult:
+        controller._agent_step_started_at = datetime.now(UTC) - timedelta(seconds=6)
+        snapshot = controller.snapshot()
+        snapshots.append(
+            (
+                snapshot.agent_lifecycle.status,
+                snapshot.agent_lifecycle.last_output_age_seconds,
+                snapshot.agent_lifecycle.timeout_remaining_seconds,
+            )
+        )
+        store.active_path.unlink()
+        return SessionCommandResult(
+            argv=["fake-agent", "ready prompt"], cwd=None, returncode=0, stdout="ok", stderr=""
+        )
+
+    controller = RunController(
+        root=tmp_path,
+        store=store,
+        config_path=None,
+        max_steps=1,
+        ready_prompt=lambda _store, _root: "ready prompt",
+        status_snapshot=_status,
+        command_runner=command,
+    )
+
+    result = controller.run()
+
+    assert result["completed"] is True
+    assert snapshots
+    status, last_output_age, timeout_remaining = snapshots[0]
+    assert status == "quiet"
+    assert last_output_age is not None and last_output_age >= 5.0
+    assert timeout_remaining is not None and 0 < timeout_remaining <= 594
 
 
 def test_command_display_label_omits_template_arguments() -> None:

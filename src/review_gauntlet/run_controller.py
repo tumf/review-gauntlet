@@ -115,6 +115,8 @@ class RunController:
         self._command_argv: tuple[str, ...] = ()
         self._command_label: str | None = None
         self._agent_lifecycle = AgentLifecycle()
+        self._agent_step_started_at: datetime | None = None
+        self._agent_timeout_seconds: int | None = None
         self._last_result: dict[str, object] | None = None
         self._started_at = datetime.now(UTC)
 
@@ -160,7 +162,33 @@ class RunController:
             finalize_blockers=_string_tuple(status.get("finalize_blockers", ())),
             next_required_action=_string_or_none(status.get("next_required_action")),
             run_count=_int_or_zero(status.get("run_count", self._step)),
-            agent_lifecycle=self._agent_lifecycle,
+            agent_lifecycle=self._current_agent_lifecycle(),
+        )
+
+    def _current_agent_lifecycle(self) -> AgentLifecycle:
+        if self._agent_status != "running":
+            return self._agent_lifecycle
+        now = datetime.now(UTC)
+        last_output_age = self._agent_lifecycle.last_output_age_seconds
+        if last_output_age is None and self._agent_step_started_at is not None:
+            last_output_age = (now - self._agent_step_started_at).total_seconds()
+        timeout_remaining = self._agent_lifecycle.timeout_remaining_seconds
+        if timeout_remaining is None and self._agent_timeout_seconds is not None:
+            elapsed = (
+                (now - self._agent_step_started_at).total_seconds()
+                if self._agent_step_started_at is not None
+                else 0.0
+            )
+            timeout_remaining = max(0.0, float(self._agent_timeout_seconds) - elapsed)
+        status = self._agent_lifecycle.status
+        if status == "running" and last_output_age is not None and last_output_age >= 5.0:
+            status = "quiet"
+        return AgentLifecycle(
+            status=status,
+            last_output_age_seconds=last_output_age,
+            timeout_remaining_seconds=timeout_remaining,
+            artifact_path=self._agent_lifecycle.artifact_path,
+            output_tail=self._agent_lifecycle.output_tail,
         )
 
     def run(self) -> dict[str, object]:
@@ -197,6 +225,8 @@ class RunController:
                 )
             self._emit("step_started", step=step_number, prompt=prompt)
             self._agent_status = "running"
+            self._agent_step_started_at = datetime.now(UTC)
+            self._agent_timeout_seconds = effective_config.adapter.timeout_seconds
             self._agent_lifecycle = AgentLifecycle(status="running")
             self._emit(
                 "agent_started",
@@ -218,11 +248,14 @@ class RunController:
             lifecycle_status = _lifecycle_status_from_result(command_result)
             self._agent_lifecycle = AgentLifecycle(
                 status=lifecycle_status,
+                last_output_age_seconds=0.0 if command_result.output_tail else None,
                 artifact_path=command_result.activity_artifact
                 or command_result.stdout_artifact
                 or command_result.stderr_artifact,
                 output_tail=command_result.output_tail,
             )
+            self._agent_step_started_at = None
+            self._agent_timeout_seconds = None
             step_payload = _run_step_payload(step_number, prompt, command_result)
             steps.append(step_payload)
             self._agent_status = "idle" if command_result.failure is None else lifecycle_status

@@ -211,6 +211,8 @@ class RunViewState:
     command_label: str | None
     timeline_events: tuple[TimelineEvent, ...]
     activity: str
+    liveness_detail: str
+    artifact_path: str | None
     elapsed: str
 
 
@@ -251,6 +253,14 @@ def short_session_id(session_id: str | None) -> str:
     if len(safe) <= 12:
         return safe
     return f"{safe[:8]}…{safe[-4:]}"
+
+
+def short_artifact_path(path: str) -> str:
+    safe = _plain_text(path)
+    marker = ".review-gauntlet/"
+    if marker in safe:
+        return marker + safe.rsplit(marker, maxsplit=1)[1]
+    return _summarize_text(safe, limit=96)
 
 
 def format_event_time(timestamp: str) -> str:
@@ -314,6 +324,8 @@ def dashboard_state(
     output_events = tuple(
         format_agent_output_entry(entry) for entry in snapshot.agent_lifecycle.output_tail[-6:]
     )
+    liveness_detail = agent_liveness_detail(snapshot)
+    heartbeat_events = heartbeat_timeline_events(snapshot, activity_frame=activity_frame)
     return RunViewState(
         status=snapshot.agent_status,
         status_summary=status_summary,
@@ -328,10 +340,12 @@ def dashboard_state(
         open_findings=_count_value(snapshot.findings.get("open", 0)),
         task=format_task_title(snapshot.next_ready_prompt),
         command_label=command_label,
-        timeline_events=timeline_events + output_events,
+        timeline_events=timeline_events + heartbeat_events + output_events,
         activity=agent_activity_text(
             _display_agent_status(snapshot), activity_frame=activity_frame
         ),
+        liveness_detail=liveness_detail,
+        artifact_path=snapshot.agent_lifecycle.artifact_path,
         elapsed=format_elapsed_time(snapshot.elapsed_seconds),
     )
 
@@ -399,6 +413,47 @@ def _display_agent_status(snapshot: RunSnapshot) -> str:
     return snapshot.agent_lifecycle.status or snapshot.agent_status
 
 
+def agent_liveness_detail(snapshot: RunSnapshot) -> str:
+    parts: list[str] = []
+    lifecycle = snapshot.agent_lifecycle
+    if lifecycle.last_output_age_seconds is not None:
+        parts.append(f"last output {format_duration(lifecycle.last_output_age_seconds)} ago")
+    if _display_agent_status(snapshot) == "quiet":
+        quiet_for = lifecycle.last_output_age_seconds
+        if quiet_for is not None:
+            parts.append(f"quiet {format_duration(quiet_for)}")
+        else:
+            parts.append("quiet but alive")
+    if lifecycle.timeout_remaining_seconds is not None:
+        parts.append(f"timeout in {format_duration(lifecycle.timeout_remaining_seconds)}")
+    if not parts:
+        return agent_activity_text(_display_agent_status(snapshot))
+    return " | ".join(parts)
+
+
+def heartbeat_timeline_events(
+    snapshot: RunSnapshot, *, activity_frame: int = 0
+) -> tuple[TimelineEvent, ...]:
+    display_status = _display_agent_status(snapshot)
+    if display_status != "quiet":
+        return ()
+    detail = agent_liveness_detail(snapshot)
+    if activity_frame % 4 != 0:
+        return ()
+    return (TimelineEvent("--:--:--", "agent heartbeat", f"agent still running - {detail}"),)
+
+
+def format_duration(seconds: float) -> str:
+    safe_seconds = max(0, int(seconds))
+    if safe_seconds < 60:
+        return f"{safe_seconds}s"
+    minutes, remainder = divmod(safe_seconds, 60)
+    if minutes < 60:
+        return f"{minutes}m{remainder:02d}s"
+    hours, minutes = divmod(minutes, 60)
+    return f"{hours}h{minutes:02d}m"
+
+
 def terminal_state(agent_status: str) -> tuple[str, str]:
     status = _plain_text(agent_status)
     if status == "running":
@@ -416,7 +471,7 @@ def header_text(view: RunViewState) -> str:
     return (
         f"Review Gauntlet | session {view.session_short_id} | {view.status_summary}\n"
         f"{view.gate_label} {view.active_gate.title} | {view.step_label} | "
-        f"elapsed {view.elapsed} | agent {view.activity}"
+        f"elapsed {view.elapsed} | agent {view.activity} | {view.liveness_detail}"
     )
 
 
@@ -463,9 +518,12 @@ def current_operation_text(view: RunViewState) -> str:
         f"{view.active_gate.title} ({view.active_gate.state})",
         view.active_gate.detail,
         f"liveness {view.activity}",
+        f"agent {view.liveness_detail}",
     ]
     if view.command_label is not None:
         lines.append(f"command {view.command_label}")
+    if view.artifact_path is not None:
+        lines.append(f"artifact {short_artifact_path(view.artifact_path)}")
     return "\n".join(lines)
 
 
