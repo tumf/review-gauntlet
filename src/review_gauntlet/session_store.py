@@ -152,6 +152,45 @@ class SessionStore:
         if cur.rowcount != 1:
             raise LookupError(f"unknown review cell: session_id={session_id} cell_id={cell.id}")
 
+    def refresh_file_digest(
+        self,
+        session_id: str,
+        file_path: str,
+        content_digest: str,
+        *,
+        stale_to_pending: bool = False,
+    ) -> None:
+        with self.connect() as conn:
+            session_row = conn.execute(
+                "select 1 from sessions where session_id = ?",
+                (session_id,),
+            ).fetchone()
+            if session_row is None:
+                raise LookupError(f"unknown session: {session_id}")
+            if stale_to_pending:
+                cur = conn.execute(
+                    """
+                    update review_cells
+                    set content_digest = ?,
+                        state = case when state = ? then ? else state end
+                    where session_id = ? and file_path = ?
+                    """,
+                    (content_digest, CellState.STALE, CellState.PENDING, session_id, file_path),
+                )
+            else:
+                cur = conn.execute(
+                    """
+                    update review_cells
+                    set content_digest = ?
+                    where session_id = ? and file_path = ?
+                    """,
+                    (content_digest, session_id, file_path),
+                )
+        if cur.rowcount < 1:
+            raise LookupError(
+                f"unknown review cell path: session_id={session_id} file_path={file_path}"
+            )
+
     def fixed_pending_paths(self, session_id: str) -> set[str]:
         return {str(row["path"]) for row in self.list_fixed_pending_findings(session_id)}
 

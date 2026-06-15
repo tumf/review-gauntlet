@@ -23,6 +23,13 @@ def _cell_for_path(tmp_path: Path, path: str) -> str:
     raise AssertionError(f"missing cell for {path}")
 
 
+def _python_cell_for_rule(tmp_path: Path, path: str, rule_id: str) -> str:
+    for row in SessionStore(tmp_path).list_cells():
+        if row["file_path"] == path and row["rule_id"] == rule_id:
+            return str(row["cell_id"])
+    raise AssertionError(f"missing cell for {path} rule {rule_id}")
+
+
 def _fixture(tmp_path: Path, comments_by_cell: dict[str, list[dict[str, object]]]) -> Path:
     fixture = tmp_path / "fixture.json"
     fixture.write_text(json.dumps(comments_by_cell), encoding="utf-8")
@@ -187,9 +194,68 @@ def test_verify_fixes_resolves_fixed_pending_path_digest_drift(
     refreshed_rows = [row for row in after_rows if row["content_digest"] != before_digest]
     assert data["reviewed_cells"] == 1
     assert data["fixed_verified_ids"] == [ids["README.md"]]
-    assert len(refreshed_rows) == 1
-    assert refreshed_rows[0]["state"] == "reviewed"
+    assert len(refreshed_rows) == len(after_rows)
+    assert {str(row["state"]) for row in refreshed_rows} == {"reviewed"}
     assert _states_by_path(tmp_path)["README.md"] == "fixed_verified"
+
+
+def test_verify_fixes_refreshes_targeted_file_siblings_without_staling_them(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "app.py").write_text("print('hello')\n", encoding="utf-8")
+    main(["init", str(tmp_path), "--worktree", "--format", "json"])
+    capsys.readouterr()
+    target_cell = _python_cell_for_rule(tmp_path, "app.py", "data-validation")
+    sibling_cell = _python_cell_for_rule(tmp_path, "app.py", "test-evidence")
+    fixture = _fixture(
+        tmp_path,
+        {
+            target_cell: [
+                {
+                    "path": "app.py",
+                    "content": "Code issue",
+                    "existing_code": "print('hello')",
+                    "start_line": 1,
+                    "end_line": 1,
+                }
+            ],
+            sibling_cell: [],
+        },
+    )
+    main(["review", str(tmp_path), "--fixture", str(fixture), "--budget", "50", "--format", "json"])
+    capsys.readouterr()
+    with sqlite3.connect(tmp_path / ".review-gauntlet" / "ledger.sqlite") as conn:
+        finding_id = str(conn.execute("select finding_id from findings").fetchone()[0])
+    main(["mark", str(tmp_path), finding_id, "fixed", "--format", "json"])
+    capsys.readouterr()
+    before_rows = _cell_rows_by_path(tmp_path, "app.py")
+    before_digest = str(before_rows[0]["content_digest"])
+    (tmp_path / "app.py").write_text("print('fixed')\n", encoding="utf-8")
+    empty_fixture = _fixture(tmp_path, {})
+
+    main(
+        [
+            "verify-fixes",
+            str(tmp_path),
+            "--fixture",
+            str(empty_fixture),
+            "--finding",
+            finding_id,
+            "--format",
+            "json",
+        ]
+    )
+
+    data = json.loads(capsys.readouterr().out)
+    after_rows = _cell_rows_by_path(tmp_path, "app.py")
+    states_by_rule = {str(row["rule_id"]): str(row["state"]) for row in after_rows}
+    assert data["reviewed_cells"] == 1
+    assert data["fixed_verified_ids"] == [finding_id]
+    assert {str(row["content_digest"]) for row in after_rows} != {before_digest}
+    assert len({str(row["content_digest"]) for row in after_rows}) == 1
+    assert states_by_rule["data-validation"] == "reviewed"
+    assert states_by_rule["test-evidence"] == "reviewed"
+    assert {str(row["state"]) for row in after_rows} == {"reviewed"}
 
 
 def test_verify_fixes_redetection_reopens_without_command_failure(
