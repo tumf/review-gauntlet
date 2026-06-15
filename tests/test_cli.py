@@ -4,7 +4,11 @@ from pathlib import Path
 import pytest
 
 from review_gauntlet.__about__ import __version__
-from review_gauntlet.cli import main
+from review_gauntlet.cli import (
+    _run_session_command_step,  # pyright: ignore[reportPrivateUsage]
+    main,
+)
+from review_gauntlet.config import CommandAdapterConfig
 from review_gauntlet.models import MatrixRow, ReviewCheck, ReviewMatrix, ReviewPlan, ReviewSlice
 from review_gauntlet.report import render_markdown_report
 from review_gauntlet.review_adapter import VERDICT_OUTPUT_SIZE_LIMIT_BYTES
@@ -591,6 +595,36 @@ def _fake_controller_run(_self: object) -> dict[str, object]:
 
 def _raise_controller_keyboard_interrupt(_self: object) -> dict[str, object]:
     raise KeyboardInterrupt
+
+
+def test_run_session_command_persists_agent_output_artifacts(tmp_path: Path) -> None:
+    script = tmp_path / "agent.py"
+    script.write_text(
+        "import sys\nprint('out-line')\nprint('err-line', file=sys.stderr)\n",
+        encoding="utf-8",
+    )
+    state_dir = tmp_path / ".review-gauntlet"
+    config = CommandAdapterConfig(type="command", command="python", args=(str(script),))
+
+    result = _run_session_command_step(
+        config=config, root=tmp_path, state_dir=state_dir, prompt="review pending cells"
+    )
+
+    assert result.returncode == 0
+    assert result.stdout == "out-line\n"
+    assert result.stderr == "err-line\n"
+    assert result.stdout_artifact is not None
+    assert result.stderr_artifact is not None
+    assert result.activity_artifact is not None
+    assert Path(result.stdout_artifact).read_text(encoding="utf-8") == result.stdout
+    assert Path(result.stderr_artifact).read_text(encoding="utf-8") == result.stderr
+    activity = Path(result.activity_artifact).read_text(encoding="utf-8")
+    assert '"stream": "stdout"' in activity
+    assert '"stream": "stderr"' in activity
+    assert tuple((entry.stream, entry.text) for entry in result.output_tail) == (
+        ("stdout", "out-line"),
+        ("stderr", "err-line"),
+    )
 
 
 def test_cli_run_help_exposes_no_tui(capsys: pytest.CaptureFixture[str]) -> None:

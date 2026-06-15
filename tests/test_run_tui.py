@@ -9,6 +9,7 @@ import pytest
 
 from review_gauntlet import run_tui
 from review_gauntlet.run_controller import (
+    AgentLifecycle,
     RunController,
     RunEvent,
     RunSnapshot,
@@ -103,13 +104,65 @@ def test_dashboard_header_contains_human_run_state_and_short_session() -> None:
 
     text = progress_text(snapshot, activity_frame=1)
 
-    assert "Review dashboard" in text
+    assert "Review Gauntlet" in text
     assert "RGS-prog…7890" in text
     assert "RUNNING - agent is working" in text
     assert "elapsed 02:05" in text
-    assert "step 4" in text
+    assert "gate 1/6" in text
+    assert "agent step 4" in text
     assert "agent ⠙ running" in text
     assert "current cells" not in text
+
+
+def test_header_and_current_operation_show_quiet_timeout_and_artifact_liveness() -> None:
+    snapshot = RunSnapshot(
+        session_id="RGS-liveness-1234",
+        coverage={"reviewed": 1},
+        findings={},
+        next_ready_prompt="finalize session",
+        step=2,
+        agent_status="running",
+        command_argv=("agent",),
+        elapsed_seconds=10,
+        command_label="agent",
+        agent_lifecycle=AgentLifecycle(
+            status="quiet",
+            last_output_age_seconds=7.0,
+            timeout_remaining_seconds=53.0,
+            artifact_path="/tmp/repo/.review-gauntlet/runs/run-1/activity.jsonl",
+        ),
+    )
+    view = dashboard_state(snapshot, (), activity_frame=0)
+
+    header = run_tui.header_text(view)
+    operation = run_tui.current_operation_text(view)
+    activity = activity_text(view)
+
+    assert "last output 7s ago" in header
+    assert "quiet 7s" in header
+    assert "timeout in 53s" in header
+    assert "agent still running" in activity
+    assert "artifact .review-gauntlet/runs/run-1/activity.jsonl" in operation
+    assert "timeout in 53s" in operation
+
+
+def test_liveness_synthesizes_non_flooding_quiet_heartbeat_rows() -> None:
+    snapshot = RunSnapshot(
+        session_id="RGS-liveness",
+        coverage={"reviewed": 1},
+        findings={},
+        next_ready_prompt=None,
+        step=1,
+        agent_status="running",
+        command_argv=(),
+        elapsed_seconds=0,
+        agent_lifecycle=AgentLifecycle(status="quiet", last_output_age_seconds=9.0),
+    )
+
+    assert "agent still running" in activity_text(dashboard_state(snapshot, (), activity_frame=0))
+    assert "agent still running" not in activity_text(
+        dashboard_state(snapshot, (), activity_frame=1)
+    )
 
 
 def test_coverage_and_findings_render_dashboard_metrics_without_old_markers() -> None:
@@ -173,8 +226,8 @@ def test_task_text_sanitizes_unknown_prompt_and_omits_command_na() -> None:
     text = task_text(snapshot)
 
     assert "Current operation" in text
-    assert "READY TASK" in text
-    assert "\\[bold]task" in text
+    assert "Finalize checkpoint" in text
+    assert "\\[bold]task" not in text
     assert "\x1b" not in text
     assert "command n/a" not in text
     assert "argv=[]" not in text
@@ -226,7 +279,7 @@ def test_view_state_fields_and_terminal_state_classes() -> None:
 
     assert view.session_short_id == "RGS-abcd…hijk"
     assert view.agent_name == "agent run"
-    assert view.step_label == "step 3"
+    assert view.step_label == "agent step 3"
     assert view.task.title == "FINALIZE SESSION"
     assert view.command_label == "agent run"
     assert view.state_class == "panel-finalized"
@@ -320,6 +373,7 @@ def test_compact_dashboard_text_keeps_required_sections() -> None:
     compact = "\n".join(
         [
             progress_text(snapshot),
+            run_tui.finalize_path_text(view),
             coverage_text(snapshot),
             findings_text(snapshot),
             task_text(snapshot),
@@ -328,10 +382,11 @@ def test_compact_dashboard_text_keeps_required_sections() -> None:
         ]
     )
 
-    assert "Review dashboard" in compact
-    assert "Coverage" in compact
+    assert "Review Gauntlet" in compact
+    assert "Finalize path" in compact
+    assert "Session metrics" in compact
     assert "Findings" in compact
-    assert "TRIAGE FINDINGS" in compact
+    assert "Review coverage" in compact
     assert "Activity" in compact
     assert "q stop after current step" in compact
 
@@ -391,7 +446,8 @@ def test_create_run_app_constructs_when_textual_available(tmp_path: Path) -> Non
     assert app is not None
 
 
-def test_run_app_executes_controller_in_headless_mode(tmp_path: Path) -> None:
+@pytest.mark.anyio
+async def test_run_app_executes_controller_in_headless_mode(tmp_path: Path) -> None:
     if not textual_available():
         pytest.skip("Textual optional dependency is not installed")
     (tmp_path / "review-gauntlet.json").write_text(
@@ -427,7 +483,15 @@ def test_run_app_executes_controller_in_headless_mode(tmp_path: Path) -> None:
         command_runner=command_runner,
     )
 
-    result = cast(Any, create_run_app(controller)).run(headless=True)
+    app = cast(Any, create_run_app(controller))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        assert app._completed_result is not None
+        assert not pilot.app._exit
+        await pilot.press("q")
 
+    result = getattr(app, "return_value", None)
+    if result is None:
+        result = getattr(app, "_return_value", None)
     assert isinstance(result, dict)
     assert result["completed"] is True

@@ -2,10 +2,11 @@
 from __future__ import annotations
 
 import importlib.util
+import re
 from dataclasses import dataclass
 from datetime import datetime
 
-from review_gauntlet.run_controller import RunController, RunEvent, RunSnapshot
+from review_gauntlet.run_controller import AgentOutputEntry, RunController, RunEvent, RunSnapshot
 
 TUI_FALLBACK_WARNING = "TUI support is not installed; falling back to text mode."
 TUI_INSTALL_GUIDANCE = 'Install with: uv tool install "review-gauntlet[tui]"'
@@ -57,6 +58,7 @@ def create_run_app(controller: RunController) -> object:
             self.controller = run_controller
             self.snapshot = run_controller.snapshot()
             self._activity_frame = 0
+            self._completed_result: dict[str, object] | None = None
 
         def compose(self) -> ComposeResult:
             view = dashboard_state(
@@ -64,6 +66,11 @@ def create_run_app(controller: RunController) -> object:
             )
             with Vertical(id="body"):
                 yield Static(header_text(view), id="session_header", classes=view.state_class)
+                yield Static(
+                    finalize_path_text(view),
+                    id="finalize_path",
+                    classes=f"panel {view.state_class}",
+                )
                 with Horizontal(id="metrics"):
                     yield Static(coverage_text(self.snapshot), id="coverage_panel", classes="panel")
                     yield Static(findings_text(self.snapshot), id="findings_panel", classes="panel")
@@ -82,13 +89,20 @@ def create_run_app(controller: RunController) -> object:
 
         def _run_controller(self) -> None:
             result = self.controller.run()
-            self.call_from_thread(self.exit, result)
+            self._completed_result = result
+            self.call_from_thread(self.refresh_view)
 
         def action_stop_after_current_step(self) -> None:
+            if self._completed_result is not None:
+                self.exit(self._completed_result)
+                return
             self.controller.request_stop_after_current_step()
             self.refresh_view()
 
         def action_interrupt(self) -> None:
+            if self._completed_result is not None:
+                self.exit(self._completed_result)
+                return
             self.controller.interrupt()
             self.exit({"completed": False, "reason": "interrupted", "steps": [], "step_count": 0})
 
@@ -108,6 +122,7 @@ def create_run_app(controller: RunController) -> object:
             )
             try:
                 session_header = self.query_one("#session_header", Static)
+                finalize_path = self.query_one("#finalize_path", Static)
                 coverage_panel = self.query_one("#coverage_panel", Static)
                 findings_panel = self.query_one("#findings_panel", Static)
                 task_panel = self.query_one("#task_panel", Static)
@@ -123,6 +138,7 @@ def create_run_app(controller: RunController) -> object:
                 "panel-finalized",
             ):
                 session_header.set_class(state_class == view.state_class, state_class)
+            finalize_path.update(finalize_path_text(view))
             coverage_panel.update(coverage_text(self.snapshot))
             findings_panel.update(findings_text(self.snapshot))
             task_panel.update(current_operation_text(view))
@@ -171,6 +187,14 @@ class TimelineEvent:
 
 
 @dataclass(frozen=True)
+class FinalizeGate:
+    index: int
+    title: str
+    state: str
+    detail: str
+
+
+@dataclass(frozen=True)
 class RunViewState:
     status: str
     status_summary: str
@@ -178,12 +202,17 @@ class RunViewState:
     session_short_id: str
     agent_name: str
     step_label: str
+    gate_label: str
+    active_gate: FinalizeGate
+    gates: tuple[FinalizeGate, ...]
     coverage: ProgressMetrics
     open_findings: int
     task: TaskDisplay
     command_label: str | None
     timeline_events: tuple[TimelineEvent, ...]
     activity: str
+    liveness_detail: str
+    artifact_path: str | None
     elapsed: str
 
 
@@ -224,6 +253,14 @@ def short_session_id(session_id: str | None) -> str:
     if len(safe) <= 12:
         return safe
     return f"{safe[:8]}…{safe[-4:]}"
+
+
+def short_artifact_path(path: str) -> str:
+    safe = _plain_text(path)
+    marker = ".review-gauntlet/"
+    if marker in safe:
+        return marker + safe.rsplit(marker, maxsplit=1)[1]
+    return _summarize_text(safe, limit=96)
 
 
 def format_event_time(timestamp: str) -> str:
@@ -279,21 +316,142 @@ def dashboard_state(
 ) -> RunViewState:
     status_summary, state_class = terminal_state(snapshot.agent_status)
     command_label = format_command_label(snapshot)
+    gates = derive_finalize_gates(snapshot)
+    active_gate = next(
+        (gate for gate in gates if gate.state in {"active", "blocked", "failed"}), gates[-1]
+    )
+    timeline_events = tuple(format_activity_event(event) for event in events[-10:])
+    output_events = tuple(
+        format_agent_output_entry(entry) for entry in snapshot.agent_lifecycle.output_tail[-6:]
+    )
+    liveness_detail = agent_liveness_detail(snapshot)
+    heartbeat_events = heartbeat_timeline_events(snapshot, activity_frame=activity_frame)
     return RunViewState(
         status=snapshot.agent_status,
         status_summary=status_summary,
         state_class=state_class,
         session_short_id=short_session_id(snapshot.session_id),
         agent_name=command_label or "agent idle",
-        step_label=f"step {snapshot.step}",
+        step_label=f"agent step {snapshot.step}",
+        gate_label=f"gate {active_gate.index}/6",
+        active_gate=active_gate,
+        gates=gates,
         coverage=calculate_progress_metrics(snapshot.coverage),
         open_findings=_count_value(snapshot.findings.get("open", 0)),
         task=format_task_title(snapshot.next_ready_prompt),
         command_label=command_label,
-        timeline_events=tuple(format_activity_event(event) for event in events[-12:]),
-        activity=agent_activity_text(snapshot.agent_status, activity_frame=activity_frame),
+        timeline_events=timeline_events + heartbeat_events + output_events,
+        activity=agent_activity_text(
+            _display_agent_status(snapshot), activity_frame=activity_frame
+        ),
+        liveness_detail=liveness_detail,
+        artifact_path=snapshot.agent_lifecycle.artifact_path,
         elapsed=format_elapsed_time(snapshot.elapsed_seconds),
     )
+
+
+def derive_finalize_gates(snapshot: RunSnapshot) -> tuple[FinalizeGate, ...]:
+    coverage = calculate_progress_metrics(snapshot.coverage)
+    findings = snapshot.findings
+    triage_count = _count_value(findings.get("untriaged", 0)) + _count_value(
+        findings.get("reopened", 0)
+    )
+    fix_count = _count_value(findings.get("confirmed", 0))
+    verify_count = _count_value(findings.get("fixed_pending_verification", 0))
+    blocker_count = len(snapshot.finalize_blockers)
+    failed = snapshot.agent_status in {"failed", "interrupted", "timed_out", "cancelled"}
+    finalized = snapshot.agent_status == "finalized" or (
+        snapshot.session_state == "finalized" and snapshot.can_finalize
+    )
+    specs = [
+        (
+            "Review coverage",
+            coverage.incomplete,
+            f"{coverage.completed}/{coverage.total} cells reviewed",
+        ),
+        ("Triage findings", triage_count, f"{triage_count} finding(s) need triage"),
+        ("Fix confirmed findings", fix_count, f"{fix_count} confirmed finding(s) need fixes"),
+        ("Verify fixes", verify_count, f"{verify_count} fixed finding(s) need verification"),
+        ("Resolve finalize blockers", blocker_count, f"{blocker_count} finalize blocker(s)"),
+        (
+            "Finalize checkpoint",
+            0 if finalized else 1,
+            snapshot.next_required_action or "checkpoint not finalized",
+        ),
+    ]
+    gates: list[FinalizeGate] = []
+    active_assigned = False
+    for index, (title, remaining, detail) in enumerate(specs, start=1):
+        if finalized:
+            state = "done"
+            gate_detail = "complete" if index == 6 else detail
+        elif failed and not active_assigned:
+            state = "failed"
+            gate_detail = detail
+            active_assigned = True
+        elif index == 5 and blocker_count > 0:
+            state = "blocked"
+            gate_detail = detail
+            active_assigned = True
+        elif remaining <= 0:
+            state = "done" if index in {1, 5, 6} else "skipped"
+            gate_detail = detail
+        elif not active_assigned:
+            state = "active"
+            gate_detail = detail
+            active_assigned = True
+        else:
+            state = "waiting"
+            gate_detail = detail
+        gates.append(FinalizeGate(index, title, state, gate_detail))
+    return tuple(gates)
+
+
+def _display_agent_status(snapshot: RunSnapshot) -> str:
+    if snapshot.agent_status == "running" and snapshot.agent_lifecycle.status == "idle":
+        return "running"
+    return snapshot.agent_lifecycle.status or snapshot.agent_status
+
+
+def agent_liveness_detail(snapshot: RunSnapshot) -> str:
+    parts: list[str] = []
+    lifecycle = snapshot.agent_lifecycle
+    if lifecycle.last_output_age_seconds is not None:
+        parts.append(f"last output {format_duration(lifecycle.last_output_age_seconds)} ago")
+    if _display_agent_status(snapshot) == "quiet":
+        quiet_for = lifecycle.last_output_age_seconds
+        if quiet_for is not None:
+            parts.append(f"quiet {format_duration(quiet_for)}")
+        else:
+            parts.append("quiet but alive")
+    if lifecycle.timeout_remaining_seconds is not None:
+        parts.append(f"timeout in {format_duration(lifecycle.timeout_remaining_seconds)}")
+    if not parts:
+        return agent_activity_text(_display_agent_status(snapshot))
+    return " | ".join(parts)
+
+
+def heartbeat_timeline_events(
+    snapshot: RunSnapshot, *, activity_frame: int = 0
+) -> tuple[TimelineEvent, ...]:
+    display_status = _display_agent_status(snapshot)
+    if display_status != "quiet":
+        return ()
+    detail = agent_liveness_detail(snapshot)
+    if activity_frame % 4 != 0:
+        return ()
+    return (TimelineEvent("--:--:--", "agent heartbeat", f"agent still running - {detail}"),)
+
+
+def format_duration(seconds: float) -> str:
+    safe_seconds = max(0, int(seconds))
+    if safe_seconds < 60:
+        return f"{safe_seconds}s"
+    minutes, remainder = divmod(safe_seconds, 60)
+    if minutes < 60:
+        return f"{minutes}m{remainder:02d}s"
+    hours, minutes = divmod(minutes, 60)
+    return f"{hours}h{minutes:02d}m"
 
 
 def terminal_state(agent_status: str) -> tuple[str, str]:
@@ -311,8 +469,9 @@ def terminal_state(agent_status: str) -> tuple[str, str]:
 
 def header_text(view: RunViewState) -> str:
     return (
-        f"Review dashboard | session {view.session_short_id} | {view.status_summary}\n"
-        f"{view.step_label} | elapsed {view.elapsed} | agent {view.activity}"
+        f"Review Gauntlet | session {view.session_short_id} | {view.status_summary}\n"
+        f"{view.gate_label} {view.active_gate.title} | {view.step_label} | "
+        f"elapsed {view.elapsed} | agent {view.activity} | {view.liveness_detail}"
     )
 
 
@@ -320,11 +479,21 @@ def progress_text(snapshot: RunSnapshot, *, activity_frame: int = 0) -> str:
     return header_text(dashboard_state(snapshot, (), activity_frame=activity_frame))
 
 
+def finalize_path_text(view: RunViewState) -> str:
+    lines = ["Finalize path"]
+    for gate in view.gates:
+        marker = {"done": "✓", "active": "▶", "blocked": "!", "failed": "×", "skipped": "-"}.get(
+            gate.state, "·"
+        )
+        lines.append(f"{marker} gate {gate.index}/6 {gate.title} [{gate.state}] - {gate.detail}")
+    return "\n".join(lines)
+
+
 def coverage_text(snapshot: RunSnapshot) -> str:
     metrics = calculate_progress_metrics(snapshot.coverage)
     return "\n".join(
         [
-            "Coverage",
+            "Session metrics",
             f"{metrics.percent:3d}% {_progress_bar(metrics.completed, metrics.total)}",
             f"reviewed / total cells: {metrics.completed} / {metrics.total}",
             (
@@ -344,9 +513,17 @@ def findings_text(snapshot: RunSnapshot) -> str:
 
 
 def current_operation_text(view: RunViewState) -> str:
-    lines = ["Current operation", view.task.title, view.task.description]
+    lines = [
+        "Current operation",
+        f"{view.active_gate.title} ({view.active_gate.state})",
+        view.active_gate.detail,
+        f"liveness {view.activity}",
+        f"agent {view.liveness_detail}",
+    ]
     if view.command_label is not None:
         lines.append(f"command {view.command_label}")
+    if view.artifact_path is not None:
+        lines.append(f"artifact {short_artifact_path(view.artifact_path)}")
     return "\n".join(lines)
 
 
@@ -355,9 +532,24 @@ def _task_text(snapshot: RunSnapshot) -> str:  # pyright: ignore[reportUnusedFun
 
 
 def agent_activity_text(agent_status: str, *, activity_frame: int = 0) -> str:
-    if agent_status == "running":
-        return f"{_SPINNER_FRAMES[activity_frame % len(_SPINNER_FRAMES)]} running"
+    if agent_status in {"running", "starting"}:
+        return f"{_SPINNER_FRAMES[activity_frame % len(_SPINNER_FRAMES)]} {agent_status}"
+    if agent_status == "quiet":
+        return "quiet but alive"
     return f"· {_plain_text(agent_status)}"
+
+
+def format_agent_output_entry(entry: AgentOutputEntry) -> TimelineEvent:
+    label = "agent stderr" if entry.stream == "stderr" else "agent stdout"
+    return TimelineEvent("--:--:--", label, sanitize_agent_output_line(entry.text))
+
+
+def sanitize_agent_output_line(value: object, *, limit: int = 120) -> str:
+    text = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", str(value))
+    text = text.replace("\r", "\n")
+    text = " ".join(_plain_text(text).split())
+    text = re.sub(r"\b[A-Z0-9_]*(?:TOKEN|SECRET|KEY)=\S+", "<redacted>", text)
+    return _summarize_text(text, limit=limit)
 
 
 def format_activity_event(event: RunEvent) -> TimelineEvent:

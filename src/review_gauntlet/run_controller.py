@@ -14,6 +14,22 @@ RUN_INTERRUPTED_REASON = "interrupted"
 
 
 @dataclass(frozen=True)
+class AgentOutputEntry:
+    stream: str
+    text: str
+    timestamp: str | None = None
+
+
+@dataclass(frozen=True)
+class AgentLifecycle:
+    status: str = "idle"
+    last_output_age_seconds: float | None = None
+    timeout_remaining_seconds: float | None = None
+    artifact_path: str | None = None
+    output_tail: tuple[AgentOutputEntry, ...] = ()
+
+
+@dataclass(frozen=True)
 class SessionCommandResult:
     argv: list[str]
     cwd: str | None
@@ -21,6 +37,10 @@ class SessionCommandResult:
     stdout: str
     stderr: str
     failure: dict[str, object] | None = None
+    stdout_artifact: str | None = None
+    stderr_artifact: str | None = None
+    activity_artifact: str | None = None
+    output_tail: tuple[AgentOutputEntry, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -52,6 +72,12 @@ class RunSnapshot:
     command_argv: tuple[str, ...]
     elapsed_seconds: float
     command_label: str | None = None
+    session_state: str | None = None
+    can_finalize: bool = False
+    finalize_blockers: tuple[str, ...] = ()
+    next_required_action: str | None = None
+    run_count: int = 0
+    agent_lifecycle: AgentLifecycle = AgentLifecycle()
 
 
 ReadyPrompt = Callable[[SessionStore, Path], str | None]
@@ -88,7 +114,14 @@ class RunController:
         self._agent_status = "idle"
         self._command_argv: tuple[str, ...] = ()
         self._command_label: str | None = None
+        self._agent_lifecycle = AgentLifecycle()
+        self._agent_step_started_at: datetime | None = None
+        self._agent_timeout_seconds: float | None = None
+        self._last_result: dict[str, object] | None = None
         self._started_at = datetime.now(UTC)
+
+    def set_agent_step_started_at_for_testing(self, started_at: datetime) -> None:
+        self._agent_step_started_at = started_at
 
     @property
     def events(self) -> tuple[RunEvent, ...]:
@@ -127,6 +160,38 @@ class RunController:
             command_argv=self._command_argv,
             elapsed_seconds=(datetime.now(UTC) - self._started_at).total_seconds(),
             command_label=self._command_label,
+            session_state=_string_or_none(status.get("session_state")),
+            can_finalize=bool(status.get("can_finalize", False)),
+            finalize_blockers=_string_tuple(status.get("finalize_blockers", ())),
+            next_required_action=_string_or_none(status.get("next_required_action")),
+            run_count=_int_or_zero(status.get("run_count", self._step)),
+            agent_lifecycle=self._current_agent_lifecycle(),
+        )
+
+    def _current_agent_lifecycle(self) -> AgentLifecycle:
+        if self._agent_status != "running":
+            return self._agent_lifecycle
+        now = datetime.now(UTC)
+        last_output_age = self._agent_lifecycle.last_output_age_seconds
+        if last_output_age is None and self._agent_step_started_at is not None:
+            last_output_age = (now - self._agent_step_started_at).total_seconds()
+        timeout_remaining = self._agent_lifecycle.timeout_remaining_seconds
+        if timeout_remaining is None and self._agent_timeout_seconds is not None:
+            elapsed = (
+                (now - self._agent_step_started_at).total_seconds()
+                if self._agent_step_started_at is not None
+                else 0.0
+            )
+            timeout_remaining = max(0.0, float(self._agent_timeout_seconds) - elapsed)
+        status = self._agent_lifecycle.status
+        if status == "running" and last_output_age is not None and last_output_age >= 5.0:
+            status = "quiet"
+        return AgentLifecycle(
+            status=status,
+            last_output_age_seconds=last_output_age,
+            timeout_remaining_seconds=timeout_remaining,
+            artifact_path=self._agent_lifecycle.artifact_path,
+            output_tail=self._agent_lifecycle.output_tail,
         )
 
     def run(self) -> dict[str, object]:
@@ -163,6 +228,9 @@ class RunController:
                 )
             self._emit("step_started", step=step_number, prompt=prompt)
             self._agent_status = "running"
+            self._agent_step_started_at = datetime.now(UTC)
+            self._agent_timeout_seconds = effective_config.adapter.timeout_seconds
+            self._agent_lifecycle = AgentLifecycle(status="running")
             self._emit(
                 "agent_started",
                 command_label=self._command_label,
@@ -180,9 +248,20 @@ class RunController:
                 self._emit("interrupted", step=step_number, session_id=session_id)
                 return self._interrupted_result(steps)
             self._command_argv = tuple(command_result.argv)
+            lifecycle_status = _lifecycle_status_from_result(command_result)
+            self._agent_lifecycle = AgentLifecycle(
+                status=lifecycle_status,
+                last_output_age_seconds=0.0 if command_result.output_tail else None,
+                artifact_path=command_result.activity_artifact
+                or command_result.stdout_artifact
+                or command_result.stderr_artifact,
+                output_tail=command_result.output_tail,
+            )
+            self._agent_step_started_at = None
+            self._agent_timeout_seconds = None
             step_payload = _run_step_payload(step_number, prompt, command_result)
             steps.append(step_payload)
-            self._agent_status = "idle"
+            self._agent_status = "idle" if command_result.failure is None else lifecycle_status
             self._emit(
                 "agent_finished",
                 returncode=command_result.returncode,
@@ -274,6 +353,41 @@ def _object_dict(value: object) -> dict[str, object]:
         return {}
     typed_value = cast(Mapping[object, object], value)
     return {str(key): item for key, item in typed_value.items()}
+
+
+def _string_or_none(value: object) -> str | None:
+    if value is None:
+        return None
+    text = str(value)
+    return text if text else None
+
+
+def _string_tuple(value: object) -> tuple[str, ...]:
+    if isinstance(value, str):
+        return (value,) if value else ()
+    if not isinstance(value, tuple | list):
+        return ()
+    items = cast(tuple[object, ...] | list[object], value)
+    return tuple(text for item in items if (text := str(item)))
+
+
+def _int_or_zero(value: object) -> int:
+    if isinstance(value, bool):
+        return 0
+    if isinstance(value, int):
+        return max(0, value)
+    return 0
+
+
+def _lifecycle_status_from_result(result: SessionCommandResult) -> str:
+    if result.failure is None:
+        return "completed"
+    reason = str(result.failure.get("reason", "failed"))
+    if reason == "timeout":
+        return "timed_out"
+    if reason == RUN_INTERRUPTED_REASON:
+        return "cancelled"
+    return "failed"
 
 
 def _run_result(

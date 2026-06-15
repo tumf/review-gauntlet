@@ -62,6 +62,7 @@ from review_gauntlet.review_cells import CellState, ReviewCell, cells_from_plan
 from review_gauntlet.run_controller import (
     RUN_INTERRUPTED_ERROR,
     RUN_INTERRUPTED_REASON,
+    AgentOutputEntry,
     RunController,
     SessionCommandResult,
 )
@@ -1498,17 +1499,20 @@ def _run_session_command_step(
             },
         )
     except subprocess.TimeoutExpired as exc:
-        return SessionCommandResult(
-            argv=argv,
-            cwd=None if cwd_path is None else str(cwd_path),
-            returncode=None,
-            stdout=_process_session_output_text(exc.stdout),
-            stderr=_process_session_output_text(exc.stderr),
-            failure={
-                "reason": "timeout",
-                "error": f"command timed out after {config.timeout_seconds} seconds",
-                "timeout_seconds": config.timeout_seconds,
-            },
+        return _persist_session_command_artifacts(
+            state_dir,
+            SessionCommandResult(
+                argv=argv,
+                cwd=None if cwd_path is None else str(cwd_path),
+                returncode=None,
+                stdout=_process_session_output_text(exc.stdout),
+                stderr=_process_session_output_text(exc.stderr),
+                failure={
+                    "reason": "timeout",
+                    "error": f"command timed out after {config.timeout_seconds} seconds",
+                    "timeout_seconds": config.timeout_seconds,
+                },
+            ),
         )
     except KeyboardInterrupt:
         return SessionCommandResult(
@@ -1529,7 +1533,7 @@ def _run_session_command_step(
             "error": f"command exited with status {completed.returncode}",
             "returncode": completed.returncode,
         }
-    return SessionCommandResult(
+    result = SessionCommandResult(
         argv=argv,
         cwd=None if cwd_path is None else str(cwd_path),
         returncode=completed.returncode,
@@ -1537,6 +1541,54 @@ def _run_session_command_step(
         stderr=completed.stderr,
         failure=failure,
     )
+    return _persist_session_command_artifacts(state_dir, result)
+
+
+def _persist_session_command_artifacts(
+    state_dir: Path, result: SessionCommandResult
+) -> SessionCommandResult:
+    run_dir = state_dir / "runs" / uuid.uuid4().hex
+    run_dir.mkdir(parents=True, exist_ok=True)
+    stdout_path = run_dir / "agent-stdout.log"
+    stderr_path = run_dir / "agent-stderr.log"
+    activity_path = run_dir / "activity.jsonl"
+    stdout_path.write_text(result.stdout, encoding="utf-8")
+    stderr_path.write_text(result.stderr, encoding="utf-8")
+    output_tail = _agent_output_tail(result.stdout, result.stderr)
+    with activity_path.open("w", encoding="utf-8") as handle:
+        for entry in output_tail:
+            handle.write(json.dumps({"stream": entry.stream, "text": entry.text}) + "\n")
+        handle.write(
+            json.dumps(
+                {
+                    "event": "agent_completed",
+                    "returncode": result.returncode,
+                    "failed": result.failure is not None,
+                }
+            )
+            + "\n"
+        )
+    return SessionCommandResult(
+        argv=result.argv,
+        cwd=result.cwd,
+        returncode=result.returncode,
+        stdout=result.stdout,
+        stderr=result.stderr,
+        failure=result.failure,
+        stdout_artifact=str(stdout_path),
+        stderr_artifact=str(stderr_path),
+        activity_artifact=str(activity_path),
+        output_tail=output_tail,
+    )
+
+
+def _agent_output_tail(
+    stdout: str, stderr: str, *, limit: int = 20
+) -> tuple[AgentOutputEntry, ...]:
+    entries: list[AgentOutputEntry] = []
+    entries.extend(AgentOutputEntry("stdout", line) for line in stdout.splitlines() if line.strip())
+    entries.extend(AgentOutputEntry("stderr", line) for line in stderr.splitlines() if line.strip())
+    return tuple(entries[-limit:])
 
 
 def _expand_session_template(value: str, variables: dict[str, str]) -> str:
