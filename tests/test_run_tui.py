@@ -142,6 +142,7 @@ def test_header_omits_timeout_and_agent_summary_keeps_quiet_timeout_artifact_liv
 
     assert "quiet 7s" in header
     assert "timeout" not in header
+    assert "timeout in 53s" not in header
     assert "last output 7s ago" not in header
     assert "event - agent alive no output for 7s" in activity
     assert "artifact .review-gauntlet/runs/run-1/activity.jsonl" in operation
