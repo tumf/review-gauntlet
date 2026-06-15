@@ -5,6 +5,7 @@ import json
 import os
 import posixpath
 import re
+import shutil
 import subprocess
 import sys
 import uuid
@@ -37,6 +38,11 @@ from review_gauntlet.config import (
     validate_config_text,
 )
 from review_gauntlet.findings import FindingState, normalize_ocr_comment
+from review_gauntlet.git_worktree import (
+    create_session_worktree,
+    merge_preflight_blockers,
+    merge_session_worktree,
+)
 from review_gauntlet.inventory import (
     UnsafeRepositoryPathError,
     build_inventory,
@@ -174,7 +180,14 @@ def build_parser() -> argparse.ArgumentParser:
     init.add_argument("--from", dest="base_ref")
     init.add_argument("--to", dest="head_ref")
     init.add_argument(
-        "--worktree", action="store_true", help="Review worktree changes (default: false)"
+        "--worktree",
+        action="store_true",
+        help="Review workspace/worktree changes as the target (default: false)",
+    )
+    init.add_argument(
+        "--git-worktree",
+        action="store_true",
+        help="Create an isolated Git linked worktree and session branch (default: false)",
     )
     init.add_argument("--commit")
     init.add_argument(
@@ -274,6 +287,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     finalize = subparsers.add_parser("finalize")
     _root_arg(finalize)
+    finalize.add_argument(
+        "--merge",
+        action="store_true",
+        help="Merge and clean up a Git-worktree-backed session (default: false)",
+    )
     _output_format_arg(finalize)
     _allow_non_review_dirty_arg(finalize)
 
@@ -759,7 +777,7 @@ def _run_session_command(args: argparse.Namespace, root: Path) -> None:
         _cmd_mark(args, store)
     elif args.command == "finalize":
         allow = bool(getattr(args, "allow_non_review_dirty", False))
-        result = _finalize(store, root, allow_non_review_dirty=allow)
+        result = _finalize(store, root, allow_non_review_dirty=allow, merge=bool(args.merge))
         _emit(result, args.format)
         if not result["can_finalize"]:
             raise SystemExit(1)
@@ -798,9 +816,14 @@ def _cmd_init(args: argparse.Namespace, root: Path, store: SessionStore) -> None
         "ruleset_digest": ruleset.digest,
         "target_digest": target_digest(root),
     }
+    output: dict[str, object] = {"session_id": session_id, "cell_count": len(cells), "run_count": 0}
+    if bool(getattr(args, "git_worktree", False)):
+        git_metadata = create_session_worktree(root, session_id)
+        metadata["git_worktree"] = git_metadata.as_dict()
+        output["git_worktree"] = git_metadata.as_dict()
     store.create_session(metadata, cells)
     (store.state_dir / "rules.lock").write_text(ruleset.model_dump_json(indent=2), encoding="utf-8")
-    _emit({"session_id": session_id, "cell_count": len(cells), "run_count": 0}, args.format)
+    _emit(output, args.format)
 
 
 def _build_target_plan(root: Path, target: TargetSpec) -> ReviewPlan:
@@ -1830,9 +1853,28 @@ def _finalize(
     root: Path,
     *,
     allow_non_review_dirty: bool = False,
+    merge: bool = False,
 ) -> dict[str, object]:
     status = _status(store, root, allow_non_review_dirty=allow_non_review_dirty)
+    session_id = str(status["session_id"])
+    metadata = store.session_metadata(session_id)
+    if merge and not (
+        isinstance(metadata.get("git_worktree"), dict)
+        and cast(dict[str, object], metadata["git_worktree"]).get("enabled") is True
+    ):
+        status["can_finalize"] = False
+        status["merged"] = False
+        status["cleaned_up"] = False
+        status["finalize_blockers"] = [
+            *cast(list[str], status["finalize_blockers"]),
+            "merge finalization requires a Git-worktree-backed session",
+        ]
+        status["next_required_action"] = "resolve_finalize_blockers"
+        return status
     if not status["can_finalize"]:
+        if merge:
+            status["merged"] = False
+            status["cleaned_up"] = False
         try:
             from review_gauntlet.checkpoint import assert_review_universe_clean
 
@@ -1842,6 +1884,17 @@ def _finalize(
             if str(exc) not in blockers:
                 status["finalize_blockers"] = [*blockers, str(exc)]
         return status
+    if merge:
+        preflight_blockers = merge_preflight_blockers(
+            root, cast(dict[str, object], metadata["git_worktree"])
+        )
+        if preflight_blockers:
+            status["can_finalize"] = False
+            status["merged"] = False
+            status["cleaned_up"] = False
+            status["finalize_blockers"] = preflight_blockers
+            status["next_required_action"] = "resolve_finalize_blockers"
+            return status
     try:
         checkpoint = write_latest_checkpoint(store, root, str(status["session_id"]), status)
     except DirtyReviewUniverseError as exc:
@@ -1849,6 +1902,36 @@ def _finalize(
         status["finalize_blockers"] = [*cast(list[str], status["finalize_blockers"]), str(exc)]
         status["next_required_action"] = "resolve_finalize_blockers"
         return status
+    if merge:
+        git_meta = cast(dict[str, object], metadata["git_worktree"])
+        session_worktree = (root / str(git_meta["worktree_path"])).resolve()
+        _copy_checkpoint_artifacts_to_session_worktree(root, session_worktree, checkpoint)
+        _remove_base_checkpoint_artifacts_before_merge(root, checkpoint)
+        merge_result = merge_session_worktree(
+            root,
+            metadata,
+            session_id=session_id,
+            commit_paths=tuple(cast(list[str], checkpoint["generated_files"]))
+            + (".review-gauntlet/checkpoints/latest",),
+        )
+        status.update(
+            {
+                "merged": merge_result.merged,
+                "cleaned_up": merge_result.cleaned_up,
+                "base_branch": merge_result.base_branch,
+                "session_branch": merge_result.session_branch,
+                "session_commit": merge_result.session_commit,
+                "merge_commit": merge_result.merge_commit,
+                "removed_worktree_path": merge_result.removed_worktree_path,
+                "deleted_branch": merge_result.deleted_branch,
+                "cleanup_blockers": list(merge_result.cleanup_blockers),
+            }
+        )
+        if not merge_result.merged:
+            status["can_finalize"] = False
+            status["finalize_blockers"] = list(merge_result.finalize_blockers)
+            status["next_required_action"] = merge_result.next_required_action
+            return status
     with store.connect() as conn:
         conn.execute(
             "update sessions set state = 'finalized' where session_id = ?",
@@ -1859,7 +1942,31 @@ def _finalize(
     status.update(checkpoint)
     status["session_state"] = "finalized"
     status["can_finalize"] = True
+    if merge and status.get("cleaned_up") is False:
+        status["next_required_action"] = "cleanup_git_worktree"
     return status
+
+
+def _copy_checkpoint_artifacts_to_session_worktree(
+    root: Path, session_worktree: Path, checkpoint: dict[str, object]
+) -> None:
+    generated_files = cast(list[str], checkpoint["generated_files"])
+    for relative in [*generated_files, ".review-gauntlet/checkpoints/latest"]:
+        source = root / relative
+        destination = session_worktree / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, destination)
+
+
+def _remove_base_checkpoint_artifacts_before_merge(
+    root: Path, checkpoint: dict[str, object]
+) -> None:
+    checkpoint_dir = root / str(checkpoint["checkpoint_dir"])
+    if checkpoint_dir.exists():
+        shutil.rmtree(checkpoint_dir)
+    latest = root / ".review-gauntlet" / "checkpoints" / "latest"
+    if latest.exists() or latest.is_symlink():
+        latest.unlink()
 
 
 def _finalize_reasons(

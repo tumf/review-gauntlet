@@ -172,7 +172,16 @@ def _dirty_review_universe_paths(root: Path) -> tuple[str, ...]:
     names += _split(_git(root, "ls-files", "--others", "--exclude-standard"))
     from review_gauntlet.inventory import should_include_review_relative_path
 
-    return tuple(sorted({name for name in names if should_include_review_relative_path(name)}))
+    return tuple(
+        sorted(
+            {
+                name
+                for name in names
+                if not name.startswith(".review-gauntlet/")
+                and should_include_review_relative_path(name)
+            }
+        )
+    )
 
 
 def _get_all_uncommitted_paths(root: Path) -> tuple[str, ...]:

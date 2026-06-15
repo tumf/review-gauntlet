@@ -475,11 +475,23 @@ def test_cli_status_help_shows_boolean_default(capsys: pytest.CaptureFixture[str
     assert "(default: false)" in output
 
 
+def test_cli_finalize_help_exposes_merge(capsys: pytest.CaptureFixture[str]) -> None:
+    output = _help_output(["finalize"], capsys)
+
+    assert "--merge" in output
+    assert "Merge and clean up a Git-worktree-backed session" in output
+    assert "(default: false)" in output
+
+
 def test_cli_init_help_shows_boolean_defaults(capsys: pytest.CaptureFixture[str]) -> None:
     output = _help_output(["init"], capsys)
 
-    assert "Review worktree changes (default: false)" in output
+    assert "Review workspace/worktree changes as the target" in output
+    assert "Create an isolated Git linked worktree" in output
+    assert "--git-worktree" in output
+    assert "(default: false)" in output
     assert "Review all files (default: false)" in output
+    assert "--git-worktree" in output
     assert "--from" in output
     assert "--to" in output
     assert "--commit" in output
