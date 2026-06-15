@@ -195,6 +195,11 @@ review-gauntlet run
 # Inspect state and findings when debugging or auditing the result.
 review-gauntlet status
 review-gauntlet findings
+
+# Optional isolation workflow: create a Git branch and linked worktree for the session.
+review-gauntlet init --git-worktree
+review-gauntlet run
+review-gauntlet finalize --merge
 ```
 
 `run` is the normal progression command. It does not change the constitution-backed
@@ -202,6 +207,18 @@ behavior of `review`: `review` advances exactly one review batch per invocation,
 `run` orchestrates repeated ready-task execution through the external agent. `finalize`
 is still a gate, not a cleanup command: it fails until required coverage is complete
 and live findings are closed.
+
+`--worktree` and `--git-worktree` are intentionally different concepts. `init
+--worktree` selects the current workspace diff as the review target. `init
+--git-worktree` creates an isolated Git linked worktree under
+`.review-gauntlet/worktrees/<session-id>/` and a `review-gauntlet/<session-id>` branch
+for the session. They can be combined as `init --worktree --git-worktree` to review the
+workspace diff while isolating session work. For Git-worktree-backed sessions,
+`finalize --merge` writes checkpoint artifacts, commits the session branch, fast-forward
+merges it into the recorded base branch, removes the linked worktree, and deletes the
+session branch. If merge succeeds but cleanup fails, the command reports
+`cleaned_up: false`, includes cleanup blockers, and leaves `next_required_action:
+cleanup_git_worktree` for manual repair.
 
 ### Advanced `ready` usage
 
