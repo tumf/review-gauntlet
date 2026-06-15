@@ -435,9 +435,11 @@ def build_agent_summary(
     output = "no output yet"
     if lifecycle.last_output_age_seconds is not None:
         output = f"last output {format_duration(lifecycle.last_output_age_seconds)} ago"
-    timeout = "timeout not set"
+    timeout = "not configured"
     if lifecycle.timeout_remaining_seconds is not None:
-        timeout = f"timeout in {format_duration(lifecycle.timeout_remaining_seconds)}"
+        timeout = f"in {format_duration(lifecycle.timeout_remaining_seconds)}"
+    elif lifecycle.timeout_seconds is not None:
+        timeout = f"configured {format_duration(lifecycle.timeout_seconds)}"
     artifact = short_artifact_path(artifact_path) if artifact_path is not None else None
     return AgentSummary(
         command=command_label or "command resolving...",
@@ -491,6 +493,14 @@ def classify_finalize_blockers(blockers: tuple[str, ...]) -> BlockerGroups:
     return BlockerGroups(tuple(coverage), tuple(findings), tuple(final_checks))
 
 
+def _is_finalize_ready_timeout(snapshot: RunSnapshot) -> bool:
+    return (
+        snapshot.agent_status == "timed_out"
+        and snapshot.can_finalize
+        and not snapshot.finalize_blockers
+    )
+
+
 def derive_finalize_gates(snapshot: RunSnapshot) -> tuple[FinalizeGate, ...]:
     coverage = calculate_progress_metrics(snapshot.coverage)
     findings = snapshot.findings
@@ -542,6 +552,9 @@ def derive_finalize_gates(snapshot: RunSnapshot) -> tuple[FinalizeGate, ...]:
     if finalized:
         checkpoint_state = "done"
         checkpoint_detail = "complete"
+    elif _is_finalize_ready_timeout(snapshot):
+        checkpoint_state = "running"
+        checkpoint_detail = "agent timed out; run review-gauntlet finalize"
     elif final_checks_state == "done" and snapshot.can_finalize:
         checkpoint_state = "running"
         checkpoint_detail = "ready to finalize"
@@ -558,7 +571,7 @@ def derive_finalize_gates(snapshot: RunSnapshot) -> tuple[FinalizeGate, ...]:
     ]
     if finalized:
         return tuple(FinalizeGate(gate.index, gate.title, "done", "complete") for gate in gates)
-    if failed:
+    if failed and not _is_finalize_ready_timeout(snapshot):
         for gate in gates:
             if gate.state in {"running", "blocked", "next", "later"}:
                 return tuple(

@@ -255,6 +255,54 @@ def test_command_display_label_omits_template_arguments() -> None:
     assert command_display_label(config) == "fake-agent --mode review"
 
 
+def test_run_controller_preserves_effective_timeout_after_command_timeout(
+    tmp_path: Path,
+) -> None:
+    store = _store(tmp_path)
+
+    def command(
+        config: CommandAdapterConfig, _root: Path, _state_dir: Path, _prompt: str
+    ) -> SessionCommandResult:
+        return SessionCommandResult(
+            argv=[config.command],
+            cwd=None,
+            returncode=None,
+            stdout="",
+            stderr="command timed out",
+            failure={
+                "reason": "timeout",
+                "error": f"command timed out after {config.timeout_seconds} seconds",
+            },
+        )
+
+    controller = RunController(
+        root=tmp_path,
+        store=store,
+        config_path=None,
+        max_steps=1,
+        ready_prompt=lambda _store, _root: "ready prompt",
+        status_snapshot=lambda _store, _root: {
+            "coverage": {"reviewed": 1},
+            "findings": {},
+            "can_finalize": True,
+            "finalize_blockers": [],
+            "next_required_action": "finalize",
+        },
+        command_runner=command,
+    )
+
+    result = controller.run()
+    snapshot = controller.snapshot()
+
+    assert result["completed"] is False
+    assert result["reason"] == "timeout"
+    assert snapshot.agent_status == "timed_out"
+    assert snapshot.agent_lifecycle.status == "timed_out"
+    assert snapshot.agent_lifecycle.timeout_seconds == 600.0
+    assert snapshot.agent_lifecycle.timeout_remaining_seconds is None
+    assert snapshot.can_finalize is True
+
+
 def test_run_controller_reports_command_failure(tmp_path: Path) -> None:
     store = _store(tmp_path)
 

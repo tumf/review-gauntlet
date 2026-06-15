@@ -27,6 +27,7 @@ class AgentLifecycle:
     status: str = "idle"
     last_output_age_seconds: float | None = None
     timeout_remaining_seconds: float | None = None
+    timeout_seconds: float | None = None
     artifact_path: str | None = None
     output_tail: tuple[AgentOutputEntry, ...] = ()
 
@@ -192,6 +193,7 @@ class RunController:
             status=status,
             last_output_age_seconds=last_output_age,
             timeout_remaining_seconds=timeout_remaining,
+            timeout_seconds=self._agent_timeout_seconds,
             artifact_path=self._agent_lifecycle.artifact_path,
             output_tail=self._agent_lifecycle.output_tail,
         )
@@ -232,7 +234,10 @@ class RunController:
             self._agent_status = "running"
             self._agent_step_started_at = datetime.now(UTC)
             self._agent_timeout_seconds = effective_config.adapter.timeout_seconds
-            self._agent_lifecycle = AgentLifecycle(status="running")
+            self._agent_lifecycle = AgentLifecycle(
+                status="running",
+                timeout_seconds=effective_config.adapter.timeout_seconds,
+            )
             self._emit(
                 "agent_started",
                 command_label=self._command_label,
@@ -254,6 +259,7 @@ class RunController:
             self._agent_lifecycle = AgentLifecycle(
                 status=lifecycle_status,
                 last_output_age_seconds=0.0 if command_result.output_tail else None,
+                timeout_seconds=effective_config.adapter.timeout_seconds,
                 artifact_path=command_result.activity_artifact
                 or command_result.stdout_artifact
                 or command_result.stderr_artifact,

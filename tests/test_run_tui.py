@@ -149,7 +149,8 @@ def test_header_omits_timeout_and_agent_summary_keeps_quiet_timeout_artifact_liv
     assert "artifact .review-gauntlet/runs/run-1/activity.jsonl" in operation
     assert "status  quiet 7s" in operation
     assert "output  last output 7s ago" in operation
-    assert "timeout timeout in 53s" in operation
+    assert "timeout in 53s" in operation
+    assert "timeout timeout" not in operation
 
 
 def test_liveness_omits_quiet_heartbeat_rows_across_animation_frames() -> None:
@@ -577,7 +578,8 @@ def test_agent_session_summary_and_activity_rows_are_human_facing_and_sanitized(
     assert "command opencode" in agent
     assert "status  quiet 2m00s" in agent
     assert "output  last output 2m00s ago" in agent
-    assert "timeout timeout in 7m06s" in agent
+    assert "timeout in 7m06s" in agent
+    assert "timeout timeout" not in agent
     assert "last output 2m00s ago | quiet 2m00s" not in agent
     assert "artifact .review-gauntlet/runs/run-1/output.txt" in agent
     assert "Session" not in session
@@ -593,6 +595,104 @@ def test_agent_session_summary_and_activity_rows_are_human_facing_and_sanitized(
     assert "SECRET=value" not in activity
     assert run_tui.sanitize_agent_output_line("api_key=supersecret") == "<redacted>"
     assert run_tui.sanitize_agent_output_line("ClientSecret=supersecret") == "<redacted>"
+
+
+def test_agent_summary_uses_configured_default_timeout_without_unset_or_duplicate_wording() -> None:
+    snapshot = RunSnapshot(
+        session_id="RGS-timeout-default",
+        coverage={"reviewed": 1},
+        findings={},
+        next_ready_prompt="finalize session",
+        step=1,
+        agent_status="timed_out",
+        command_argv=("agent",),
+        elapsed_seconds=600,
+        command_label="agent",
+        agent_lifecycle=AgentLifecycle(status="timed_out", timeout_seconds=600.0),
+    )
+
+    text = run_tui.agent_summary_text(dashboard_state(snapshot, ()))
+
+    assert "timeout configured 10m00s" in text
+    assert "timeout not set" not in text
+    assert "timeout timeout" not in text
+
+
+def test_finalize_ready_timeout_keeps_prior_gates_successful_and_shows_manual_finalize_cue() -> (
+    None
+):
+    snapshot = RunSnapshot(
+        session_id="RGS-ready-timeout",
+        coverage={"reviewed": 13},
+        findings={},
+        next_ready_prompt="finalize session",
+        step=3,
+        agent_status="timed_out",
+        command_argv=("agent",),
+        elapsed_seconds=600,
+        command_label="agent",
+        can_finalize=True,
+        finalize_blockers=(),
+        next_required_action="finalize",
+        agent_lifecycle=AgentLifecycle(status="timed_out", timeout_seconds=600.0),
+    )
+    view = dashboard_state(snapshot, ())
+    checklist = run_tui.finalize_path_text(view)
+    operation = run_tui.current_operation_text(view)
+
+    assert view.gates[0].state == "done"
+    assert view.gates[1].state == "done"
+    assert view.gates[2].state == "done"
+    assert view.gates[3].state == "done"
+    assert view.gates[4].state == "done"
+    assert view.gates[5].title == "Finalize checkpoint"
+    assert view.gates[5].state == "running"
+    assert "agent timed out; run review-gauntlet finalize" in checklist
+    assert "timeout configured 10m00s" in operation
+    assert "failed" not in checklist
+
+
+def test_timeout_before_finalize_ready_remains_failed_without_manual_finalize_cue() -> None:
+    snapshot = RunSnapshot(
+        session_id="RGS-preready-timeout",
+        coverage={"reviewed": 2, "pending": 1},
+        findings={},
+        next_ready_prompt="review pending cells",
+        step=2,
+        agent_status="timed_out",
+        command_argv=("agent",),
+        elapsed_seconds=600,
+        command_label="agent",
+        can_finalize=False,
+        finalize_blockers=("review cells are still pending",),
+        agent_lifecycle=AgentLifecycle(status="timed_out", timeout_seconds=600.0),
+    )
+    checklist = run_tui.finalize_path_text(dashboard_state(snapshot, ()))
+
+    assert "× Review coverage" in checklist
+    assert "run review-gauntlet finalize" not in checklist
+
+
+def test_timeout_with_finalize_blockers_remains_blocked_without_manual_finalize_cue() -> None:
+    snapshot = RunSnapshot(
+        session_id="RGS-blocked-timeout",
+        coverage={"reviewed": 13},
+        findings={},
+        next_ready_prompt="finalize session",
+        step=3,
+        agent_status="timed_out",
+        command_argv=("agent",),
+        elapsed_seconds=600,
+        command_label="agent",
+        can_finalize=False,
+        finalize_blockers=("working tree has uncommitted changes",),
+        agent_lifecycle=AgentLifecycle(status="timed_out", timeout_seconds=600.0),
+    )
+    checklist = run_tui.finalize_path_text(dashboard_state(snapshot, ()))
+
+    assert "× Final checks" in checklist
+    assert "working tree has uncommitted changes" in checklist
+    assert "run review-gauntlet finalize" not in checklist
 
 
 def test_footer_lists_only_implemented_controls() -> None:
