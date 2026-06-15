@@ -145,176 +145,62 @@ When the same finding is detected while it is `fixed_pending_verification`, the 
 
 ### Requirement: Status and findings commands SHALL expose actionable session state
 
-`status` and `finalize` SHALL tolerate malformed persisted finding-event metadata without crashing. Malformed terminal-decision metadata SHALL be surfaced conservatively as a blocker so completion cannot hide invalid waiver or accepted-risk state.
+`review-gauntlet run` SHALL continue to orchestrate active sessions without changing task selection, command execution, result payloads, interruption behavior, JSON output behavior, non-TUI behavior, fallback behavior, or session finalization semantics.
 
-`review-gauntlet finalize` SHALL close a complete active review session into deterministic latest-only checkpoint files that are suitable for Git diff review and safe as the next review base. Finalization SHALL only write checkpoint files when completion blockers are absent, when review-universe files are clean relative to `HEAD`, and when current `HEAD` can be resolved to a commit. The checkpoint SHALL be derived from the existing durable session ledger, SHALL include review coverage, findings, triage events, and review-base metadata, and SHALL NOT replace the ledger as the source of truth before successful finalization.
+Interactive `run` TUI presentation SHALL render a compact dashboard that is faithful to the target user-facing structure: a `Review Gauntlet` header, a `Finalize checklist` panel, side-by-side `Agent` and `Session` summary panels where terminal width allows, an `Activity` timeline, and compact implemented controls. The TUI SHALL derive a human-facing dashboard view model from raw controller and session state before rendering. That view model SHALL include header fields, finalize checklist rows, agent summary fields, session summary fields, and normalized activity rows. TUI widgets SHALL render the view model rather than directly dumping raw prompt text, raw argv payloads, raw event payloads, raw full session IDs, raw finalize action names, or raw blocker lists.
 
-Interactive `run` TUI presentation SHALL render a compact dashboard that is faithful to the target user-facing structure: a `Review Gauntlet` header, a `Finalize checklist` progress checklist, side-by-side `Agent` and `Session` summary panels where terminal width allows, an `Activity` timeline, and compact implemented controls. The TUI SHALL derive a human-facing dashboard view model from raw controller and session state before rendering. That view model SHALL include header fields, finalize checklist rows, agent summary fields, session summary fields, and normalized activity rows. TUI widgets SHALL render the view model rather than directly dumping raw prompt text, raw argv payloads, raw event payloads, raw full session IDs, raw finalize action names, or raw blocker lists.
-
-Dirty review-universe blockers SHALL identify that review-universe files are dirty relative to `HEAD` without including individual dirty file paths in `finalize_blockers`.
-
-When `review-gauntlet run` detects that an agent step successfully finalized the active session, the run workflow SHALL attempt a checkpoint-only git commit for the generated latest checkpoint artifacts before reporting final completion. The checkpoint commit SHALL stage only `.review-gauntlet/checkpoints/latest` and concrete generated checkpoint files. The run workflow SHALL NOT stage or commit product/source files, unrelated review artifacts, or unrelated dirty worktree changes. If checkpoint artifacts have no diff, the run workflow SHALL report a successful checkpoint-commit no-op. If unrelated dirty worktree state prevents a safe checkpoint-only commit, the run workflow SHALL surface a structured blocker instead of silently claiming full completion. Standalone `review-gauntlet finalize` and `finalize --merge` SHALL keep their existing commit and merge semantics.
-
-<!-- Expected canonical result after archive: the canonical review-sessions spec will require normal `review-gauntlet run` finalization to commit generated latest checkpoint files with checkpoint-only staging, while leaving standalone finalize and merge-finalize behavior unchanged. -->
-
-`review-gauntlet run` SHALL continue to orchestrate active sessions without changing task selection, command execution, result payloads, interruption behavior, JSON output behavior, non-TUI behavior, fallback behavior, or session finalization semantics except for the run-only post-finalize checkpoint commit attempt described above.
-
-Interactive `run` TUI presentation SHALL render a compact dashboard that is faithful to the target user-facing structure: a `Review Gauntlet` header, a `Next to finalize` checklist, side-by-side `Agent` and `Session` summary panels where terminal width allows, an `Activity` timeline, and compact implemented controls. The TUI SHALL derive a human-facing dashboard view model from raw controller and session state before rendering. That view model SHALL include header fields, finalize checklist rows, agent summary fields, session summary fields, and normalized activity rows. TUI widgets SHALL render the view model rather than directly dumping raw prompt text, raw argv payloads, raw full session IDs, raw finalize action names, or raw blocker lists.
-
-The header SHALL use a concise two-line summary. The first line SHALL include terminal run status, `gate x/6`, and the current checklist title. The second line SHALL include shortened session id, agent or command display name, and a concise liveness label such as `quiet 7s` when the active agent is quiet. The header SHALL NOT display timeout remaining. Gate numbering SHALL be displayed in the header only and SHALL NOT be repeated on each checklist row.
+The header SHALL use a concise two-line summary. The first line SHALL include terminal run status, `gate x/6`, and the current checklist title. The second header line SHALL follow the canonical header timeout policy. Gate numbering SHALL be displayed in the header only and SHALL NOT be repeated on each checklist row.
 
 The primary progress panel SHALL be titled `Finalize checklist` and SHALL render exactly these six ordered checklist rows: Review coverage, Triage findings, Fix confirmed findings, Verify fixes, Final checks, and Finalize checkpoint. Each row SHALL use only one of these TUI state labels: `running`, `done`, `next`, `later`, `blocked`, or `failed`. Internal states such as `pending`, `stale`, `untriaged`, `confirmed`, `reopened`, and `fixed_pending_verification` MAY appear in row details but SHALL NOT be used as primary row states. The TUI SHALL NOT render the old `Resolve finalize blockers` checklist row.
 
 The TUI SHALL classify finalize blockers for display. Coverage blockers, including pending review cells and stale review cells, SHALL be represented by the Review coverage row. Finding blockers, including untriaged, reopened, confirmed, and fixed-pending-verification findings, SHALL be represented by the corresponding finding rows. Finalize-only blockers, including dirty worktree blockers, target digest drift, expired waived or accepted-risk findings, no completed review run, and unclassified finalization blockers, SHALL be represented by Final checks. While any earlier checklist row is incomplete, Final checks SHALL render as `later` with human wording such as `checked after review/findings` rather than displaying a generic finalize blocker count. Final checks SHALL render as `blocked` only when prior rows are complete and finalize-only blockers remain.
 
-The TUI SHALL replace standalone `Session metrics`, standalone `Findings`, and standalone `Current operation` panels with compact `Agent` and `Session` summary panels. The Agent panel SHALL show command label, alive/running/quiet/terminal status, output recency, timeout remaining when known, and artifact path when available. The Session panel SHALL show compact coverage percent and reviewed/total counts, open finding count, current checklist title, and agent step. Coverage denominator rules SHALL continue to exclude superseded cells, and this presentation calculation SHALL NOT mutate durable coverage state.
+When the external command adapter times out, the TUI SHALL preserve the agent lifecycle status as timed out for auditability. If the latest session status is still eligible to finalize with `can_finalize=true` and no finalize blockers, the checklist SHALL treat Review coverage, Triage findings, Fix confirmed findings, Verify fixes, and Final checks as complete and SHALL render Finalize checkpoint as a recoverable manual-finalize state, not as a generic failed review gate. The recoverable state SHALL show concise wording that tells the user the session is ready and can be finalized with `review-gauntlet finalize` or equivalent command wording. If the timeout occurs before finalization eligibility, or if finalize blockers remain, the TUI SHALL NOT show the manual-finalize-ready cue and SHALL continue to show the first incomplete or blocked checklist row.
+
+The TUI SHALL replace standalone `Session metrics`, standalone `Findings`, and standalone `Current operation` panels with compact `Agent` and `Session` summary panels. The Agent panel SHALL show command label, alive/running/quiet/terminal status, output recency, effective timeout remaining or timeout configuration when known, and artifact path when available. Configured command adapters, including adapters using the default timeout, SHALL NOT render timeout as unset. Timeout wording SHALL be concise and SHALL NOT duplicate labels such as `timeout timeout not set`. The Session panel SHALL show compact coverage percent and reviewed/total counts, open finding count, current checklist title, and agent step. Coverage denominator rules SHALL continue to exclude superseded cells, and this presentation calculation SHALL NOT mutate durable coverage state.
 
 The Activity panel SHALL mix normalized Review Gauntlet events and bounded agent stdout/stderr tail rows in one timeline. Activity row kinds SHALL be human labels such as `event`, `stdout`, and `stderr`. The TUI MAY synthesize display-only activity rows such as `gate started` from the current view model, but it SHALL NOT synthesize quiet-running agent heartbeat rows such as `agent alive no output for 2m00s` in Activity. When an agent is quiet but still running, the TUI SHALL keep liveness visible in the Header and Agent summary instead of adding or removing Activity rows. Agent output displayed in Activity SHALL remain bounded, line-oriented, sanitized, truncated, and redacted, and full output artifacts SHALL remain the audit source of truth.
 
 The TUI SHALL avoid user-facing internal action names such as `run_review` and `resolve_finalize_blockers`. It SHALL map those internal actions to human wording such as `waiting`, `ready to finalize`, `waits for coverage`, `checked after review/findings`, or the relevant checklist title.
 
-<!-- Expected canonical result after archive: the canonical review-sessions spec will define that quiet-running liveness is displayed in Header and Agent summary, while Activity remains stable by omitting synthetic quiet heartbeat rows. -->
+<!-- Expected canonical result after archive: the canonical review-sessions spec will distinguish adapter timeout from finalize readiness, show manual finalize recovery when a timed-out agent leaves a session ready to finalize, and keep effective adapter timeout display accurate without changing command execution or finalization semantics. -->
 
-<!-- Expected canonical result after archive: the canonical review-sessions spec will title the primary run TUI progress panel `Finalize checklist` while preserving the existing finalize readiness rows, state labels, blocker classification, and run/finalization semantics. -->
+#### Scenario: Run TUI shows manual finalize recovery after ready adapter timeout
 
-#### Scenario: Successful run finalization commits checkpoint artifacts
+**Given**: an active session whose latest status has `can_finalize=true`
+**And**: the status has no finalize blockers
+**And**: coverage, triage, fixing, verification, and final checks are complete
+**And**: the external command adapter timed out before invoking finalization
+**When**: the TUI renders the finalize checklist and Agent summary
+**Then**: Review coverage, Triage findings, Fix confirmed findings, Verify fixes, and Final checks are not marked failed
+**And**: Finalize checkpoint indicates that the agent timed out but the session is ready for manual finalization
+**And**: the rendered text includes `review-gauntlet finalize` or equivalent concise recovery wording
+**And**: the Agent summary still exposes the timed-out lifecycle state for auditability
 
-**Given**: an active review session with complete reviewed coverage and all live findings closed
-**And**: the command adapter invoked by `review-gauntlet run` finalizes the session successfully
-**And**: generated latest checkpoint files differ from `HEAD`
-**And**: no unrelated dirty worktree files are present
-**When**: the developer runs `review-gauntlet run --format json`
-**Then**: `.review-gauntlet/checkpoints/latest/status.json` is written
-**And**: `.review-gauntlet/checkpoints/latest/findings.json` is written
-**And**: `.review-gauntlet/checkpoints/latest/events.json` is written
-**And**: `.review-gauntlet/checkpoints/latest/summary.md` is written
-**And**: the run workflow creates a git commit containing the latest checkpoint artifacts
-**And**: the JSON result reports that checkpoint commit was attempted and created
-**And**: the JSON result includes the checkpoint commit SHA
+#### Scenario: Run TUI preserves failure before finalize readiness
 
-#### Scenario: Run TUI renders compact dashboard panel structure
+**Given**: an active session whose latest status has `can_finalize=false`
+**And**: coverage or finding work remains incomplete
+**And**: the external command adapter timed out
+**When**: the TUI renders the finalize checklist
+**Then**: the first incomplete checklist row is shown as incomplete or failed according to the existing failure rules
+**And**: Finalize checkpoint does not show the manual-finalize-ready recovery cue
 
-**Given**: an active review session with a configured command adapter
-**And**: the `run` TUI is eligible for an interactive text execution
-**When**: the TUI renders the session snapshot
-**Then**: the dashboard contains panels titled `Review Gauntlet`, `Finalize checklist`, `Agent`, `Session`, and `Activity` in that order
-**And**: the dashboard does not render standalone `Session metrics`, `Current operation`, `Finalize path`, or `Next to finalize` panel labels
-**And**: task selection, command execution, result payloads, interruption behavior, JSON output behavior, non-TUI behavior, and fallback behavior remain unchanged
+#### Scenario: Run TUI preserves blockers after adapter timeout
 
-#### Scenario: Run checkpoint commit stages only checkpoint paths
+**Given**: an active session whose latest status has finalize blockers
+**And**: the external command adapter timed out
+**When**: the TUI renders the finalize checklist
+**Then**: Final checks or the relevant earlier checklist row shows the blocker state
+**And**: Finalize checkpoint does not show the manual-finalize-ready recovery cue
 
-**Given**: an active review session that finalizes during `review-gauntlet run`
-**And**: a non-checkpoint source file has dirty staged, unstaged, deleted, renamed, or untracked changes after finalization
-**When**: the run workflow reaches checkpoint commit handling
-**Then**: the run workflow does not stage or commit the non-checkpoint source file
-**And**: the run result surfaces a structured checkpoint commit blocker
-**And**: the blocker makes the incomplete checkpoint commit state visible
+#### Scenario: Agent summary uses effective adapter timeout wording
 
-#### Scenario: Run checkpoint commit no-ops when checkpoint diff is empty
-
-**Given**: an active review session that finalizes during `review-gauntlet run`
-**And**: the latest checkpoint artifacts match `HEAD` after finalization
-**When**: the run workflow reaches checkpoint commit handling
-**Then**: no git commit is created
-**And**: the run result reports that checkpoint commit was attempted but not created
-**And**: the run result includes a no-op reason such as `no_checkpoint_diff`
-**And**: the finalized session remains finalized
-
-#### Scenario: Standalone finalize behavior remains unchanged
-
-**Given**: an active review session eligible for finalization
-**When**: the developer runs `review-gauntlet finalize --format json`
-**Then**: the command writes latest checkpoint files according to existing finalize semantics
-**And**: the standalone finalize command does not create the new run-only checkpoint commit
-
-#### Scenario: Merge finalization is not double-committed
-
-**Given**: an active Git-worktree-backed review session eligible for merge finalization
-**When**: the developer runs `review-gauntlet finalize --merge --format json`
-**Then**: the existing session-worktree commit and merge behavior remains authoritative
-**And**: the new normal-run checkpoint commit path does not create an additional duplicate checkpoint commit
-
-<!-- Expected canonical result after archive: the canonical review-sessions spec will keep quiet/liveness in the run TUI Header, remove timeout remaining from the Header, and keep timeout remaining in the Agent summary panel. -->
-
-#### Scenario: Run TUI renders a two-line header without timeout details
-
-**Given**: an active session whose current checklist row is Review coverage
-**And**: the command adapter is `opencode`
-**And**: the agent is quiet with a known timeout remaining
-**When**: the TUI renders the header
-**Then**: the first header line includes `RUNNING`, `gate 1/6`, and `Review coverage`
-**And**: the second header line includes the shortened session id, `agent opencode`, and a quiet liveness label
-**And**: the header does not render timeout remaining, raw argv, a full session id, or repeated last-output and quiet labels for the same liveness signal
-
-#### Scenario: Run TUI renders Finalize checklist without gate numbering
-
-**Given**: an active session with 0 reviewed cells and 9 pending cells
-**And**: no open findings have been recorded yet
-**When**: the TUI renders `Finalize checklist`
-**Then**: it renders Review coverage as `running` with detail such as `0 / 9 reviewed, 9 pending`
-**And**: it renders Triage findings as `next` with detail such as `waits for coverage`
-**And**: it renders Fix confirmed findings as `next` with detail such as `no confirmed findings yet`
-**And**: it renders Verify fixes as `next` with detail such as `no fixed-pending findings yet`
-**And**: it renders Final checks as `later` with detail such as `checked after review/findings`
-**And**: it renders Finalize checkpoint as `later` with detail such as `waiting`
-**And**: none of the checklist rows include `gate 1/6`, `gate 2/6`, or other per-row gate numbering
-
-#### Scenario: Run TUI classifies blockers before displaying Final checks
-
-**Given**: an active session whose status payload includes finalize blockers for pending or stale review cells
-**And**: coverage is still incomplete
-**When**: the TUI renders the checklist
-**Then**: Review coverage represents the incomplete coverage state
-**And**: Final checks is rendered as `later`, not `blocked`
-**And**: the checklist does not render `Resolve finalize blockers`
-**And**: the checklist does not render a generic detail such as `1 finalize blocker(s)` for coverage or finding blockers
-
-#### Scenario: Run TUI blocks Final checks only for finalize-only blockers
-
-**Given**: coverage, triage, fixing, and verification checklist rows are complete
-**And**: a finalize-only blocker such as an uncommitted worktree file remains
-**When**: the TUI renders the checklist
-**Then**: Final checks is rendered as `blocked`
-**And**: Final checks detail identifies the human blocker, such as uncommitted files
-**And**: Finalize checkpoint remains `later` until Final checks is done
-
-#### Scenario: Run TUI hides internal action names
-
-**Given**: the session status contains `next_required_action` values such as `run_review` or `resolve_finalize_blockers`
-**When**: the TUI renders header, checklist, Agent, Session, and Activity text
-**Then**: the rendered dashboard does not contain `run_review`
-**And**: the rendered dashboard does not contain `resolve_finalize_blockers`
-**And**: equivalent human wording is shown instead
-
-#### Scenario: Run TUI renders compact Agent and Session summaries
-
-**Given**: an active session with a command label, agent lifecycle state, timeout remaining, coverage counts, finding counts, and agent step
-**When**: the TUI renders the summary panels
-**Then**: the Agent panel shows the command label, status/liveness, output recency, and timeout when known
-**And**: the Session panel shows compact coverage percent and reviewed/total counts
-**And**: the Session panel shows open finding count, current checklist title, and agent step
-**And**: the old expanded coverage text is not the primary dashboard panel
-
-#### Scenario: Run TUI activity mixes events and output without quiet heartbeat rows
-
-**Given**: the run controller has emitted Review Gauntlet events
-**And**: the active agent has emitted stdout and stderr output lines
-**And**: the agent later becomes quiet while still running
-**When**: the TUI renders Activity
-**Then**: event rows use the `event` kind and human labels such as `run started`, `gate started`, or `agent started`
-**And**: agent stdout rows use the `stdout` kind
-**And**: agent stderr rows use the `stderr` kind
-**And**: Activity does not contain synthetic quiet heartbeat rows such as `agent alive no output for 2m00s`
-**And**: the Header or Agent summary shows the quiet liveness state instead
-**And**: displayed output remains bounded, sanitized, truncated, and redacted
-
-#### Scenario: Run TUI renders dashboard panel names as border titles
-
-**Given**: an interactive `review-gauntlet run` execution is eligible for the Textual TUI
-**When**: the TUI renders the dashboard panels for finalize checklist, agent, session, and activity
-**Then**: each panel's section name is assigned through a Textual border title on the bordered panel widget or container
-**And**: each panel body begins with panel content rather than repeating the section name as the first body row
-**And**: normal, active, blocked, failed, and finalized panel states retain semantic border and border-title styling
+**Given**: an active session with a configured command adapter that uses the default timeout
+**When**: the TUI renders the Agent summary before or after a command adapter timeout
+**Then**: the Agent summary does not render timeout as unset
+**And**: the Agent summary does not duplicate timeout labels such as `timeout timeout not set`
+**And**: timeout enforcement, command execution, JSON output, non-TUI behavior, and session finalization semantics remain unchanged
 
 ### Requirement: Finalize SHALL validate completion without running review work
 
