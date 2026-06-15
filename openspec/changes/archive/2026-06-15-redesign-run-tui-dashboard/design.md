@@ -1,94 +1,128 @@
-## Design
+# Design: Run TUI checklist dashboard
 
-### Current implementation boundary
+## Context
 
-The existing TUI is concentrated in `src/review_gauntlet/run_tui.py`, with session state supplied by `RunSnapshot` and event history supplied by `RunController.events`. The project is already using Textual for interactive TTY mode, so this change should not migrate to another TUI framework. Textual remains the application layer for layout, CSS, actions, events, reactivity, and workers; Rich renderables may still be used inside Textual widgets where helpful.
+The current TUI derives `RunViewState` from `RunSnapshot`, but several rendering functions still expose internal concepts directly: gate states such as `active`/`waiting`, the `Resolve finalize blockers` row, raw `next_required_action`, and repeated liveness labels. The redesign keeps controller data unchanged and moves presentation responsibility into the TUI view-model layer.
 
-This change should preserve the controller/UI boundary: presentation-specific logic belongs in TUI view-model and formatter helpers, while execution semantics remain in `RunController`.
+## Dashboard view model
 
-A small controller-facing adjustment may be needed so the TUI can show a command or agent display label while the session-level command is running. Today `RunController` only records `command_argv` after `_command_runner` returns and emits `agent_started` with `argv=[]`. The TUI can hide empty argv, but accurate running-state display is better if the controller exposes a display label derived from effective adapter config before command execution starts.
+Introduce or evolve the TUI view model into a structure equivalent to:
 
-### Dashboard regions
+```text
+RunDashboardView
+  header
+  finalize_path[]
+  agent_summary
+  session_summary
+  activity[]
+```
 
-The TUI should render these regions in order:
+The view model is the only input to render functions. Raw `RunSnapshot` fields can be used to build the view model, but should not be concatenated directly into dashboard text unless first normalized.
 
-1. Header / session summary
-2. Metrics dashboard
-3. Current operation
-4. Activity timeline
-5. Footer controls
+## Panel layout
 
-Normal-width layout should keep Coverage and Findings side by side. Compact layout may stack them and shorten labels, but must keep all required counts visible.
+The Textual app should compose these regions:
 
-### View-model and formatter-first design
+1. `#session_header` rendering `Review Gauntlet`
+2. `#finalize_path` rendering `Next to finalize`
+3. horizontal `#summary` containing `#agent_panel` and `#session_panel`
+4. `#activity_timeline`
+5. compact controls
 
-Most behavior should be implemented by first converting raw controller data into a human-facing display model, then rendering that model with Textual widgets. This avoids repeating the current pattern of placing raw payloads directly inside panels.
+On narrow terminals, Textual may stack summary cards if needed, but the content order remains Agent before Session.
 
-A `RunViewState`-style model should contain fields equivalent to:
+## Checklist state model
 
-- `status`
-- `session_short_id`
-- `agent_name`
-- `step_label`
-- `coverage_percent`
-- `reviewed_cells`
-- `total_cells`
-- `pending_cells`
-- `stale_cells`
-- `superseded_cells`
-- `open_findings`
-- `task_title`
-- `task_description`
-- `command_label`
-- `timeline_events`
+TUI checklist states are intentionally fewer and more human-facing than durable session states:
 
-Most formatting behavior should be deterministic functions that accept `RunSnapshot`, `RunEvent`, and terminal/layout hints. This keeps the display testable without requiring a live terminal.
+- `running`
+- `done`
+- `next`
+- `later`
+- `blocked`
+- `failed`
 
-Recommended helpers:
+Internal states such as `pending`, `stale`, `untriaged`, `confirmed`, and `fixed_pending_verification` remain available in details but are not used as primary TUI state labels.
 
-- `short_session_id(session_id: str | None) -> str`
-- `format_event_time(timestamp: str) -> str`
-- `format_task_title(prompt: str | None) -> TaskDisplay`
-- `format_command_label(snapshot: RunSnapshot) -> str | None`
-- `format_activity_event(event: RunEvent, snapshot: RunSnapshot | None) -> str`
-- `dashboard_state(snapshot: RunSnapshot, events: tuple[RunEvent, ...]) -> RunViewState`
+## Blocker classification
 
-The implementation may use different names, but tests should exercise equivalent behavior.
+`snapshot.finalize_blockers` remains an API/status concern. The TUI classifies blocker strings for display:
 
-### Prompt intent mapping
+- Coverage blockers:
+  - `review cells are still pending`
+  - `review cells are stale after target changes`
+- Finding blockers:
+  - strings indicating untriaged, reopened, confirmed, or fixed-pending findings
+  - `fixed findings require verification`
+- Finalize-only blockers:
+  - uncommitted or dirty working tree blockers
+  - target digest drift blockers
+  - expired waived or accepted-risk findings
+  - `no review run has been completed`
+  - anything not classified as coverage/finding blocker
 
-The TUI must not display ready prompts as the primary task text. It should classify known prompt intents by substring or more structured metadata if available.
+Coverage and finding blockers should influence their dedicated rows. `Final checks` is blocked only when earlier checklist rows are complete and finalize-only blockers remain.
 
-Minimum mappings:
+## Gate derivation rules
 
-- pending review work -> `REVIEW PENDING CELLS`
-- stale review work -> `REVIEW STALE CELLS`
-- untriaged finding work -> `TRIAGE FINDINGS`
-- confirmed finding fix work -> `FIX CONFIRMED FINDING`
-- fixed-pending verification work -> `VERIFY FIXES`
-- finalization work -> `FINALIZE SESSION`
+### Review coverage
 
-Unknown prompts should be sanitized and summarized without dumping the full prompt body.
+- `running` if pending or stale coverage exists
+- `done` when pending and stale are zero
+- `failed` if the run failed while this is the active unresolved row
 
-### Event transformation
+### Triage findings
 
-Raw event payloads remain useful as evidence, but the dashboard timeline should transform them into user-facing rows. Event formatting should:
+- `next` while coverage is incomplete
+- `running` when untriaged or reopened findings remain
+- `done` otherwise
 
-- Convert ISO timestamps to `HH:MM:SS`.
-- Use stable event labels such as `run started`, `status refreshed`, `step 1 started`, `agent started`, `blocked`, `failed`, and `finalized`.
-- Shorten session IDs.
-- Omit empty argv values.
-- Summarize prompt details through the same prompt intent mapping used for Current task.
-- Escape Rich/Textual markup and control characters.
+### Fix confirmed findings
 
-Malformed timestamps or unexpected payloads should not crash rendering.
+- `next` while triage is incomplete
+- `running` when confirmed findings remain
+- `done` otherwise
 
-### Color and state semantics
+### Verify fixes
 
-The Textual CSS should define normal panels independently from warning state. Yellow should be reserved for pending/warning/blocker text or blocked panel styling. Failed and finalized states should have explicit classes or style hooks so tests can assert the classes exist and manual review can verify colors.
+- `next` while confirmed fixes remain
+- `running` when fixed-pending verification remains
+- `done` otherwise
 
-### Verification strategy
+### Final checks
 
-Most acceptance criteria are presentation formatting and should be unit-tested without requiring Textual to be installed. Textual construction/headless tests should remain optional or skipped when the optional dependency is unavailable, consistent with existing behavior.
+- `later` while any prior row is incomplete
+- `blocked` when finalize-only blockers remain
+- `done` when prior rows are complete and no finalize-only blockers remain
 
-Manual verification is still appropriate for final color and 80x24 wrapping behavior because terminal rendering and theme support vary by environment.
+### Finalize checkpoint
+
+- `later` while Final checks is not done
+- `running` when `can_finalize` is true and the session is not finalized
+- `done` after finalization
+
+## Activity rows
+
+Activity rows should use normalized columns:
+
+```text
+HH:MM:SS  event   run started     session RGS-...
+HH:MM:SS  stdout  Reading prompt
+HH:MM:SS  stderr  Analyzing review cell RGC-...
+```
+
+The TUI may synthesize display-only rows such as `gate started` and `agent alive` from the current view model. These synthetic rows do not need to be persisted as durable events.
+
+Agent output display remains bounded, line-oriented, sanitized, truncated, and redacted. Full output artifacts remain the audit source of truth.
+
+## Compatibility
+
+This is a presentation-only redesign. It must not alter:
+
+- `RunController` task selection
+- ready prompt generation
+- durable session status
+- JSON output
+- finalization rules
+- output artifact persistence
+- non-TUI fallback behavior
