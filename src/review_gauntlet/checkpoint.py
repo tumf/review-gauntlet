@@ -463,7 +463,7 @@ def commit_latest_checkpoint(
             attempted=True, committed=False, commit=None, reason="not_git_repository"
         )
     dirty = _get_all_uncommitted_paths(root)
-    allowed_paths = _allowed_checkpoint_commit_paths(generated_files)
+    allowed_paths = _allowed_checkpoint_commit_paths(root, generated_files)
     blocked_paths = tuple(path for path in dirty if path not in allowed_paths)
     if blocked_paths:
         return CheckpointCommitResult(
@@ -499,14 +499,39 @@ def commit_latest_checkpoint(
     return CheckpointCommitResult(attempted=True, committed=True, commit=commit, reason="committed")
 
 
-def _allowed_checkpoint_commit_paths(generated_files: tuple[str, ...]) -> tuple[str, ...]:
+def _allowed_checkpoint_commit_paths(
+    root: Path, generated_files: tuple[str, ...]
+) -> tuple[str, ...]:
     allowed = {".review-gauntlet/checkpoints/latest"}
+    checkpoints_prefix = ".review-gauntlet/checkpoints/"
     for path in generated_files:
-        if path == ".review-gauntlet/checkpoints/latest" or path.startswith(
-            ".review-gauntlet/checkpoints/latest/"
-        ):
+        if _is_allowed_checkpoint_artifact_path(path):
             allowed.add(path)
+    latest_dir = latest_checkpoint_dir(root)
+    if latest_dir != latest_checkpoint_pointer(root) and latest_dir.is_relative_to(root):
+        latest_relative = latest_dir.relative_to(root).as_posix()
+        if latest_relative.startswith(checkpoints_prefix):
+            for name in ("status.json", "findings.json", "events.json", "summary.md"):
+                allowed.add(f"{latest_relative}/{name}")
     return tuple(sorted(allowed))
+
+
+def _is_allowed_checkpoint_artifact_path(path: str) -> bool:
+    relative = Path(path)
+    if relative.is_absolute() or any(part in {"", ".", ".."} for part in relative.parts):
+        return False
+    parts = relative.parts
+    if parts == (".review-gauntlet", "checkpoints", "latest"):
+        return True
+    if len(parts) == 4 and parts[:2] == (".review-gauntlet", "checkpoints"):
+        checkpoint_id, filename = parts[2], parts[3]
+        return checkpoint_id != "latest" and filename in {
+            "status.json",
+            "findings.json",
+            "events.json",
+            "summary.md",
+        }
+    return False
 
 
 def _git_error(exc: subprocess.CalledProcessError) -> str:

@@ -17,3 +17,8 @@
 
 Archive validation itself is the authoritative final OpenSpec validation gate.
 Expected archive gate: `cflx openspec validate commit-run-finalize-checkpoint --archive-gate`
+
+## Acceptance #1 Failure Follow-up
+- [x] BLOCKER: commit_latest_checkpoint never commits real checkpoint artifacts — fixed by allowing concrete generated checkpoint artifacts under `.review-gauntlet/checkpoints/<checkpoint_id>/` and by resolving the current `latest` pointer to its real checkpoint directory.
+- [x] FALSE ASSURANCE: no test exercises the real write_latest_checkpoint→commit_latest_checkpoint flow — fixed by adding a regression test that writes the real checkpoint layout with `write_latest_checkpoint` and verifies `commit_latest_checkpoint` commits the pointer plus generated checkpoint files.
+- [x] SECONDARY: generated_files is parsed from the agent's stdout JSON and may be empty — fixed by making `commit_latest_checkpoint` derive allowed generated files from the `latest` checkpoint pointer when explicit generated files are absent or incomplete.
