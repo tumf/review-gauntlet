@@ -1,0 +1,48 @@
+{
+  "checkpoint_id": "RGC-ce28ec13a501-RGS-d48762964e79",
+  "findings": [
+    {
+      "checkpoint_id": "RGC-ce28ec13a501-RGS-d48762964e79",
+      "content": "Agent stdout/stderr sanitization only redacts all-uppercase credential variable names, so common lowercase or mixed-case forms like `api_key=...`, `github_token=...`, or `ClientSecret=...` can still be rendered in the TUI activity timeline. Since this function handles untrusted agent output, make the credential-name match case-insensitive before displaying it.",
+      "finding_id": "RGF-0130",
+      "fingerprint": "b9faef3f5f432df3727429edd5beae8a84d0aac7690cf4600c15cc708706e4c6",
+      "latest_occurrence": {
+        "cell_id": "RGC-8610c7a6f661b70a",
+        "end_line": 729,
+        "finding_id": "RGF-0130",
+        "imprecise": 0,
+        "occurrence_id": 130,
+        "path": "src/review_gauntlet/run_tui.py",
+        "run_id": 124,
+        "start_line": 724
+      },
+      "metadata": "{\"fingerprint\":\"b9faef3f5f432df3727429edd5beae8a84d0aac7690cf4600c15cc708706e4c6\",\"path\":\"src/review_gauntlet/run_tui.py\",\"rule_id\":\"data-validation\",\"content\":\"Agent stdout/stderr sanitization only redacts all-uppercase credential variable names, so common lowercase or mixed-case forms like `api_key=...`, `github_token=...`, or `ClientSecret=...` can still be rendered in the TUI activity timeline. Since this function handles untrusted agent output, make the credential-name match case-insensitive before displaying it.\",\"suggestion_code\":\"def sanitize_agent_output_line(value: object, *, limit: int = 120) -> str:\\n    text = re.sub(r\\\"\\\\x1b\\\\[[0-?]*[ -/]*[@-~]\\\", \\\"\\\", str(value))\\n    text = text.replace(\\\"\\\\r\\\", \\\"\\\\n\\\")\\n    text = \\\" \\\".join(_plain_text(text).split())\\n    text = re.sub(\\n        r\\\"\\\\b[A-Z0-9_]*(?:TOKEN|SECRET|KEY)=\\\\S+\\\", \\\"<redacted>\\\", text, flags=re.IGNORECASE\\n    )\\n    return _summarize_text(text, limit=limit)\",\"existing_code\":\"def sanitize_agent_output_line(value: object, *, limit: int = 120) -> str:\\n    text = re.sub(r\\\"\\\\x1b\\\\[[0-?]*[ -/]*[@-~]\\\", \\\"\\\", str(value))\\n    text = text.replace(\\\"\\\\r\\\", \\\"\\\\n\\\")\\n    text = \\\" \\\".join(_plain_text(text).split())\\n    text = re.sub(r\\\"\\\\b[A-Z0-9_]*(?:TOKEN|SECRET|KEY)=\\\\S+\\\", \\\"<redacted>\\\", text)\\n    return _summarize_text(text, limit=limit)\",\"start_line\":724,\"end_line\":729,\"thinking\":\"Agent output is external data displayed to users. The current validation/sanitization misses lowercase and mixed-case credential labels, which are common in environment variables and CLI output.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_tui.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-d48762964e79",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ce28ec13a501-RGS-d48762964e79",
+      "content": "Agent output redaction only matches all-uppercase environment-style names, so common lowercase or mixed-case secrets such as `api_key=...`, `token=...`, or `OpenAI_API_Key=...` are still rendered in the TUI activity stream. Because this output is explicitly shown in `activity_text`, the sanitizer should redact these case-insensitively before display.",
+      "finding_id": "RGF-0131",
+      "fingerprint": "5e658ec7f2f7ad695c85e12261b3b4c01cc8ed98c28c31a1e549ce37c2e51f80",
+      "latest_occurrence": {
+        "cell_id": "RGC-c1ad423b70f325a0",
+        "end_line": 729,
+        "finding_id": "RGF-0131",
+        "imprecise": 0,
+        "occurrence_id": 131,
+        "path": "src/review_gauntlet/run_tui.py",
+        "run_id": 124,
+        "start_line": 728
+      },
+      "metadata": "{\"fingerprint\":\"5e658ec7f2f7ad695c85e12261b3b4c01cc8ed98c28c31a1e549ce37c2e51f80\",\"path\":\"src/review_gauntlet/run_tui.py\",\"rule_id\":\"test-evidence\",\"content\":\"Agent output redaction only matches all-uppercase environment-style names, so common lowercase or mixed-case secrets such as `api_key=...`, `token=...`, or `OpenAI_API_Key=...` are still rendered in the TUI activity stream. Because this output is explicitly shown in `activity_text`, the sanitizer should redact these case-insensitively before display.\",\"suggestion_code\":\"    text = re.sub(\\n        r\\\"(?i)\\\\b[A-Z0-9_]*(?:TOKEN|SECRET|KEY)=\\\\S+\\\", \\\"<redacted>\\\", text\\n    )\\n    return _summarize_text(text, limit=limit)\",\"existing_code\":\"    text = re.sub(r\\\"\\\\b[A-Z0-9_]*(?:TOKEN|SECRET|KEY)=\\\\S+\\\", \\\"<redacted>\\\", text)\\n    return _summarize_text(text, limit=limit)\",\"start_line\":728,\"end_line\":729,\"thinking\":\"The current regex is case-sensitive and only covers uppercase secret labels, while shell output and tool logs often use lowercase or mixed-case names.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_tui.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-d48762964e79",
+      "state": "fixed_verified"
+    }
+  ],
+  "schema_version": 1
+}

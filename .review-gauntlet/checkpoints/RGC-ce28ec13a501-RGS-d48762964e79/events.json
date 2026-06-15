@@ -1,0 +1,66 @@
+{
+  "checkpoint_id": "RGC-ce28ec13a501-RGS-d48762964e79",
+  "events": [
+    {
+      "checkpoint_id": "RGC-ce28ec13a501-RGS-d48762964e79",
+      "created_at": "2026-06-15 07:10:53",
+      "event_id": 270,
+      "finding_id": "RGF-0130",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Case-sensitive secret-name redaction misses lowercase and mixed-case agent output keys; verified in src/review_gauntlet/run_tui.py:728",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ce28ec13a501-RGS-d48762964e79",
+      "created_at": "2026-06-15 07:10:54",
+      "event_id": 271,
+      "finding_id": "RGF-0131",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Same confirmed sanitizer gap as RGF-0130; duplicate evidence at src/review_gauntlet/run_tui.py:728 under separate rule",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ce28ec13a501-RGS-d48762964e79",
+      "created_at": "2026-06-15 07:13:57",
+      "event_id": 272,
+      "finding_id": "RGF-0130",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Made agent output credential redaction case-insensitive and added regression coverage",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ce28ec13a501-RGS-d48762964e79",
+      "created_at": "2026-06-15 07:13:57",
+      "event_id": 273,
+      "finding_id": "RGF-0131",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Same root cause as RGF-0130; fixed by case-insensitive sanitizer and regression coverage",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ce28ec13a501-RGS-d48762964e79",
+      "created_at": "2026-06-15 07:16:14",
+      "event_id": 274,
+      "finding_id": "RGF-0131",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ce28ec13a501-RGS-d48762964e79",
+      "created_at": "2026-06-15 07:16:14",
+      "event_id": 275,
+      "finding_id": "RGF-0130",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    }
+  ],
+  "schema_version": 1
+}
