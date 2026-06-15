@@ -159,47 +159,72 @@ Status and freshness computations SHALL use the same resolved repository root fo
 
 `review-gauntlet run` SHALL orchestrate an active session by repeatedly using the same continuation task prompt that `review-gauntlet ready` would emit. `run` SHALL NOT maintain independent task-selection priority logic. `run` SHALL invoke the configured command adapter as a session-level task runner with the ready prompt and then re-evaluate the active session. `run` SHALL NOT require the session-level agent invocation to emit OCR verdict JSON, and SHALL NOT use review-cell verdict parsing as the success criterion for a session-level task. `run` SHALL stop successfully when the active session has been finalized and the active-session marker is gone. `run` SHALL stop unsuccessfully when no ready task exists while a session remains active, when the configured command fails, when the configured maximum step count is reached while the session remains active, or when a user-requested stop after the current step leaves the session active. Interactive text executions of `review-gauntlet run` SHOULD use a Textual TUI by default when TUI support is installed, stdout is a TTY, `--format text` is selected, and `--no-tui` is not provided. `run --format json`, `run --no-tui`, and non-TTY executions SHALL NOT launch the TUI. TUI presentation SHALL NOT change task selection, command execution semantics, run result semantics, or session finalization semantics. TUI dependencies SHALL be optional; when TUI support is unavailable for an otherwise TUI-eligible run, the command SHALL warn and fall back to non-TUI text mode. When interrupted by the user, `run` SHALL NOT print a Python traceback. Instead, it SHALL return or emit a structured interrupted run result with `completed: false`, `reason: interrupted`, current step evidence when available, and the active session ID when available.
 
-Interactive `run` TUI presentation SHALL prioritize current-target progress over generic application chrome. Its first visible dashboard area SHALL show percent complete, completed current cells over total current cells, elapsed time, current step, and session-level agent status. The progress denominator SHALL exclude `superseded` coverage. The incomplete count SHALL include current-target `pending` and `stale` coverage. Current-target cells in other coverage states SHALL count as complete for presentation purposes only; this presentation calculation SHALL NOT mutate or redefine durable coverage state. The TUI SHALL display coverage composition with compact graphical bars or equivalent dense visual text and SHALL keep pending and stale states visibly emphasized. The TUI SHALL display actionable finding-state counts from the run status payload, including payloads where counts are exposed as `finding_state_counts` rather than `findings`. While the run controller reports the session-level agent status as `running`, the TUI SHALL show visible activity animation such as a spinner or pulse indicator. When the agent is not running, the activity indicator SHALL stop or dim. The TUI SHALL remove default Textual header and footer chrome that would otherwise show a generic app title such as `RunApp` or a default left-side icon. These presentation requirements SHALL NOT change task selection, command execution, result payloads, interruption behavior, or fallback behavior.
+Interactive `run` TUI presentation SHALL use Textual as the interactive TTY dashboard framework. Rich renderables MAY be used inside Textual widgets, but the TUI SHALL be structured as an application dashboard rather than raw Rich panels arranged as a log display. The TUI SHALL derive a human-facing run view model from raw controller state before rendering. The view model SHALL include status, shortened session ID, agent or command display name, step label, elapsed time, coverage metrics, finding metrics, current task title and description, command label, and human-readable timeline events. Widgets SHALL render this view model rather than directly dumping raw prompt text, raw argv payloads, raw event payloads, or raw session IDs.
 
-#### Scenario: Run TUI shows current-target progress first
+Interactive `run` TUI presentation SHALL prioritize current-target progress over generic application chrome. Its first visible dashboard area SHALL show percent complete, completed cells over total cells, elapsed time, current step, session-level agent status, and shortened session ID. The progress denominator SHALL exclude `superseded` coverage. The incomplete count SHALL include current-target `pending` and `stale` coverage. Current-target cells in other coverage states SHALL count as complete for presentation purposes only; this presentation calculation SHALL NOT mutate or redefine durable coverage state. The TUI SHALL display coverage composition with compact graphical bars or equivalent dense visual text and SHALL keep pending and stale states visibly emphasized without rendering error-like markers such as `! pending` or `! stale`. The TUI SHALL display actionable finding-state counts from the run status payload, including payloads where counts are exposed as `finding_state_counts` rather than `findings`. Findings SHALL remain visible even when all finding counts are zero. While the run controller reports the session-level agent status as `running`, the TUI SHALL show visible activity animation such as a spinner or pulse indicator. When the agent is not running, the activity indicator SHALL stop or dim. The TUI SHALL remove default Textual header and footer chrome that would otherwise show a generic app title such as `RunApp` or a default left-side icon. Keyboard controls SHALL remain available through a compact in-dashboard hint that lists only implemented controls. These presentation requirements SHALL NOT change task selection, command execution, result payloads, interruption behavior, or fallback behavior.
 
-**Given**: an active session with effective coverage containing reviewed, pending, stale, and superseded cells
+Interactive `run` TUI presentation SHALL use semantic state colors. Normal panel borders SHALL use muted blue or gray styling, not yellow. Yellow SHALL be reserved for pending work, blockers, human-action-needed states, or warnings. Failed states SHALL use red semantic styling, finalized states SHALL use green semantic styling, and active/running task focus MAY use blue or green styling. Blocked, failed, and finalized states SHALL have distinct human-readable summary text describing the current condition and next action or evidence path when available.
+
+Interactive `run` TUI activity presentation SHALL render human-readable timeline rows instead of raw event logs. Timeline timestamps SHALL be displayed as `HH:MM:SS`. Timeline labels SHALL describe events such as run start, status refresh, step start, agent start, agent finish, blocked, failed, and finalized. Timeline details SHALL shorten session IDs, summarize prompt intent through task titles, omit empty argv values, and avoid displaying `argv=[]`, `command n/a`, raw full prompts, or ISO timestamps. Malformed event timestamps or unexpected payloads SHALL NOT crash TUI rendering.
+
+Interactive `run` TUI current operation presentation SHALL render ready prompts as human task titles and descriptions rather than displaying the full prompt as the primary text. At minimum, pending review, stale review, untriaged finding triage, confirmed finding fix, fixed-pending verification, and finalization prompts SHALL map to stable task titles. Unknown prompt text SHALL be sanitized and summarized without dumping the full internal instruction body.
+
+Interactive `run` TUI presentation SHALL include a compact layout suitable for approximately 80x24 terminals. In compact layout, Coverage and Findings MAY stack vertically and labels MAY be shortened, but status, coverage progress, pending/stale visibility, finding counts, current task, recent activity, and implemented controls SHALL remain readable.
+
+<!-- Expected canonical result after archive: the canonical review-sessions spec will define the run TUI as a Textual dashboard driven by a human-facing view model, with semantic colors, stable coverage/findings metrics, prompt-to-task presentation, readable timelines, terminal-state summaries, and compact layout behavior while preserving run semantics. -->
+
+#### Scenario: Run TUI renders a Textual dashboard from a view model
+
+**Given**: an active review session with a configured command adapter and effective coverage/finding status
 **And**: the `run` TUI is eligible for an interactive text execution
 **When**: the TUI renders the session snapshot
-**Then**: the first visible dashboard area shows the percent complete
-**And**: it shows completed current cells over total current cells
-**And**: it shows elapsed time, current step, and agent status
-**And**: superseded cells are not included in the progress denominator
+**Then**: the TUI uses Textual dashboard regions for header, metrics, current operation, activity, and controls
+**And**: the rendered widgets use human-facing view model fields rather than raw controller payload dumps
+**And**: task selection, command execution, result payloads, interruption behavior, and fallback behavior remain unchanged
 
-#### Scenario: Run TUI visualizes remaining work without hiding unknowns
+#### Scenario: Run TUI shows dashboard coverage and findings metrics
 
-**Given**: an active session with pending and stale effective coverage
-**When**: the `run` TUI renders the coverage breakdown
-**Then**: pending and stale counts are visually emphasized
-**And**: coverage composition is represented with compact graphical bars or equivalent dense visual text
-**And**: the TUI does not replace unknown or incomplete states with optimistic completion claims
+**Given**: an active session with effective coverage containing reviewed, pending, stale, and superseded cells
+**And**: finding counts for open, untriaged, confirmed, reopened, fixed-pending, and closed findings
+**When**: the `run` TUI renders the metrics dashboard
+**Then**: Coverage shows percent complete, a progress bar or equivalent dense indicator, reviewed cells over total cells, and reviewed, pending, stale, and superseded counts
+**And**: the progress denominator excludes superseded cells
+**And**: Findings remains visible even when every finding count is zero
+**And**: the coverage text does not use `current cells`, `! pending`, or `! stale`
 
-#### Scenario: Run TUI displays finding counts from status payloads
+#### Scenario: Run TUI renders human-readable current operation
 
-**Given**: a run status snapshot whose finding counts are exposed as `finding_state_counts`
-**When**: the `run` TUI renders finding-state details
-**Then**: actionable finding counts are shown in the TUI
-**And**: the TUI does not require a separate legacy `findings` key to display those counts
+**Given**: `review-gauntlet ready` returns a prompt for pending review, stale review, finding triage, confirmed finding fix, fixed-pending verification, or finalization
+**When**: the `run` TUI renders the current operation panel
+**Then**: the TUI displays a stable human task title and short description for that prompt intent
+**And**: the full internal prompt is not displayed as the primary task text
+**And**: unresolved command state does not render `command n/a`
 
-#### Scenario: Run TUI activity indicator follows agent status
+#### Scenario: Run TUI renders human-readable activity timeline
 
-**Given**: the run controller reports `agent_status` as `running`
-**When**: the TUI refreshes while the session-level command is executing
-**Then**: the visible status area includes an animated spinner or pulse indicator
-**And**: when the run controller reports a non-running status, the running animation stops or becomes dim
+**Given**: the run controller has emitted events containing ISO timestamps, session IDs, prompt payloads, or argv payloads
+**When**: the `run` TUI renders the activity timeline
+**Then**: each visible event row uses `HH:MM:SS` timestamp formatting
+**And**: event labels are human-readable
+**And**: session IDs are shortened
+**And**: empty argv values are omitted
+**And**: the timeline does not display `argv=[]`, raw full prompts, or raw ISO timestamps
 
-#### Scenario: Run TUI omits generic Textual chrome
+#### Scenario: Run TUI distinguishes terminal states semantically
 
-**Given**: an interactive TUI-eligible `review-gauntlet run`
-**When**: the TUI is rendered
-**Then**: the default Textual header title such as `RunApp` is not shown
-**And**: the default header icon is not shown
-**And**: keyboard controls remain available through a compact in-dashboard hint or equivalent non-header/footer presentation
+**Given**: a run is blocked, failed, or finalized
+**When**: the `run` TUI renders the dashboard
+**Then**: blocked state uses warning styling and explains the blocker or next action
+**And**: failed state uses failure styling and points to available command failure evidence
+**And**: finalized state uses success styling and summarizes completed coverage and open findings
+**And**: normal non-terminal panel borders do not use warning styling
+
+#### Scenario: Run TUI remains readable in compact terminals
+
+**Given**: the terminal is approximately 80 columns by 24 rows
+**When**: the `run` TUI renders the dashboard
+**Then**: the layout remains readable without losing status, coverage progress, pending/stale counts, finding counts, current task, recent activity, or implemented controls
+**And**: Coverage and Findings may stack vertically if horizontal metric cards would not fit
 
 ### Requirement: Finalize SHALL validate completion without running review work
 
