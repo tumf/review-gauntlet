@@ -16,10 +16,10 @@ from review_gauntlet.run_controller import (
     SessionCommandResult,
 )
 from review_gauntlet.run_tui import (
+    PANEL_TITLES,
     activity_text,
     agent_activity_text,
     calculate_progress_metrics,
-    PANEL_TITLES,
     compact_dashboard_text,
     coverage_text,
     create_run_app,

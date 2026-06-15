@@ -24,3 +24,4 @@ Expected archive gate: `cflx openspec validate use-tui-border-titles --archive-g
 ## Acceptance Notes
 
 - Acceptance #1 archive-commitability blocker was resolved by rewriting the project verification task note into the parenthesized end-of-line verification form required by the archive gate.
+- Acceptance #2 archive-commitability blocker was resolved by moving `PANEL_TITLES` before function imports in `tests/test_run_tui.py`; `agent-exec run -- make check` completed with exit code 0 (job `e5777dac413dbab27120835ad81530ab`).
