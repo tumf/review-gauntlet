@@ -118,7 +118,7 @@ class RunController:
         return RunSnapshot(
             session_id=session_id,
             coverage=_object_dict(status.get("coverage", {})),
-            findings=_object_dict(status.get("findings", {})),
+            findings=_object_dict(status.get("findings", status.get("finding_state_counts", {}))),
             next_ready_prompt=ready,
             step=self._step,
             agent_status=self._agent_status,
