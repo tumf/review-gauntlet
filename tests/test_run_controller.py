@@ -359,7 +359,19 @@ def test_run_controller_preserves_effective_timeout_after_command_timeout(
     assert snapshot.can_finalize is True
 
 
-def test_run_controller_reports_command_failure(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("reason", "expected_status"),
+    [
+        ("timeout", "timed_out"),
+        ("command_failed", "command_failed"),
+        ("startup_error", "startup_error"),
+        ("template_error", "template_error"),
+        ("interrupted", "interrupted"),
+    ],
+)
+def test_run_controller_preserves_specific_command_failure_statuses(
+    tmp_path: Path, reason: str, expected_status: str
+) -> None:
     store = _store(tmp_path)
 
     def command(
@@ -368,10 +380,10 @@ def test_run_controller_reports_command_failure(tmp_path: Path) -> None:
         return SessionCommandResult(
             argv=["fake-agent"],
             cwd=None,
-            returncode=2,
+            returncode=2 if reason == "command_failed" else None,
             stdout="",
             stderr="boom",
-            failure={"reason": "command_failed", "error": "command exited with status 2"},
+            failure={"reason": reason, "error": f"{reason} error"},
         )
 
     controller = RunController(
@@ -385,11 +397,15 @@ def test_run_controller_reports_command_failure(tmp_path: Path) -> None:
     )
 
     result = controller.run()
+    snapshot = controller.snapshot()
 
     assert result["completed"] is False
-    assert result["reason"] == "command_failed"
-    assert result["error"] == "command exited with status 2"
+    assert result["reason"] == reason
+    assert result["error"] == f"{reason} error"
     assert result["step_count"] == 1
+    assert snapshot.agent_status == expected_status
+    assert snapshot.agent_lifecycle.status == expected_status
+    assert snapshot.agent_status != "timed_out" or reason == "timeout"
 
 
 def test_run_controller_reports_interrupted_command_and_keeps_active_session(
@@ -413,6 +429,7 @@ def test_run_controller_reports_interrupted_command_and_keeps_active_session(
     )
 
     result = controller.run()
+    snapshot = controller.snapshot()
 
     assert result["completed"] is False
     assert result["reason"] == "interrupted"
@@ -420,6 +437,8 @@ def test_run_controller_reports_interrupted_command_and_keeps_active_session(
     assert result["step_count"] == 0
     assert result["steps"] == []
     assert result["session_id"] == "RGS-test"
+    assert snapshot.agent_status == "interrupted"
+    assert snapshot.agent_lifecycle.status == "interrupted"
     assert store.active_path.exists()
     assert store.active_session_id() == "RGS-test"
     assert [event.type for event in controller.events][-1] == "interrupted"
@@ -462,10 +481,14 @@ def test_run_controller_reports_max_steps_exhausted(tmp_path: Path) -> None:
 
     result = controller.run()
 
+    snapshot = controller.snapshot()
+
     assert result["completed"] is False
     assert result["reason"] == "max_steps_exhausted"
     assert result["max_steps"] == 2
     assert result["step_count"] == 2
+    assert snapshot.agent_status == "max_steps_exhausted"
+    assert snapshot.agent_lifecycle.status == "max_steps_exhausted"
 
 
 def test_run_controller_stop_after_current_step_prevents_next_step(tmp_path: Path) -> None:
