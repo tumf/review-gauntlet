@@ -153,8 +153,16 @@ def merge_preflight_blockers(root: Path, git_meta: dict[str, object]) -> list[st
         if current_base != base_commit:
             blockers.append("base branch has advanced from recorded base_commit")
     if not blockers:
-        merge_tree = git(root, "merge-tree", base_commit, base_branch, session_branch, check=False)
-        if "<<<<<<<" in merge_tree or "changed in both" in merge_tree:
+        merge_tree_result = subprocess.run(
+            ["git", "merge-tree", "--write-tree", base_branch, session_branch],
+            cwd=root,
+            text=True,
+            capture_output=True,
+            timeout=10,
+            check=False,
+        )
+        merge_tree_output = f"{merge_tree_result.stdout}\n{merge_tree_result.stderr}"
+        if merge_tree_result.returncode != 0 or "<<<<<<<" in merge_tree_output:
             blockers.append("session branch would conflict with base branch")
     return blockers
 

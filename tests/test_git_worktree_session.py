@@ -6,6 +6,7 @@ from typing import Any
 import pytest
 
 from review_gauntlet.cli import main
+from review_gauntlet.git_worktree import merge_preflight_blockers
 from review_gauntlet.session_store import SessionStore
 
 
@@ -84,7 +85,8 @@ def test_finalize_merge_blocks_when_base_branch_advanced_before_checkpoint(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _init_repo(tmp_path)
-    _complete_session(tmp_path, capsys)
+    init_data = _complete_session(tmp_path, capsys)
+    git_metadata = init_data["git_worktree"]
     assert not (tmp_path / ".review-gauntlet" / "checkpoints" / "latest").exists()
     (tmp_path / "package.json").write_text("{}\n", encoding="utf-8")
     _git(tmp_path, "add", "package.json")
@@ -95,8 +97,55 @@ def test_finalize_merge_blocks_when_base_branch_advanced_before_checkpoint(
 
     data = json.loads(capsys.readouterr().out)
     assert data["merged"] is False
+    assert data["can_finalize"] is False
+    assert data["next_required_action"] == "resolve_finalize_blockers"
     assert "base branch has advanced" in "\n".join(data["finalize_blockers"])
+    assert (tmp_path / ".review-gauntlet" / "active-session.json").exists()
+    assert (tmp_path / git_metadata["worktree_path"]).is_dir()
+    assert _git(tmp_path, "branch", "--list", git_metadata["session_branch"])
     assert not (tmp_path / ".review-gauntlet" / "checkpoints" / "latest").exists()
+
+
+def test_merge_preflight_reports_missing_and_dirty_base_blockers(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_repo(tmp_path)
+    init_data = _complete_session(tmp_path, capsys)
+    git_metadata = init_data["git_worktree"]
+    _git(tmp_path, "branch", "-m", git_metadata["base_branch"], "renamed-base")
+    _git(tmp_path, "worktree", "remove", "--force", git_metadata["worktree_path"])
+    _git(tmp_path, "branch", "-D", git_metadata["session_branch"])
+    (tmp_path / "dirty.txt").write_text("dirty\n", encoding="utf-8")
+
+    blockers = merge_preflight_blockers(tmp_path, git_metadata)
+
+    assert f"base branch is missing: {git_metadata['base_branch']}" in blockers
+    assert f"session branch is missing: {git_metadata['session_branch']}" in blockers
+    assert f"session worktree is missing: {git_metadata['worktree_path']}" in blockers
+    assert "base branch worktree has uncommitted files" in blockers
+
+
+def test_merge_preflight_reports_conflict_without_mutating_session(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_repo(tmp_path)
+    init_data = _complete_session(tmp_path, capsys)
+    git_metadata = init_data["git_worktree"]
+    (tmp_path / "app.py").write_text("print('base')\n", encoding="utf-8")
+    _git(tmp_path, "add", "app.py")
+    _git(tmp_path, "commit", "-m", "base change")
+    git_metadata = {**git_metadata, "base_commit": _git(tmp_path, "rev-parse", "HEAD")}
+    session_worktree = tmp_path / git_metadata["worktree_path"]
+    (session_worktree / "app.py").write_text("print('session')\n", encoding="utf-8")
+    _git(session_worktree, "add", "app.py")
+    _git(session_worktree, "commit", "-m", "session change")
+
+    blockers = merge_preflight_blockers(tmp_path, git_metadata)
+
+    assert "session branch would conflict with base branch" in blockers
+    assert (tmp_path / ".review-gauntlet" / "active-session.json").exists()
+    assert (tmp_path / git_metadata["worktree_path"]).is_dir()
+    assert _git(tmp_path, "branch", "--list", git_metadata["session_branch"])
 
 
 def test_finalize_merge_commits_merges_and_cleans_up(
