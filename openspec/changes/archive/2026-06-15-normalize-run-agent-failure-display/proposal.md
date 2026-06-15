@@ -1,8 +1,6 @@
 ---
 change_type: implementation
 priority: medium
-dependencies:
-  - clarify-run-finalize-timeout
 references:
   - openspec/CONSTITUTION.md
   - openspec/specs/review-sessions/spec.md

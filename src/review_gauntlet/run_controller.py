@@ -287,7 +287,13 @@ class RunController:
                     prompt,
                 )
             except KeyboardInterrupt:
-                self._agent_status = "interrupted"
+                self._agent_status = RUN_INTERRUPTED_REASON
+                self._agent_lifecycle = AgentLifecycle(
+                    status=RUN_INTERRUPTED_REASON,
+                    timeout_seconds=effective_config.adapter.timeout_seconds,
+                )
+                self._agent_step_started_at = None
+                self._agent_timeout_seconds = None
                 self._emit("interrupted", step=step_number, session_id=session_id)
                 return self._interrupted_result(steps)
             self._command_argv = tuple(command_result.argv)
@@ -306,7 +312,15 @@ class RunController:
             step_payload = _run_step_payload(step_number, prompt, command_result)
             steps.append(step_payload)
             if self._interrupted:
-                self._agent_status = "interrupted"
+                self._agent_status = RUN_INTERRUPTED_REASON
+                self._agent_lifecycle = AgentLifecycle(
+                    status=RUN_INTERRUPTED_REASON,
+                    timeout_seconds=effective_config.adapter.timeout_seconds,
+                    artifact_path=command_result.activity_artifact
+                    or command_result.stdout_artifact
+                    or command_result.stderr_artifact,
+                    output_tail=command_result.output_tail,
+                )
                 self._emit("interrupted", step=step_number, session_id=session_id)
                 return self._interrupted_result(
                     steps, error="run interrupted by controller request"
@@ -365,6 +379,8 @@ class RunController:
                 error=None,
                 session_id=None,
             )
+        self._agent_status = "max_steps_exhausted"
+        self._agent_lifecycle = AgentLifecycle(status="max_steps_exhausted")
         self._emit("failed", reason="max_steps_exhausted", session_id=session_id)
         return _run_result(
             completed=False,
@@ -453,10 +469,20 @@ def _lifecycle_status_from_result(result: SessionCommandResult) -> str:
     if result.failure is None:
         return "completed"
     reason = str(result.failure.get("reason", "failed"))
+    return _agent_status_from_failure_reason(reason)
+
+
+def _agent_status_from_failure_reason(reason: str) -> str:
     if reason == "timeout":
         return "timed_out"
-    if reason == RUN_INTERRUPTED_REASON:
-        return "cancelled"
+    if reason in {
+        "command_failed",
+        "startup_error",
+        "template_error",
+        RUN_INTERRUPTED_REASON,
+        "max_steps_exhausted",
+    }:
+        return reason
     return "failed"
 
 

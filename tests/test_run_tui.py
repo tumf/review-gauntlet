@@ -608,6 +608,70 @@ def test_agent_session_summary_and_activity_rows_are_human_facing_and_sanitized(
     assert run_tui.sanitize_agent_output_line("password=supersecret") == "<redacted>"
 
 
+@pytest.mark.parametrize(
+    ("status", "header", "agent_label"),
+    [
+        ("timed_out", "TIMED OUT", "timed out"),
+        ("command_failed", "COMMAND FAILED", "command failed"),
+        ("startup_error", "STARTUP ERROR", "startup error"),
+        ("template_error", "TEMPLATE ERROR", "template error"),
+        ("interrupted", "INTERRUPTED", "interrupted"),
+        ("max_steps_exhausted", "MAX STEPS EXHAUSTED", "max steps exhausted"),
+    ],
+)
+def test_failure_families_render_distinct_concise_agent_text(
+    status: str, header: str, agent_label: str
+) -> None:
+    snapshot = RunSnapshot(
+        session_id="RGS-failure-status",
+        coverage={"pending": 1},
+        findings={},
+        next_ready_prompt="review pending cells",
+        step=1,
+        agent_status=status,
+        command_argv=("agent",),
+        elapsed_seconds=1,
+        command_label="agent",
+        agent_lifecycle=AgentLifecycle(status=status, timeout_seconds=600.0),
+    )
+    view = dashboard_state(snapshot, ())
+    agent = run_tui.agent_summary_text(view)
+    activity = run_tui.agent_activity_text(status)
+
+    assert view.status_summary == header
+    assert f"status  · {agent_label}" in agent
+    assert activity == f"· {agent_label}"
+    if status != "timed_out":
+        assert "timed out" not in agent
+        assert "timeout timeout" not in agent
+
+
+def test_activity_panel_uses_command_failure_reason_and_keeps_stderr_evidence() -> None:
+    snapshot = RunSnapshot(
+        session_id="RGS-command-failure",
+        coverage={"pending": 1},
+        findings={},
+        next_ready_prompt="review pending cells",
+        step=1,
+        agent_status="command_failed",
+        command_argv=("agent",),
+        elapsed_seconds=1,
+        command_label="agent",
+        agent_lifecycle=AgentLifecycle(
+            status="command_failed",
+            timeout_seconds=600.0,
+            output_tail=(AgentOutputEntry("stderr", "File not found: missing.txt"),),
+        ),
+    )
+    events = (RunEvent("failed", "2026-06-15T12:35:03+00:00", {"reason": "command_failed"}),)
+
+    text = activity_text(dashboard_state(snapshot, events))
+
+    assert "event - failed command_failed" in text
+    assert "stderr - File not found: missing.txt" in text
+    assert "timed out" not in text
+
+
 def test_agent_summary_uses_configured_default_timeout_without_unset_or_duplicate_wording() -> None:
     snapshot = RunSnapshot(
         session_id="RGS-timeout-default",

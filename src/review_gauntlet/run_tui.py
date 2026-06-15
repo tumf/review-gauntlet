@@ -212,6 +212,33 @@ FINDING_STATES = (
 )
 _SPINNER_FRAMES = ("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
 _BAR_WIDTH = 24
+_FAILED_AGENT_STATUSES = frozenset(
+    {
+        "failed",
+        "timed_out",
+        "command_failed",
+        "startup_error",
+        "template_error",
+        "interrupted",
+        "cancelled",
+        "max_steps_exhausted",
+    }
+)
+_AGENT_STATUS_LABELS = {
+    "idle": "idle",
+    "running": "running",
+    "starting": "starting",
+    "quiet": "quiet but alive",
+    "completed": "completed",
+    "timed_out": "timed out",
+    "command_failed": "command failed",
+    "startup_error": "startup error",
+    "template_error": "template error",
+    "interrupted": "interrupted",
+    "cancelled": "interrupted",
+    "max_steps_exhausted": "max steps exhausted",
+    "failed": "failed",
+}
 
 
 @dataclass(frozen=True)
@@ -511,7 +538,7 @@ def derive_finalize_gates(snapshot: RunSnapshot) -> tuple[FinalizeGate, ...]:
     fix_count = _count_value(findings.get("confirmed", 0))
     verify_count = _count_value(findings.get("fixed_pending_verification", 0))
     blockers = classify_finalize_blockers(snapshot.finalize_blockers)
-    failed = snapshot.agent_status in {"failed", "interrupted", "timed_out", "cancelled"}
+    failed = snapshot.agent_status in _FAILED_AGENT_STATUSES
     finalized = snapshot.agent_status == "finalized" or snapshot.session_state == "finalized"
 
     review_state = "done" if coverage.incomplete == 0 else "running"
@@ -618,11 +645,31 @@ def terminal_state(agent_status: str) -> tuple[str, str]:
         return "RUNNING", "panel-active"
     if status == "blocked":
         return "BLOCKED", "panel-blocked"
-    if status in {"failed", "interrupted"}:
-        return "FAILED", "panel-failed"
+    if status in _FAILED_AGENT_STATUSES:
+        return _agent_terminal_label(status), "panel-failed"
     if status in {"finalized", "completed"}:
         return "FINALIZED", "panel-finalized"
-    return f"READY {status}", "panel"
+    return f"READY {_agent_status_label(status).upper()}", "panel"
+
+
+def _agent_terminal_label(status: str) -> str:
+    if status == "timed_out":
+        return "TIMED OUT"
+    if status == "command_failed":
+        return "COMMAND FAILED"
+    if status == "startup_error":
+        return "STARTUP ERROR"
+    if status == "template_error":
+        return "TEMPLATE ERROR"
+    if status in {"interrupted", "cancelled"}:
+        return "INTERRUPTED"
+    if status == "max_steps_exhausted":
+        return "MAX STEPS EXHAUSTED"
+    return "FAILED"
+
+
+def _agent_status_label(status: str) -> str:
+    return _AGENT_STATUS_LABELS.get(status, status.replace("_", " "))
 
 
 def header_title_text() -> str:
@@ -729,7 +776,7 @@ def agent_activity_text(agent_status: str, *, activity_frame: int = 0) -> str:
         return f"{_SPINNER_FRAMES[activity_frame % len(_SPINNER_FRAMES)]} {agent_status}"
     if agent_status == "quiet":
         return "quiet but alive"
-    return f"· {_plain_text(agent_status)}"
+    return f"· {_agent_status_label(_plain_text(agent_status))}"
 
 
 def format_agent_output_entry(entry: AgentOutputEntry) -> TimelineEvent:
