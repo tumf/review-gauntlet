@@ -1,0 +1,21 @@
+## Implementation Tasks
+
+- [ ] Replace the TUI dashboard composition with the target panel structure: `Review Gauntlet`, `Next to finalize`, side-by-side `Agent` and `Session`, `Activity`, and controls. (verification: unit - `tests/test_run_tui.py` asserts the rendered compact dashboard text includes the new panel labels in order and excludes `Session metrics`, `Current operation`, and `Finalize path`.)
+- [ ] Refactor the run TUI view model so rendering functions consume human-facing header, finalize checklist, agent summary, session summary, and activity rows instead of raw controller fields. (verification: unit - `tests/test_run_tui.py` constructs `RunSnapshot` fixtures and asserts view-model fields produce stable human labels without raw prompt bodies, raw argv, or full session ids.)
+- [ ] Implement finalize checklist state derivation with six visible rows: Review coverage, Triage findings, Fix confirmed findings, Verify fixes, Final checks, and Finalize checkpoint. (verification: unit - `tests/test_run_tui.py` covers incomplete coverage, completed coverage with pending findings, confirmed findings, fixed-pending verification, final-check blockers, and finalized sessions.)
+- [ ] Classify blockers for TUI display so coverage blockers and finding blockers are represented by their dedicated checklist rows, while `Final checks` only blocks on finalize-only blockers after earlier gates complete. (verification: unit - `tests/test_run_tui.py` includes a snapshot whose `finalize_blockers` contains `review cells are still pending` and asserts `Final checks` is `later`, not `blocked`, and no `1 finalize blocker(s)` text is rendered.)
+- [ ] Remove internal action names from TUI text by mapping `next_required_action` and ready-prompt intent to human wording such as `waiting`, `ready to finalize`, or current checklist labels. (verification: unit - `tests/test_run_tui.py` asserts `run_review` and `resolve_finalize_blockers` are absent from header, checklist, agent, session, and activity text.)
+- [ ] Render the header as a two-line summary with terminal status, `gate x/6`, current gate title, shortened session id, agent name, liveness, and timeout, without duplicating gate numbers in checklist rows. (verification: unit - `tests/test_run_tui.py` asserts the header contains `RUNNING · gate 1/6 · Review coverage` and checklist rows do not contain `gate 1/6` or `gate 2/6`.)
+- [ ] Add `Agent` summary rendering for command label, alive/quiet status, output recency, timeout, and artifact path when available. (verification: unit - `tests/test_run_tui.py` asserts quiet snapshots render `status`, `output`, and `timeout` lines and represent quiet as alive rather than failed.)
+- [ ] Add `Session` summary rendering for compact coverage, open findings, current checklist item, and agent step. (verification: unit - `tests/test_run_tui.py` asserts `Coverage  0%   0 / 9`, `Findings  open 0`, `Current   review coverage`, and `Agent step 1` style content for representative snapshots.)
+- [ ] Rework Activity timeline labels to mix Review Gauntlet events and agent stdout/stderr tail rows with `event`, `stdout`, and `stderr` kinds, plus a quiet heartbeat row. (verification: unit - `tests/test_run_tui.py` asserts event rows, stdout rows, stderr rows, and `agent alive` heartbeat rows appear together and remain sanitized/redacted.)
+- [ ] Preserve existing optional Textual behavior, fallback behavior, non-TUI behavior, JSON behavior, run-controller semantics, and artifact persistence. (verification: integration - run existing focused tests in `tests/test_run_tui.py` plus existing CLI/run-controller tests affected by imports or public helper names.)
+- [ ] Run focused and full project verification. (verification: integration - `uv run pytest tests/test_run_tui.py` and `make check`.)
+
+## Future Work
+
+- Manual visual review in an approximately 80x24 terminal should compare the rendered Textual dashboard against the proposal mock and record any acceptable Textual-specific deviations.
+
+## Final Validation
+
+Archive validation itself is the authoritative final OpenSpec validation gate. Expected archive gate: `cflx openspec validate redesign-run-tui-dashboard --archive-gate`.
