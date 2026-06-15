@@ -1,0 +1,174 @@
+{
+  "checkpoint_id": "RGC-a927cf1b7f8d-RGS-7a2d31da6896",
+  "findings": [
+    {
+      "checkpoint_id": "RGC-a927cf1b7f8d-RGS-7a2d31da6896",
+      "content": "The status and event text sanitization still permits newline and tab characters, so a crafted agent status, event type, payload reason, command label, or session id can inject extra rows into the TUI and obscure the true run state. Collapse control whitespace before rendering these values in single-line labels/details.",
+      "finding_id": "RGF-0121",
+      "fingerprint": "667915eac30018d3fc5e8e83e40b45674541fcbf57f6e5b01a5560b422861b04",
+      "latest_occurrence": {
+        "cell_id": "RGC-8610c7a6f661b70a",
+        "end_line": 421,
+        "finding_id": "RGF-0121",
+        "imprecise": 0,
+        "occurrence_id": 121,
+        "path": "src/review_gauntlet/run_tui.py",
+        "run_id": 109,
+        "start_line": 419
+      },
+      "metadata": "{\"fingerprint\":\"667915eac30018d3fc5e8e83e40b45674541fcbf57f6e5b01a5560b422861b04\",\"path\":\"src/review_gauntlet/run_tui.py\",\"rule_id\":\"data-validation\",\"content\":\"The status and event text sanitization still permits newline and tab characters, so a crafted agent status, event type, payload reason, command label, or session id can inject extra rows into the TUI and obscure the true run state. Collapse control whitespace before rendering these values in single-line labels/details.\",\"suggestion_code\":\"def _plain_character(character: str) -> str:\\n    if character in {\\\"\\\\n\\\", \\\"\\\\r\\\", \\\"\\\\t\\\"}:\\n        return \\\" \\\"\\n    if ord(character) >= 32 and ord(character) != 127:\\n        return character\\n    return \\\"\ufffd\\\"\",\"existing_code\":\"def _plain_character(character: str) -> str:\\n    if character in {\\\"\\\\n\\\", \\\"\\\\t\\\"} or (ord(character) >= 32 and ord(character) != 127):\\n        return character\\n    return \\\"\ufffd\\\"\",\"start_line\":419,\"end_line\":421,\"thinking\":\"Most call sites use _plain_text for untrusted subprocess/controller fields and then interpolate into single-line dashboard rows. Allowing embedded newlines defeats that validation boundary.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_tui.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-7a2d31da6896",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-a927cf1b7f8d-RGS-7a2d31da6896",
+      "content": "_progress_bar() trusts its completed argument after calculate_progress_metrics() derives it from arbitrary coverage counts. If completed exceeds total (for example because coverage contains a negative pending/stale count that is clamped to 0 for incomplete but total is reduced by other states, or because callers invoke _progress_bar directly), filled can become larger than _BAR_WIDTH. That makes the bar exceed the intended fixed width and masks inconsistent input instead of clamping the rendered value. Clamp filled into [0, _BAR_WIDTH] before rendering.",
+      "finding_id": "RGF-0122",
+      "fingerprint": "b14d9954f0e8ecfc9b75475dc85e64ee1adc207cbac9acd6d5d09e974aa478eb",
+      "latest_occurrence": {
+        "cell_id": "RGC-8610c7a6f661b70a",
+        "end_line": 438,
+        "finding_id": "RGF-0122",
+        "imprecise": 0,
+        "occurrence_id": 122,
+        "path": "src/review_gauntlet/run_tui.py",
+        "run_id": 110,
+        "start_line": 434
+      },
+      "metadata": "{\"fingerprint\":\"b14d9954f0e8ecfc9b75475dc85e64ee1adc207cbac9acd6d5d09e974aa478eb\",\"path\":\"src/review_gauntlet/run_tui.py\",\"rule_id\":\"data-validation\",\"content\":\"_progress_bar() trusts its completed argument after calculate_progress_metrics() derives it from arbitrary coverage counts. If completed exceeds total (for example because coverage contains a negative pending/stale count that is clamped to 0 for incomplete but total is reduced by other states, or because callers invoke _progress_bar directly), filled can become larger than _BAR_WIDTH. That makes the bar exceed the intended fixed width and masks inconsistent input instead of clamping the rendered value. Clamp filled into [0, _BAR_WIDTH] before rendering.\",\"suggestion_code\":\"def _progress_bar(completed: int, total: int) -> str:\\n    if total <= 0:\\n        return \\\"[\\\" + \\\"\u00b7\\\" * _BAR_WIDTH + \\\"]\\\"\\n    filled = min(_BAR_WIDTH, max(0, round((completed / total) * _BAR_WIDTH)))\\n    return \\\"[\\\" + \\\"\u2588\\\" * filled + \\\"\u2591\\\" * (_BAR_WIDTH - filled) + \\\"]\\\"\",\"existing_code\":\"def _progress_bar(completed: int, total: int) -> str:\\n    if total <= 0:\\n        return \\\"[\\\" + \\\"\u00b7\\\" * _BAR_WIDTH + \\\"]\\\"\\n    filled = round((completed / total) * _BAR_WIDTH)\\n    return \\\"[\\\" + \\\"\u2588\\\" * filled + \\\"\u2591\\\" * (_BAR_WIDTH - filled) + \\\"]\\\"\",\"start_line\":434,\"end_line\":438,\"thinking\":\"Data validation issue: rendering should not trust derived numeric inputs to be within display bounds.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_tui.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-7a2d31da6896",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-a927cf1b7f8d-RGS-7a2d31da6896",
+      "content": "refresh_view() can be invoked by the interval after the worker exits the Textual app. At that point compose() has not necessarily completed or the widgets may already be unmounted, so query_one() can raise and mask the run result during shutdown. Guard widget updates with is_mounted/screen checks or catch NoMatches so late refresh ticks are harmless.",
+      "finding_id": "RGF-0123",
+      "fingerprint": "61a54c74668ecf760757b9541173150658233442d7577a195fc72ca00a91fd0e",
+      "latest_occurrence": {
+        "cell_id": "RGC-8610c7a6f661b70a",
+        "end_line": 108,
+        "finding_id": "RGF-0123",
+        "imprecise": 0,
+        "occurrence_id": 123,
+        "path": "src/review_gauntlet/run_tui.py",
+        "run_id": 111,
+        "start_line": 108
+      },
+      "metadata": "{\"fingerprint\":\"61a54c74668ecf760757b9541173150658233442d7577a195fc72ca00a91fd0e\",\"path\":\"src/review_gauntlet/run_tui.py\",\"rule_id\":\"data-validation\",\"content\":\"refresh_view() can be invoked by the interval after the worker exits the Textual app. At that point compose() has not necessarily completed or the widgets may already be unmounted, so query_one() can raise and mask the run result during shutdown. Guard widget updates with is_mounted/screen checks or catch NoMatches so late refresh ticks are harmless.\",\"suggestion_code\":\"            try:\\n                self.query_one(\\\"#session_header\\\", Static).update(header_text(view))\\n            except NoMatches:\\n                return\",\"existing_code\":\"            self.query_one(\\\"#session_header\\\", Static).update(header_text(view))\",\"start_line\":108,\"end_line\":108,\"thinking\":\"The periodic timer is registered unconditionally and the worker exits the app from another thread. Without validation that the widgets still exist, a shutdown race can turn a successful run into a TUI exception.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_tui.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-7a2d31da6896",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-a927cf1b7f8d-RGS-7a2d31da6896",
+      "content": "Coverage percentages are computed from counts after coercing floats with int(), but completed is not clamped to total. If a malformed or partially aggregated coverage snapshot reports counts such as reviewed=5 and pending=1 for a 4-cell run, the TUI can render percentages above 100%, which is misleading for review progress. Clamp the displayed completed count to total before deriving the percentage and progress bar.",
+      "finding_id": "RGF-0124",
+      "fingerprint": "f42a0a5e3b5ea8f98c5560475576cb19bc512b8f9a80f9777bba478e8e6ca59e",
+      "latest_occurrence": {
+        "cell_id": "RGC-8610c7a6f661b70a",
+        "end_line": 197,
+        "finding_id": "RGF-0124",
+        "imprecise": 0,
+        "occurrence_id": 124,
+        "path": "src/review_gauntlet/run_tui.py",
+        "run_id": 113,
+        "start_line": 196
+      },
+      "metadata": "{\"fingerprint\":\"f42a0a5e3b5ea8f98c5560475576cb19bc512b8f9a80f9777bba478e8e6ca59e\",\"path\":\"src/review_gauntlet/run_tui.py\",\"rule_id\":\"data-validation\",\"content\":\"Coverage percentages are computed from counts after coercing floats with int(), but completed is not clamped to total. If a malformed or partially aggregated coverage snapshot reports counts such as reviewed=5 and pending=1 for a 4-cell run, the TUI can render percentages above 100%, which is misleading for review progress. Clamp the displayed completed count to total before deriving the percentage and progress bar.\",\"suggestion_code\":\"    displayed_completed = min(completed, total)\\n    percent = round((displayed_completed / total) * 100) if total else 0\\n    return ProgressMetrics(displayed_completed, total, percent, superseded, pending + stale, pending, stale)\",\"existing_code\":\"    percent = round((completed / total) * 100) if total else 0\\n    return ProgressMetrics(completed, total, percent, superseded, pending + stale, pending, stale)\",\"start_line\":196,\"end_line\":197,\"thinking\":\"The function already treats negative and non-numeric values defensively, so it should also defend against internally inconsistent count totals before presenting progress to users.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_tui.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-7a2d31da6896",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-a927cf1b7f8d-RGS-7a2d31da6896",
+      "content": "`calculate_progress_metrics` treats every unknown coverage state as completed because only `pending` and `stale` are considered incomplete. If the status snapshot starts returning another non-terminal state (for example `queued`, `in_progress`, or an adapter typo), the TUI will overstate review progress instead of surfacing invalid/unknown data. Prefer an explicit set of completed states and count unknown states as incomplete (or excluded only when explicitly listed).",
+      "finding_id": "RGF-0125",
+      "fingerprint": "e5feb845615370ad574756d241e0b478322c48f68826f0d0f46008ae5745947f",
+      "latest_occurrence": {
+        "cell_id": "RGC-8610c7a6f661b70a",
+        "end_line": 195,
+        "finding_id": "RGF-0125",
+        "imprecise": 0,
+        "occurrence_id": 125,
+        "path": "src/review_gauntlet/run_tui.py",
+        "run_id": 114,
+        "start_line": 188
+      },
+      "metadata": "{\"fingerprint\":\"e5feb845615370ad574756d241e0b478322c48f68826f0d0f46008ae5745947f\",\"path\":\"src/review_gauntlet/run_tui.py\",\"rule_id\":\"data-validation\",\"content\":\"`calculate_progress_metrics` treats every unknown coverage state as completed because only `pending` and `stale` are considered incomplete. If the status snapshot starts returning another non-terminal state (for example `queued`, `in_progress`, or an adapter typo), the TUI will overstate review progress instead of surfacing invalid/unknown data. Prefer an explicit set of completed states and count unknown states as incomplete (or excluded only when explicitly listed).\",\"suggestion_code\":\"    completed_states = {\\\"covered\\\", \\\"reviewed\\\", \\\"done\\\"}\\n    for state, raw_count in coverage.items():\\n        count = _count_value(raw_count)\\n        if state in EXCLUDED_COVERAGE_STATES:\\n            superseded += count\\n            continue\\n        total += count\\n        if state in completed_states:\\n            completed += count\",\"existing_code\":\"    for state, raw_count in coverage.items():\\n        count = _count_value(raw_count)\\n        if state in EXCLUDED_COVERAGE_STATES:\\n            superseded += count\\n            continue\\n        total += count\\n        if state not in INCOMPLETE_COVERAGE_STATES:\\n            completed += count\",\"start_line\":188,\"end_line\":195,\"thinking\":\"Data-validation issue: unknown external status keys should not be silently interpreted as successful completion.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_tui.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-7a2d31da6896",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-a927cf1b7f8d-RGS-7a2d31da6896",
+      "content": "Coverage and finding counts silently accept boolean values because bool is a subclass of int. If malformed status data contains true/false for a count, the dashboard will report it as 1/0 instead of treating it as invalid or absent, which can make progress and findings totals misleading.",
+      "finding_id": "RGF-0126",
+      "fingerprint": "8724e784a753b35ca5d7f0dd37174a8a27d40ec2c719576807592f81af3cc670",
+      "latest_occurrence": {
+        "cell_id": "RGC-8610c7a6f661b70a",
+        "end_line": 458,
+        "finding_id": "RGF-0126",
+        "imprecise": 0,
+        "occurrence_id": 126,
+        "path": "src/review_gauntlet/run_tui.py",
+        "run_id": 115,
+        "start_line": 454
+      },
+      "metadata": "{\"fingerprint\":\"8724e784a753b35ca5d7f0dd37174a8a27d40ec2c719576807592f81af3cc670\",\"path\":\"src/review_gauntlet/run_tui.py\",\"rule_id\":\"data-validation\",\"content\":\"Coverage and finding counts silently accept boolean values because bool is a subclass of int. If malformed status data contains true/false for a count, the dashboard will report it as 1/0 instead of treating it as invalid or absent, which can make progress and findings totals misleading.\",\"suggestion_code\":\"def _count_value(value: object) -> int:\\n    if isinstance(value, bool):\\n        return 0\\n    if isinstance(value, int):\\n        return max(0, value)\",\"existing_code\":\"def _count_value(value: object) -> int:\\n    if isinstance(value, bool):\\n        return int(value)\\n    if isinstance(value, int):\\n        return max(0, value)\",\"start_line\":454,\"end_line\":458,\"thinking\":\"Dashboard metrics are derived from external session/status JSON dictionaries, so count parsing should not coerce booleans into numeric counts.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_tui.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-7a2d31da6896",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-a927cf1b7f8d-RGS-7a2d31da6896",
+      "content": "`_count_value` silently truncates non-integral floats, so malformed fractional coverage/finding counts from status data are displayed as lower integer values instead of being rejected or rounded consistently. This can underreport pending/stale/open work in the TUI and make progress appear better than the source data indicates. Validate that counts are integral before accepting them.",
+      "finding_id": "RGF-0127",
+      "fingerprint": "168b6e15aedf10cbb457ca444605010e5ae355802054408ffb3104c01ce1d626",
+      "latest_occurrence": {
+        "cell_id": "RGC-8610c7a6f661b70a",
+        "end_line": 460,
+        "finding_id": "RGF-0127",
+        "imprecise": 0,
+        "occurrence_id": 127,
+        "path": "src/review_gauntlet/run_tui.py",
+        "run_id": 117,
+        "start_line": 459
+      },
+      "metadata": "{\"fingerprint\":\"168b6e15aedf10cbb457ca444605010e5ae355802054408ffb3104c01ce1d626\",\"path\":\"src/review_gauntlet/run_tui.py\",\"rule_id\":\"data-validation\",\"content\":\"`_count_value` silently truncates non-integral floats, so malformed fractional coverage/finding counts from status data are displayed as lower integer values instead of being rejected or rounded consistently. This can underreport pending/stale/open work in the TUI and make progress appear better than the source data indicates. Validate that counts are integral before accepting them.\",\"suggestion_code\":\"    if isinstance(value, float) and value.is_integer():\\n        return max(0, int(value))\",\"existing_code\":\"    if isinstance(value, float):\\n        return max(0, int(value))\",\"start_line\":459,\"end_line\":460,\"thinking\":\"Coverage and finding state counts are data inputs from status snapshots. A float like 1.9 currently becomes 1, which hides invalid data and undercounts work.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_tui.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-7a2d31da6896",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-a927cf1b7f8d-RGS-7a2d31da6896",
+      "content": "The header widget only adds the latest state class and never removes the previous state class. If a run transitions from running to blocked/failed/finalized, the Static can keep both panel-active and the terminal class, leaving stale styling dependent on CSS precedence rather than the actual state.",
+      "finding_id": "RGF-0128",
+      "fingerprint": "3315042a91eef75ed9ae97005231ae2d81bbb9341e7bf8fd8197031a86e07a01",
+      "latest_occurrence": {
+        "cell_id": "RGC-c1ad423b70f325a0",
+        "end_line": 118,
+        "finding_id": "RGF-0128",
+        "imprecise": 0,
+        "occurrence_id": 128,
+        "path": "src/review_gauntlet/run_tui.py",
+        "run_id": 117,
+        "start_line": 117
+      },
+      "metadata": "{\"fingerprint\":\"3315042a91eef75ed9ae97005231ae2d81bbb9341e7bf8fd8197031a86e07a01\",\"path\":\"src/review_gauntlet/run_tui.py\",\"rule_id\":\"test-evidence\",\"content\":\"The header widget only adds the latest state class and never removes the previous state class. If a run transitions from running to blocked/failed/finalized, the Static can keep both panel-active and the terminal class, leaving stale styling dependent on CSS precedence rather than the actual state.\",\"suggestion_code\":\"            session_header.update(header_text(view))\\n            for state_class in (\\\"panel\\\", \\\"panel-active\\\", \\\"panel-blocked\\\", \\\"panel-failed\\\", \\\"panel-finalized\\\"):\\n                session_header.set_class(state_class == view.state_class, state_class)\",\"existing_code\":\"            session_header.update(header_text(view))\\n            session_header.set_class(True, view.state_class)\",\"start_line\":117,\"end_line\":118,\"thinking\":\"Textual set_class(True, class_name) does not clear other mutually exclusive state classes; state transitions should replace the prior state class.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_tui.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-7a2d31da6896",
+      "state": "fixed_verified"
+    }
+  ],
+  "schema_version": 1
+}
