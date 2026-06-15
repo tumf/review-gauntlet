@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 
@@ -49,3 +51,45 @@ def test_create_run_app_constructs_when_textual_available(tmp_path: Path) -> Non
     app = create_run_app(controller)
 
     assert app is not None
+
+
+def test_run_app_executes_controller_in_headless_mode(tmp_path: Path) -> None:
+    if not textual_available():
+        pytest.skip("Textual optional dependency is not installed")
+    (tmp_path / "review-gauntlet.json").write_text(
+        json.dumps({"adapter": {"type": "command", "command": "agent"}}), encoding="utf-8"
+    )
+    store = SessionStore(tmp_path)
+    store.create_session(
+        {
+            "session_id": "RGS-tui-run",
+            "root": str(tmp_path),
+            "target": {
+                "base_ref": None,
+                "head_ref": None,
+                "worktree": True,
+                "commit": None,
+                "all_files": False,
+            },
+        },
+        (),
+    )
+
+    def command_runner(*_args: object) -> SessionCommandResult:
+        (tmp_path / ".review-gauntlet" / "active-session.json").unlink()
+        return SessionCommandResult(argv=["agent"], cwd=None, returncode=0, stdout="", stderr="")
+
+    controller = RunController(
+        root=tmp_path,
+        store=store,
+        config_path=None,
+        max_steps=1,
+        ready_prompt=lambda _store, _root: "ready prompt",
+        status_snapshot=lambda _store, _root: {"coverage": {}, "findings": {}},
+        command_runner=command_runner,
+    )
+
+    result = cast(Any, create_run_app(controller)).run(headless=True)
+
+    assert isinstance(result, dict)
+    assert result["completed"] is True

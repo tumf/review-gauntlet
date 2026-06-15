@@ -66,10 +66,12 @@ def create_run_app(controller: RunController) -> object:
 
         def on_mount(self) -> None:
             self.refresh_view()
-            self.call_later(self._run_controller)
+            self.set_interval(0.25, self.refresh_view)
+            self.run_worker(self._run_controller, thread=True)
 
         def _run_controller(self) -> None:
-            self.exit(self.controller.run())
+            result = self.controller.run()
+            self.call_from_thread(self.exit, result)
 
         def action_stop_after_current_step(self) -> None:
             self.controller.request_stop_after_current_step()
