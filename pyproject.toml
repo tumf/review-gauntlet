@@ -26,6 +26,12 @@ dependencies = [
     "pydantic-settings>=2.14.1",
 ]
 
+[project.optional-dependencies]
+tui = [
+    "rich>=13",
+    "textual>=0.89",
+]
+
 [project.urls]
 Repository = "https://github.com/tumf/review-gauntlet"
 Issues = "https://github.com/tumf/review-gauntlet/issues"

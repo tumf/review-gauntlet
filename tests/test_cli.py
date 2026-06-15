@@ -542,3 +542,119 @@ def test_cli_status_json_after_init(tmp_path: Path, capsys: pytest.CaptureFixtur
     data = json.loads(capsys.readouterr().out)
     assert data["next_required_action"] == "run_review"
     assert data["can_finalize"] is False
+
+
+def _successful_run_result() -> dict[str, object]:
+    return {
+        "completed": True,
+        "reason": "completed",
+        "steps": [],
+        "step_count": 0,
+        "session_id": None,
+    }
+
+
+def _fake_cmd_run(_args: object, _root: Path, _store: object) -> dict[str, object]:
+    return _successful_run_result()
+
+
+def _fake_controller_run(_self: object) -> dict[str, object]:
+    return _successful_run_result()
+
+
+def test_cli_run_help_exposes_no_tui(capsys: pytest.CaptureFixture[str]) -> None:
+    output = _help_output(["run"], capsys)
+
+    assert "--no-tui" in output
+
+
+def test_cli_run_no_tui_accepts_flag(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr("review_gauntlet.cli.sys.stdout.isatty", lambda: True)
+    monkeypatch.setattr("review_gauntlet.cli._cmd_run", _fake_cmd_run)
+
+    main(["run", str(tmp_path), "--no-tui", "--format", "json"])
+
+    data = json.loads(capsys.readouterr().out)
+    assert data["completed"] is True
+
+
+def test_cli_run_json_does_not_emit_tui_fallback_warning(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "review-gauntlet.json").write_text(
+        json.dumps({"adapter": {"type": "command", "command": "fake-agent"}}), encoding="utf-8"
+    )
+    monkeypatch.setattr("review_gauntlet.cli.sys.stdout.isatty", lambda: True)
+    monkeypatch.setattr("review_gauntlet.cli.textual_available", lambda: False)
+    monkeypatch.setattr("review_gauntlet.cli.RunController.run", _fake_controller_run)
+
+    main(["run", str(tmp_path), "--format", "json"])
+
+    captured = capsys.readouterr()
+    assert "TUI support is not installed" not in captured.out
+    assert "TUI support is not installed" not in captured.err
+    assert json.loads(captured.out)["completed"] is True
+
+
+def test_cli_run_interactive_text_missing_textual_falls_back_with_warning(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "review-gauntlet.json").write_text(
+        json.dumps({"adapter": {"type": "command", "command": "fake-agent"}}), encoding="utf-8"
+    )
+    monkeypatch.setattr("review_gauntlet.cli.sys.stdout.isatty", lambda: True)
+    monkeypatch.setattr("review_gauntlet.cli.textual_available", lambda: False)
+    monkeypatch.setattr("review_gauntlet.cli.RunController.run", _fake_controller_run)
+
+    main(["run", str(tmp_path)])
+
+    captured = capsys.readouterr()
+    assert "TUI support is not installed; falling back to text mode." in captured.err
+    assert 'Install with: uv tool install "review-gauntlet[tui]"' in captured.err
+    assert "completed: True" in captured.out
+
+
+def test_cli_run_interactive_text_with_tui_available_chooses_tui_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "review-gauntlet.json").write_text(
+        json.dumps({"adapter": {"type": "command", "command": "fake-agent"}}), encoding="utf-8"
+    )
+    monkeypatch.setattr("review_gauntlet.cli.sys.stdout.isatty", lambda: True)
+    monkeypatch.setattr("review_gauntlet.cli.textual_available", lambda: True)
+
+    class FakeApp:
+        def run(self) -> dict[str, object]:
+            return {
+                "completed": True,
+                "reason": "completed",
+                "steps": [],
+                "step_count": 0,
+                "session_id": None,
+            }
+
+    def fake_create_run_app(_controller: object) -> FakeApp:
+        return FakeApp()
+
+    monkeypatch.setattr("review_gauntlet.cli.create_run_app", fake_create_run_app)
+
+    main(["run", str(tmp_path)])
+
+    assert capsys.readouterr().out == ""
+
+
+def test_cli_run_non_tty_text_chooses_text_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "review-gauntlet.json").write_text(
+        json.dumps({"adapter": {"type": "command", "command": "fake-agent"}}), encoding="utf-8"
+    )
+    monkeypatch.setattr("review_gauntlet.cli.sys.stdout.isatty", lambda: False)
+    monkeypatch.setattr("review_gauntlet.cli.textual_available", lambda: True)
+    monkeypatch.setattr("review_gauntlet.cli.RunController.run", _fake_controller_run)
+
+    main(["run", str(tmp_path)])
+
+    assert "completed: True" in capsys.readouterr().out
