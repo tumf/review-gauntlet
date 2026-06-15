@@ -130,22 +130,24 @@ def test_merge_preflight_reports_conflict_without_mutating_session(
 ) -> None:
     _init_repo(tmp_path)
     init_data = _complete_session(tmp_path, capsys)
-    git_metadata = init_data["git_worktree"]
+    git_metadata: dict[str, object] = init_data["git_worktree"]
     (tmp_path / "app.py").write_text("print('base')\n", encoding="utf-8")
     _git(tmp_path, "add", "app.py")
     _git(tmp_path, "commit", "-m", "base change")
     git_metadata = {**git_metadata, "base_commit": _git(tmp_path, "rev-parse", "HEAD")}
-    session_worktree = tmp_path / git_metadata["worktree_path"]
+    session_worktree = tmp_path / str(git_metadata["worktree_path"])
     (session_worktree / "app.py").write_text("print('session')\n", encoding="utf-8")
     _git(session_worktree, "add", "app.py")
     _git(session_worktree, "commit", "-m", "session change")
 
     blockers = merge_preflight_blockers(tmp_path, git_metadata)
 
+    worktree_path = str(git_metadata["worktree_path"])
+    session_branch = str(git_metadata["session_branch"])
     assert "session branch would conflict with base branch" in blockers
     assert (tmp_path / ".review-gauntlet" / "active-session.json").exists()
-    assert (tmp_path / git_metadata["worktree_path"]).is_dir()
-    assert _git(tmp_path, "branch", "--list", git_metadata["session_branch"])
+    assert (tmp_path / worktree_path).is_dir()
+    assert _git(tmp_path, "branch", "--list", session_branch)
 
 
 def test_finalize_merge_commits_merges_and_cleans_up(

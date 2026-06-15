@@ -36,3 +36,12 @@ Expected archive gate: `cflx openspec validate add-git-worktree-session-finalize
 ## Acceptance Notes
 
 Acceptance #1 flagged archive-gate evidence issues. The active implementation tasks above now cite repository-verifiable source paths, test cases, and runnable validation evidence; final OpenSpec validation remains in the non-checkbox `## Final Validation` section.
+
+## Acceptance #2 Notes
+
+Acceptance #2 identified a pyright regression in `tests/test_git_worktree_session.py::test_merge_preflight_reports_conflict_without_mutating_session`: rebinding `git_metadata` with a dict literal caused pyright to infer an incompatible dictionary type for `merge_preflight_blockers(...: dict[str, object])`. The regression was fixed by annotating the test metadata as `dict[str, object]` and converting metadata values to strings before path/Git helper use.
+
+Verification after the fix:
+
+- `make typecheck` passed via agent-exec job `ef62967a91df851dd735ceec636c505a`.
+- `make check` passed via agent-exec job `788581c94f203a21229e0ac761da705c`.
