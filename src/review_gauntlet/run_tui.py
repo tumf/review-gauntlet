@@ -54,16 +54,12 @@ def create_run_app(controller: RunController) -> object:
         def compose(self) -> ComposeResult:
             with Vertical(id="body"):
                 yield Static(
-                    _progress_text(self.snapshot, activity_frame=self._activity_frame),
+                    progress_text(self.snapshot, activity_frame=self._activity_frame),
                     id="progress_panel",
                 )
                 with Horizontal():
-                    yield Static(
-                        _coverage_text(self.snapshot), id="coverage_panel", classes="panel"
-                    )
-                    yield Static(
-                        _findings_text(self.snapshot), id="findings_panel", classes="panel"
-                    )
+                    yield Static(coverage_text(self.snapshot), id="coverage_panel", classes="panel")
+                    yield Static(findings_text(self.snapshot), id="findings_panel", classes="panel")
                 yield Static(_task_text(self.snapshot), id="task_panel", classes="panel")
                 yield Static(_events_text(self.controller.events), id="events", classes="panel")
                 yield Static(
@@ -100,10 +96,10 @@ def create_run_app(controller: RunController) -> object:
             if self.snapshot.agent_status == "running":
                 self._activity_frame += 1
             self.query_one("#progress_panel", Static).update(
-                _progress_text(self.snapshot, activity_frame=self._activity_frame)
+                progress_text(self.snapshot, activity_frame=self._activity_frame)
             )
-            self.query_one("#coverage_panel", Static).update(_coverage_text(self.snapshot))
-            self.query_one("#findings_panel", Static).update(_findings_text(self.snapshot))
+            self.query_one("#coverage_panel", Static).update(coverage_text(self.snapshot))
+            self.query_one("#findings_panel", Static).update(findings_text(self.snapshot))
             self.query_one("#task_panel", Static).update(_task_text(self.snapshot))
             self.query_one("#events", Static).update(_events_text(self.controller.events))
 
@@ -159,9 +155,9 @@ def format_elapsed_time(seconds: float) -> str:
     return f"{minutes:02d}:{seconds:02d}"
 
 
-def _progress_text(snapshot: RunSnapshot, *, activity_frame: int = 0) -> str:
+def progress_text(snapshot: RunSnapshot, *, activity_frame: int = 0) -> str:
     metrics = calculate_progress_metrics(snapshot.coverage)
-    activity = _agent_activity_text(snapshot.agent_status, activity_frame=activity_frame)
+    activity = agent_activity_text(snapshot.agent_status, activity_frame=activity_frame)
     progress_bar = _progress_bar(metrics.completed, metrics.total)
     summary = (
         f"{metrics.percent:3d}% {progress_bar} {metrics.completed}/{metrics.total} current cells"
@@ -177,7 +173,7 @@ def _progress_text(snapshot: RunSnapshot, *, activity_frame: int = 0) -> str:
     return "\n".join([summary, run_state, remaining])
 
 
-def _coverage_text(snapshot: RunSnapshot) -> str:
+def coverage_text(snapshot: RunSnapshot) -> str:
     if not snapshot.coverage:
         return "Coverage\n-"
     lines = ["Coverage"]
@@ -191,7 +187,7 @@ def _coverage_text(snapshot: RunSnapshot) -> str:
     return "\n".join(lines)
 
 
-def _findings_text(snapshot: RunSnapshot) -> str:
+def findings_text(snapshot: RunSnapshot) -> str:
     if not snapshot.findings:
         return "Findings\n-"
     chips = [
@@ -206,7 +202,7 @@ def _task_text(snapshot: RunSnapshot) -> str:
     return f"Current task\n{prompt}\ncommand {argv}"
 
 
-def _agent_activity_text(agent_status: str, *, activity_frame: int = 0) -> str:
+def agent_activity_text(agent_status: str, *, activity_frame: int = 0) -> str:
     if agent_status == "running":
         return f"{_SPINNER_FRAMES[activity_frame % len(_SPINNER_FRAMES)]} running"
     return f"· {agent_status}"

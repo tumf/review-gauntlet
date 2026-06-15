@@ -8,13 +8,13 @@ import pytest
 
 from review_gauntlet.run_controller import RunController, RunSnapshot, SessionCommandResult
 from review_gauntlet.run_tui import (
-    _agent_activity_text,
-    _coverage_text,
-    _findings_text,
-    _progress_text,
+    agent_activity_text,
     calculate_progress_metrics,
+    coverage_text,
     create_run_app,
+    findings_text,
     format_elapsed_time,
+    progress_text,
     should_use_tui,
     textual_available,
 )
@@ -69,7 +69,7 @@ def test_progress_first_header_contains_dense_run_state() -> None:
         elapsed_seconds=125,
     )
 
-    text = _progress_text(snapshot, activity_frame=1)
+    text = progress_text(snapshot, activity_frame=1)
 
     assert "50%" in text
     assert "2/4 current cells" in text
@@ -91,8 +91,8 @@ def test_coverage_and_findings_render_high_density_summaries() -> None:
         elapsed_seconds=0,
     )
 
-    coverage = _coverage_text(snapshot)
-    findings = _findings_text(snapshot)
+    coverage = coverage_text(snapshot)
+    findings = findings_text(snapshot)
 
     assert "! pending" in coverage
     assert "! stale" in coverage
@@ -105,10 +105,10 @@ def test_coverage_and_findings_render_high_density_summaries() -> None:
 
 
 def test_running_activity_animates_only_for_running_status() -> None:
-    assert _agent_activity_text("running", activity_frame=0) != _agent_activity_text(
+    assert agent_activity_text("running", activity_frame=0) != agent_activity_text(
         "running", activity_frame=1
     )
-    assert _agent_activity_text("idle", activity_frame=0) == _agent_activity_text(
+    assert agent_activity_text("idle", activity_frame=0) == agent_activity_text(
         "idle", activity_frame=1
     )
 

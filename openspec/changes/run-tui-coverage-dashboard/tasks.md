@@ -19,6 +19,7 @@
 Archive validation itself is the authoritative final OpenSpec validation gate.
 Expected archive gate: `cflx openspec validate run-tui-coverage-dashboard --archive-gate`
 Project verification command: `make check`
+Latest apply verification: `make check` passed via agent-exec job `6014a7109ab6902d60b4128c3eb9b83c`.
 
 ## Future Work
 
