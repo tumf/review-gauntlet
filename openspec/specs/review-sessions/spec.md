@@ -159,131 +159,47 @@ Status and freshness computations SHALL use the same resolved repository root fo
 
 `review-gauntlet run` SHALL orchestrate an active session by repeatedly using the same continuation task prompt that `review-gauntlet ready` would emit. `run` SHALL NOT maintain independent task-selection priority logic. `run` SHALL invoke the configured command adapter as a session-level task runner with the ready prompt and then re-evaluate the active session. `run` SHALL NOT require the session-level agent invocation to emit OCR verdict JSON, and SHALL NOT use review-cell verdict parsing as the success criterion for a session-level task. `run` SHALL stop successfully when the active session has been finalized and the active-session marker is gone. `run` SHALL stop unsuccessfully when no ready task exists while a session remains active, when the configured command fails, when the configured maximum step count is reached while the session remains active, or when a user-requested stop after the current step leaves the session active. Interactive text executions of `review-gauntlet run` SHOULD use a Textual TUI by default when TUI support is installed, stdout is a TTY, `--format text` is selected, and `--no-tui` is not provided. `run --format json`, `run --no-tui`, and non-TTY executions SHALL NOT launch the TUI. TUI presentation SHALL NOT change task selection, command execution semantics, run result semantics, or session finalization semantics. TUI dependencies SHALL be optional; when TUI support is unavailable for an otherwise TUI-eligible run, the command SHALL warn and fall back to non-TUI text mode. When interrupted by the user, `run` SHALL NOT print a Python traceback. Instead, it SHALL return or emit a structured interrupted run result with `completed: false`, `reason: interrupted`, current step evidence when available, and the active session ID when available.
 
-#### Scenario: Run invokes the same prompt as ready
+Interactive `run` TUI presentation SHALL prioritize current-target progress over generic application chrome. Its first visible dashboard area SHALL show percent complete, completed current cells over total current cells, elapsed time, current step, and session-level agent status. The progress denominator SHALL exclude `superseded` coverage. The incomplete count SHALL include current-target `pending` and `stale` coverage. Current-target cells in other coverage states SHALL count as complete for presentation purposes only; this presentation calculation SHALL NOT mutate or redefine durable coverage state. The TUI SHALL display coverage composition with compact graphical bars or equivalent dense visual text and SHALL keep pending and stale states visibly emphasized. The TUI SHALL display actionable finding-state counts from the run status payload, including payloads where counts are exposed as `finding_state_counts` rather than `findings`. While the run controller reports the session-level agent status as `running`, the TUI SHALL show visible activity animation such as a spinner or pulse indicator. When the agent is not running, the activity indicator SHALL stop or dim. The TUI SHALL remove default Textual header and footer chrome that would otherwise show a generic app title such as `RunApp` or a default left-side icon. These presentation requirements SHALL NOT change task selection, command execution, result payloads, interruption behavior, or fallback behavior.
 
-**Given**: an active session with pending review cells
-**And**: the effective adapter config invokes a fake command that records its arguments
-**When**: the developer runs `review-gauntlet run --max-steps 1 --format json`
-**Then**: the fake command receives the same prompt text that `review-gauntlet ready` emits for that session state
-**And**: task selection comes from the ready prompt computation rather than from separate run-specific priority logic
+#### Scenario: Run TUI shows current-target progress first
 
-#### Scenario: Run completes after the agent finalizes the session
+**Given**: an active session with effective coverage containing reviewed, pending, stale, and superseded cells
+**And**: the `run` TUI is eligible for an interactive text execution
+**When**: the TUI renders the session snapshot
+**Then**: the first visible dashboard area shows the percent complete
+**And**: it shows completed current cells over total current cells
+**And**: it shows elapsed time, current step, and agent status
+**And**: superseded cells are not included in the progress denominator
 
-**Given**: an active session whose next ready task can finalize the session
-**And**: the configured command performs the required finalization so `.review-gauntlet/active-session.json` is removed
-**When**: the developer runs `review-gauntlet run --format json`
-**Then**: the command exits `0`
-**And**: stdout contains structured output indicating the run completed
-**And**: the active session marker no longer exists
+#### Scenario: Run TUI visualizes remaining work without hiding unknowns
 
-#### Scenario: Run fails when no ready task exists
+**Given**: an active session with pending and stale effective coverage
+**When**: the `run` TUI renders the coverage breakdown
+**Then**: pending and stale counts are visually emphasized
+**And**: coverage composition is represented with compact graphical bars or equivalent dense visual text
+**And**: the TUI does not replace unknown or incomplete states with optimistic completion claims
 
-**Given**: an active session for which `review-gauntlet ready` would emit no ready task and exit `1`
-**When**: the developer runs `review-gauntlet run --format json`
-**Then**: the command exits `1`
-**And**: stdout contains structured output identifying that no ready task is available
-**And**: no agent command is invoked
+#### Scenario: Run TUI displays finding counts from status payloads
 
-#### Scenario: Run fails when the configured command fails
+**Given**: a run status snapshot whose finding counts are exposed as `finding_state_counts`
+**When**: the `run` TUI renders finding-state details
+**Then**: actionable finding counts are shown in the TUI
+**And**: the TUI does not require a separate legacy `findings` key to display those counts
 
-**Given**: an active session with a ready task
-**And**: the effective adapter config invokes a command that exits non-zero or cannot be started
-**When**: the developer runs `review-gauntlet run --format json`
-**Then**: the command exits `1`
-**And**: stdout contains structured failure information
-**And**: the active session remains available for later recovery
+#### Scenario: Run TUI activity indicator follows agent status
 
-#### Scenario: Run enforces max steps
+**Given**: the run controller reports `agent_status` as `running`
+**When**: the TUI refreshes while the session-level command is executing
+**Then**: the visible status area includes an animated spinner or pulse indicator
+**And**: when the run controller reports a non-running status, the running animation stops or becomes dim
 
-**Given**: an active session with a ready task
-**And**: the configured command exits `0` without finalizing or otherwise removing the active session
-**When**: the developer runs `review-gauntlet run --max-steps 1 --format json`
-**Then**: the command exits `1`
-**And**: stdout indicates the maximum step count was reached
-**And**: the active session remains available for continuation
+#### Scenario: Run TUI omits generic Textual chrome
 
-#### Scenario: Run does not parse session-level output as OCR verdict JSON
-
-**Given**: an active session with a ready task
-**And**: the configured command exits `0` while writing non-JSON progress text to stdout or stderr
-**When**: the developer runs `review-gauntlet run --max-steps 1 --format json`
-**Then**: the command does not fail solely because the session-level command output is not OCR verdict JSON
-**And**: success or failure is determined by process exit status, max-step state, and active-session completion state
-
-#### Scenario: Run launches TUI only for eligible interactive text executions
-
-**Given**: an active session with a ready task
-**And**: TUI support is installed
-**And**: stdout is a TTY
-**When**: the developer runs `review-gauntlet run`
-**Then**: the command launches the Textual TUI presentation
-**And**: the TUI uses the same run controller semantics as non-TUI run
-**And**: TUI presentation changes only how state is displayed
-
-#### Scenario: Run disables TUI for JSON output
-
-**Given**: an active session with a ready task
-**When**: the developer runs `review-gauntlet run --format json`
-**Then**: no TUI is launched
-**And**: stdout contains parseable JSON using the existing run result contract
-
-#### Scenario: Run disables TUI when explicitly requested
-
-**Given**: an active session with a ready task
-**When**: the developer runs `review-gauntlet run --no-tui`
-**Then**: no TUI is launched
-**And**: text output uses the non-TUI run presentation
-
-#### Scenario: Run disables TUI for non-TTY output
-
-**Given**: an active session with a ready task
-**And**: stdout is not a TTY
-**When**: the developer runs `review-gauntlet run`
-**Then**: no TUI is launched
-**And**: output remains suitable for redirected logs or shell pipelines
-
-#### Scenario: Run falls back when TUI dependency is missing
-
-**Given**: TUI support is not installed
-**And**: stdout is a TTY
-**When**: the developer runs `review-gauntlet run`
-**Then**: the command does not fail solely because Textual is missing
-**And**: it emits a warning explaining how to install `review-gauntlet[tui]`
-**And**: it continues with non-TUI text mode
-
-#### Scenario: TUI stop request stops after current step
-
-**Given**: the TUI run is executing a session-level agent step
-**When**: the developer requests stop after current step
-**Then**: the currently running step is allowed to finish
-**And**: no additional ready prompt execution is started
-**And**: the run exits unsuccessfully if the active session remains available for continuation
-
-#### Scenario: TUI refresh does not mutate session state
-
-**Given**: the TUI is displaying an active session
-**When**: the developer requests refresh
-**Then**: the TUI refreshes its display from durable session state through the run controller
-**And**: no finding, review cell, or session state is mutated by the TUI itself
-
-#### Scenario: Run handles user interrupt without traceback
-
-**Given**: an active session with a ready task
-**And**: the session-level command is running or about to run
-**When**: the developer interrupts `review-gauntlet run` with Ctrl-C
-**Then**: the command does not print a Python traceback
-**And**: the run exits non-zero
-**And**: the active session remains available for later continuation when it was not finalized
-
-#### Scenario: Run emits structured JSON for user interrupt
-
-**Given**: an active session with a ready task
-**And**: the session-level command is interrupted by the user
-**When**: the developer runs `review-gauntlet run --format json`
-**Then**: stdout contains parseable JSON
-**And**: the JSON result has `completed` equal to `false`
-**And**: the JSON result has `reason` equal to `interrupted`
-**And**: no traceback text is written as the user-facing result
+**Given**: an interactive TUI-eligible `review-gauntlet run`
+**When**: the TUI is rendered
+**Then**: the default Textual header title such as `RunApp` is not shown
+**And**: the default header icon is not shown
+**And**: keyboard controls remain available through a compact in-dashboard hint or equivalent non-header/footer presentation
 
 ### Requirement: Finalize SHALL validate completion without running review work
 
