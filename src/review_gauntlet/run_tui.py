@@ -164,8 +164,7 @@ def _progress_text(snapshot: RunSnapshot, *, activity_frame: int = 0) -> str:
     activity = _agent_activity_text(snapshot.agent_status, activity_frame=activity_frame)
     progress_bar = _progress_bar(metrics.completed, metrics.total)
     summary = (
-        f"{metrics.percent:3d}% {progress_bar} "
-        f"{metrics.completed}/{metrics.total} current cells"
+        f"{metrics.percent:3d}% {progress_bar} {metrics.completed}/{metrics.total} current cells"
     )
     run_state = (
         f"elapsed {format_elapsed_time(snapshot.elapsed_seconds)} | "
