@@ -930,6 +930,9 @@ def _cmd_review(args: argparse.Namespace, root: Path, store: SessionStore) -> No
             )
             seen_fingerprints.add(finding.fingerprint)
             finding_ids.append(store.upsert_finding(session_id, run_id, selected.id, finding))
+        store.refresh_file_digest(
+            session_id, selected.file_path, selected.content_digest, stale_to_pending=True
+        )
         store.mark_cell_reviewed(session_id, selected)
         reviewed += 1
     store.verify_fixed_findings(session_id, seen_fingerprints, evaluated_paths)
@@ -1048,6 +1051,9 @@ def _cmd_verify_fixes(args: argparse.Namespace, root: Path, store: SessionStore)
             )
             seen_fingerprints.add(finding.fingerprint)
             finding_ids.append(store.upsert_finding(session_id, run_id, selected.id, finding))
+        store.refresh_file_digest(
+            session_id, selected.file_path, selected.content_digest, stale_to_pending=True
+        )
         store.mark_cell_reviewed(session_id, selected)
         reviewed += 1
 

@@ -5,7 +5,9 @@ from pathlib import Path
 import pytest
 
 from review_gauntlet.cli import main
+from review_gauntlet.review_cells import CellState
 from review_gauntlet.session_store import SessionStore
+from review_gauntlet.targets import file_digests
 
 
 def _empty_fixture(tmp_path: Path) -> Path:
@@ -29,6 +31,10 @@ def _first_cell_id_for_path(tmp_path: Path, path: str) -> str:
     raise AssertionError(f"missing review cell for {path}")
 
 
+def _cell_rows_for_path(tmp_path: Path, path: str) -> list[dict[str, object]]:
+    return [dict(row) for row in SessionStore(tmp_path).list_cells() if row["file_path"] == path]
+
+
 def _reviewed_cell_ids(tmp_path: Path) -> set[str]:
     return {
         str(row["cell_id"])
@@ -47,6 +53,130 @@ def _cell_states_by_path(tmp_path: Path) -> dict[str, set[str]]:
 def _finding_id(tmp_path: Path) -> str:
     with sqlite3.connect(tmp_path / ".review-gauntlet" / "ledger.sqlite") as conn:
         return str(conn.execute("select finding_id from findings").fetchone()[0])
+
+
+def test_session_store_refresh_file_digest_preserves_sibling_state(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "app.py").write_text("print('hello')\n", encoding="utf-8")
+    main(["init", str(tmp_path), "--worktree", "--format", "json"])
+    capsys.readouterr()
+    store = SessionStore(tmp_path)
+    rows = _cell_rows_for_path(tmp_path, "app.py")
+    assert len(rows) > 1
+    reviewed_cell = str(rows[0]["cell_id"])
+    stale_cell = str(rows[1]["cell_id"])
+    store.update_cell_state(store.active_session_id(), reviewed_cell, CellState.REVIEWED)
+    store.update_cell_state(store.active_session_id(), stale_cell, CellState.STALE)
+
+    store.refresh_file_digest(store.active_session_id(), "app.py", "new-digest")
+
+    refreshed = _cell_rows_for_path(tmp_path, "app.py")
+    states_by_id = {str(row["cell_id"]): str(row["state"]) for row in refreshed}
+    assert {str(row["content_digest"]) for row in refreshed} == {"new-digest"}
+    assert states_by_id[reviewed_cell] == "reviewed"
+    assert states_by_id[stale_cell] == "stale"
+    with pytest.raises(LookupError):
+        store.refresh_file_digest(store.active_session_id(), "missing.py", "digest")
+    with pytest.raises(LookupError):
+        store.refresh_file_digest("missing-session", "app.py", "digest")
+
+
+def test_review_refreshes_targeted_file_siblings_without_staling_them(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "app.py").write_text("print('hello')\n", encoding="utf-8")
+    main(["init", str(tmp_path), "--worktree", "--format", "json"])
+    capsys.readouterr()
+    before_rows = _cell_rows_for_path(tmp_path, "app.py")
+    assert len(before_rows) > 1
+    fixture = _empty_fixture(tmp_path)
+    main(["review", str(tmp_path), "--fixture", str(fixture), "--budget", "50", "--format", "json"])
+    capsys.readouterr()
+    reviewed_before_rows = _cell_rows_for_path(tmp_path, "app.py")
+    before_digest = str(reviewed_before_rows[0]["content_digest"])
+
+    (tmp_path / "app.py").write_text("print('changed')\n", encoding="utf-8")
+    main(["review", str(tmp_path), "--budget", "0", "--format", "json"])
+    capsys.readouterr()
+    main(["review", str(tmp_path), "--fixture", str(fixture), "--budget", "1", "--format", "json"])
+
+    data = json.loads(capsys.readouterr().out)
+    after_rows = _cell_rows_for_path(tmp_path, "app.py")
+    assert data["reviewed_cells"] == 1
+    current_digest = file_digests(tmp_path)["app.py"]
+    assert {str(row["content_digest"]) for row in after_rows} == {current_digest}
+    assert current_digest != before_digest
+    assert {str(row["state"]) for row in after_rows} == {"pending", "reviewed"}
+    assert data["coverage"].get("stale", 0) == 0
+
+
+def test_incidental_changed_file_stales_while_target_file_siblings_do_not(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "app.py").write_text("print('hello')\n", encoding="utf-8")
+    (tmp_path / "other.py").write_text("print('other')\n", encoding="utf-8")
+    main(["init", str(tmp_path), "--worktree", "--format", "json"])
+    capsys.readouterr()
+    app_cell = _first_cell_id_for_path(tmp_path, "app.py")
+    issue_fixture = tmp_path / "issue-fixture.json"
+    issue_fixture.write_text(
+        json.dumps(
+            {
+                app_cell: [
+                    {
+                        "path": "app.py",
+                        "content": "Code issue",
+                        "existing_code": "print('hello')",
+                        "start_line": 1,
+                        "end_line": 1,
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    main(
+        [
+            "review",
+            str(tmp_path),
+            "--fixture",
+            str(issue_fixture),
+            "--budget",
+            "50",
+            "--format",
+            "json",
+        ]
+    )
+    capsys.readouterr()
+    finding_id = _finding_id(tmp_path)
+    main(["mark", str(tmp_path), finding_id, "fixed", "--format", "json"])
+    capsys.readouterr()
+    fixture = _empty_fixture(tmp_path)
+
+    (tmp_path / "app.py").write_text("print('target changed')\n", encoding="utf-8")
+    (tmp_path / "other.py").write_text("print('incidental changed')\n", encoding="utf-8")
+    main(["review", str(tmp_path), "--budget", "0", "--format", "json"])
+    capsys.readouterr()
+    main(
+        [
+            "verify-fixes",
+            str(tmp_path),
+            "--fixture",
+            str(fixture),
+            "--finding",
+            finding_id,
+            "--format",
+            "json",
+        ]
+    )
+
+    data = json.loads(capsys.readouterr().out)
+    states_by_path = _cell_states_by_path(tmp_path)
+    assert states_by_path["app.py"] == {"reviewed"}
+    assert states_by_path["other.py"] == {"stale"}
+    assert data["coverage"].get("stale", 0) > 0
+    assert "review cells are stale after target changes" in data["finalize_blockers"]
 
 
 def test_reconcile_adds_new_pending_cells_for_changed_universe(
