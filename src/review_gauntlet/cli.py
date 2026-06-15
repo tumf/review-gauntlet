@@ -311,6 +311,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     validate_verdict = subparsers.add_parser("validate-verdict")
     validate_verdict.add_argument("path", type=Path)
+    validate_verdict.add_argument("--expected-path")
     _output_format_arg(validate_verdict)
 
     completion = subparsers.add_parser("completion")
@@ -335,7 +336,10 @@ def _concurrency_arg(parser: argparse.ArgumentParser) -> None:
 
 
 def _positive_int(value: str) -> int:
-    parsed = int(value)
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be an integer") from exc
     if parsed < 1:
         raise argparse.ArgumentTypeError("must be a positive integer")
     return parsed
@@ -644,6 +648,16 @@ def _cmd_validate_verdict(args: argparse.Namespace) -> None:
         fail(f"verdict file exceeds size limit: {path}")
     try:
         payload = validate_verdict_json(path.read_text(encoding="utf-8"))
+        expected_path = args.expected_path
+        if expected_path is not None:
+            mismatched_paths = sorted(
+                {comment.path for comment in payload.comments if comment.path != expected_path}
+            )
+            if mismatched_paths:
+                raise ValueError(
+                    "comment paths must match expected path "
+                    f"{expected_path}: {', '.join(mismatched_paths)}"
+                )
     except (ValueError, ValidationError) as exc:
         result: dict[str, object] = {"valid": False, "error": str(exc), "path": str(path)}
         _emit(result, args.format)

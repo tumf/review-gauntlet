@@ -123,6 +123,33 @@ def test_validate_verdict_rejects_extra_comment_keys(
     assert "Extra inputs are not permitted" in data["error"]
 
 
+def test_validate_verdict_rejects_unexpected_comment_paths(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    verdict = tmp_path / "verdict.json"
+    verdict.write_text(
+        json.dumps({"comments": [{"path": "other.py", "content": "x"}]}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(SystemExit) as excinfo:
+        main(
+            [
+                "validate-verdict",
+                str(verdict),
+                "--expected-path",
+                "app.py",
+                "--format",
+                "json",
+            ]
+        )
+
+    data = json.loads(capsys.readouterr().out)
+    assert excinfo.value.code == 1
+    assert data["valid"] is False
+    assert "comment paths must match expected path app.py: other.py" in data["error"]
+
+
 def test_cli_config_preset_list_outputs_text(capsys: pytest.CaptureFixture[str]) -> None:
     main(["config", "preset", "list"])
 
@@ -582,6 +609,18 @@ def test_cli_run_no_tui_accepts_flag(
 
     data = json.loads(capsys.readouterr().out)
     assert data["completed"] is True
+
+
+def test_cli_run_rejects_non_integer_max_steps_without_traceback(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        main(["run", str(tmp_path), "--max-steps", "abc"])
+
+    captured = capsys.readouterr()
+    assert exc_info.value.code == 64
+    assert "must be an integer" in captured.err
+    assert "Traceback" not in captured.err
 
 
 def test_cli_run_json_keyboard_interrupt_emits_parseable_json_without_traceback(

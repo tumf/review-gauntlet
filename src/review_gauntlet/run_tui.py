@@ -197,22 +197,51 @@ def findings_text(snapshot: RunSnapshot) -> str:
 
 
 def _task_text(snapshot: RunSnapshot) -> str:
-    prompt = snapshot.next_ready_prompt or "No ready task"
-    argv = " ".join(snapshot.command_argv) if snapshot.command_argv else "n/a"
+    prompt = _plain_text(snapshot.next_ready_prompt or "No ready task")
+    argv = (
+        " ".join(_plain_text(argument) for argument in snapshot.command_argv)
+        if snapshot.command_argv
+        else "n/a"
+    )
     return f"Current task\n{prompt}\ncommand {argv}"
 
 
 def agent_activity_text(agent_status: str, *, activity_frame: int = 0) -> str:
     if agent_status == "running":
         return f"{_SPINNER_FRAMES[activity_frame % len(_SPINNER_FRAMES)]} running"
-    return f"· {agent_status}"
+    return f"· {_plain_text(agent_status)}"
+
+
+def _plain_text(value: object) -> str:
+    return "".join(_plain_character(character) for character in str(value)).replace("[", r"\[")
+
+
+def _plain_character(character: str) -> str:
+    if character in {"\n", "\t"} or (ord(character) >= 32 and ord(character) != 127):
+        return character
+    return "�"
+
+
+def _agent_text(snapshot: RunSnapshot) -> str:
+    argv = (
+        " ".join(_plain_text(argument) for argument in snapshot.command_argv)
+        if snapshot.command_argv
+        else "n/a"
+    )
+    return (
+        "Agent\n"
+        f"status={_plain_text(snapshot.agent_status)} step={snapshot.step} "
+        f"elapsed={snapshot.elapsed_seconds:.1f}s\nargv={argv}"
+    )
 
 
 def _events_text(events: tuple[RunEvent, ...]) -> str:
     lines = ["Events"]
     for event in events[-12:]:
-        payload = " ".join(f"{key}={value}" for key, value in event.payload.items())
-        lines.append(f"{event.timestamp} {event.type} {payload}".rstrip())
+        payload = " ".join(
+            f"{_plain_text(key)}={_plain_text(value)}" for key, value in event.payload.items()
+        )
+        lines.append(f"{_plain_text(event.timestamp)} {_plain_text(event.type)} {payload}".rstrip())
     return "\n".join(lines)
 
 
@@ -239,3 +268,11 @@ def _count_value(value: object) -> int:
     if isinstance(value, float):
         return max(0, int(value))
     return 0
+
+
+def _counts_text(counts: dict[str, object]) -> str:
+    if not counts:
+        return "-"
+    return "\n".join(
+        f"{_plain_text(key)}: {_plain_text(value)}" for key, value in sorted(counts.items())
+    )

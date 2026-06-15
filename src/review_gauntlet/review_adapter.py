@@ -178,7 +178,8 @@ def _prompt_output_instructions(context: PromptContext) -> list[str]:
             "Write the final verdict JSON to this file:",
             context.verdict_output_file,
             "Before finishing, validate the file with:",
-            f"review-gauntlet validate-verdict {context.verdict_output_file}",
+            f"review-gauntlet validate-verdict {context.verdict_output_file} "
+            f"--expected-path {context.cell.file_path}",
             "If validation fails, fix the JSON file and run the validator again.",
             "Stdout and stderr are audit/progress channels only; they are preserved but not "
             "parsed as verdict input.",
