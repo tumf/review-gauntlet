@@ -116,9 +116,12 @@ class RunController:
         self._command_label: str | None = None
         self._agent_lifecycle = AgentLifecycle()
         self._agent_step_started_at: datetime | None = None
-        self._agent_timeout_seconds: int | None = None
+        self._agent_timeout_seconds: float | None = None
         self._last_result: dict[str, object] | None = None
         self._started_at = datetime.now(UTC)
+
+    def set_agent_step_started_at_for_testing(self, started_at: datetime) -> None:
+        self._agent_step_started_at = started_at
 
     @property
     def events(self) -> tuple[RunEvent, ...]:

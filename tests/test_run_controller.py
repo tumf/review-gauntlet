@@ -143,7 +143,7 @@ def test_run_controller_synthesizes_quiet_liveness_and_timeout_remaining(
     def command(
         _config: CommandAdapterConfig, _root: Path, _state_dir: Path, _prompt: str
     ) -> SessionCommandResult:
-        controller._agent_step_started_at = datetime.now(UTC) - timedelta(seconds=6)
+        controller.set_agent_step_started_at_for_testing(datetime.now(UTC) - timedelta(seconds=6))
         snapshot = controller.snapshot()
         snapshots.append(
             (
