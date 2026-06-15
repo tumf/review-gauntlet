@@ -725,7 +725,7 @@ def sanitize_agent_output_line(value: object, *, limit: int = 120) -> str:
     text = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", str(value))
     text = text.replace("\r", "\n")
     text = " ".join(_plain_text(text).split())
-    text = re.sub(r"\b[A-Z0-9_]*(?:TOKEN|SECRET|KEY)=\S+", "<redacted>", text)
+    text = re.sub(r"\b[A-Z0-9_]*(?:TOKEN|SECRET|KEY)=\S+", "<redacted>", text, flags=re.IGNORECASE)
     return _summarize_text(text, limit=limit)
 
 

@@ -580,6 +580,8 @@ def test_agent_session_summary_and_activity_rows_are_human_facing_and_sanitized(
     assert "stderr - warn <redacted>" in activity
     assert "supersecret" not in activity
     assert "SECRET=value" not in activity
+    assert run_tui.sanitize_agent_output_line("api_key=supersecret") == "<redacted>"
+    assert run_tui.sanitize_agent_output_line("ClientSecret=supersecret") == "<redacted>"
 
 
 def test_footer_lists_only_implemented_controls() -> None:
