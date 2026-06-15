@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import importlib.util
+from dataclasses import dataclass
 
 from review_gauntlet.run_controller import RunController, RunEvent, RunSnapshot
 
@@ -24,16 +25,18 @@ def create_run_app(controller: RunController) -> object:
     try:
         from textual.app import App, ComposeResult
         from textual.containers import Horizontal, Vertical
-        from textual.widgets import Footer, Header, Static
+        from textual.widgets import Static
     except ImportError as exc:
         raise RuntimeError(TUI_FALLBACK_WARNING) from exc
 
     class RunApp(App[dict[str, object]]):
         CSS = """
         Screen { layout: vertical; }
-        #body { height: 1fr; }
+        #body { height: 1fr; padding: 1; }
+        #progress_panel { border: heavy $accent; padding: 1; height: auto; }
         .panel { border: round $accent; padding: 1; height: auto; }
         #events { height: 1fr; }
+        #controls { color: $text-muted; height: auto; }
         """
         BINDINGS = [
             ("q", "stop_after_current_step", "Stop after current step"),
@@ -46,11 +49,14 @@ def create_run_app(controller: RunController) -> object:
             super().__init__()
             self.controller = run_controller
             self.snapshot = run_controller.snapshot()
+            self._activity_frame = 0
 
         def compose(self) -> ComposeResult:
-            yield Header(show_clock=True)
             with Vertical(id="body"):
-                yield Static(_header_text(self.snapshot), id="header_panel", classes="panel")
+                yield Static(
+                    _progress_text(self.snapshot, activity_frame=self._activity_frame),
+                    id="progress_panel",
+                )
                 with Horizontal():
                     yield Static(
                         _coverage_text(self.snapshot), id="coverage_panel", classes="panel"
@@ -59,10 +65,11 @@ def create_run_app(controller: RunController) -> object:
                         _findings_text(self.snapshot), id="findings_panel", classes="panel"
                     )
                 yield Static(_task_text(self.snapshot), id="task_panel", classes="panel")
-                yield Static(_agent_text(self.snapshot), id="agent_panel", classes="panel")
                 yield Static(_events_text(self.controller.events), id="events", classes="panel")
-                yield Static("q stop after current step | r refresh | h help | Ctrl-C interrupt")
-            yield Footer()
+                yield Static(
+                    "q stop after current step | r refresh | h help | Ctrl-C interrupt",
+                    id="controls",
+                )
 
         def on_mount(self) -> None:
             self.refresh_view()
@@ -90,40 +97,120 @@ def create_run_app(controller: RunController) -> object:
 
         def refresh_view(self) -> None:
             self.snapshot = self.controller.snapshot()
-            self.query_one("#header_panel", Static).update(_header_text(self.snapshot))
+            if self.snapshot.agent_status == "running":
+                self._activity_frame += 1
+            self.query_one("#progress_panel", Static).update(
+                _progress_text(self.snapshot, activity_frame=self._activity_frame)
+            )
             self.query_one("#coverage_panel", Static).update(_coverage_text(self.snapshot))
             self.query_one("#findings_panel", Static).update(_findings_text(self.snapshot))
             self.query_one("#task_panel", Static).update(_task_text(self.snapshot))
-            self.query_one("#agent_panel", Static).update(_agent_text(self.snapshot))
             self.query_one("#events", Static).update(_events_text(self.controller.events))
 
     return RunApp(controller)
 
 
-def _header_text(snapshot: RunSnapshot) -> str:
-    return f"Review Gauntlet Run\nSession: {snapshot.session_id or 'none'}"
+INCOMPLETE_COVERAGE_STATES = frozenset({"pending", "stale"})
+EXCLUDED_COVERAGE_STATES = frozenset({"superseded"})
+_SPINNER_FRAMES = ("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
+_BAR_WIDTH = 24
+
+
+@dataclass(frozen=True)
+class ProgressMetrics:
+    completed: int
+    total: int
+    percent: int
+    superseded: int
+    incomplete: int
+
+
+def calculate_progress_metrics(coverage: dict[str, object]) -> ProgressMetrics:
+    total = 0
+    completed = 0
+    superseded = 0
+    incomplete = 0
+    for state, raw_count in coverage.items():
+        count = _count_value(raw_count)
+        if state in EXCLUDED_COVERAGE_STATES:
+            superseded += count
+            continue
+        total += count
+        if state in INCOMPLETE_COVERAGE_STATES:
+            incomplete += count
+        else:
+            completed += count
+    percent = round((completed / total) * 100) if total else 0
+    return ProgressMetrics(
+        completed=completed,
+        total=total,
+        percent=percent,
+        superseded=superseded,
+        incomplete=incomplete,
+    )
+
+
+def format_elapsed_time(seconds: float) -> str:
+    total_seconds = max(0, int(seconds))
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    if hours:
+        return f"{hours:d}:{minutes:02d}:{seconds:02d}"
+    return f"{minutes:02d}:{seconds:02d}"
+
+
+def _progress_text(snapshot: RunSnapshot, *, activity_frame: int = 0) -> str:
+    metrics = calculate_progress_metrics(snapshot.coverage)
+    activity = _agent_activity_text(snapshot.agent_status, activity_frame=activity_frame)
+    progress_bar = _progress_bar(metrics.completed, metrics.total)
+    summary = (
+        f"{metrics.percent:3d}% {progress_bar} "
+        f"{metrics.completed}/{metrics.total} current cells"
+    )
+    run_state = (
+        f"elapsed {format_elapsed_time(snapshot.elapsed_seconds)} | "
+        f"step {snapshot.step} | agent {activity}"
+    )
+    remaining = (
+        f"session {snapshot.session_id or 'none'} | remaining {metrics.incomplete} | "
+        f"superseded {metrics.superseded}"
+    )
+    return "\n".join([summary, run_state, remaining])
 
 
 def _coverage_text(snapshot: RunSnapshot) -> str:
-    return "Coverage\n" + _counts_text(snapshot.coverage)
+    if not snapshot.coverage:
+        return "Coverage\n-"
+    lines = ["Coverage"]
+    for state, raw_count in sorted(snapshot.coverage.items()):
+        count = _count_value(raw_count)
+        marker = "!" if state in INCOMPLETE_COVERAGE_STATES else " "
+        suffix = " remaining" if state in INCOMPLETE_COVERAGE_STATES else ""
+        if state in EXCLUDED_COVERAGE_STATES:
+            suffix = " excluded"
+        lines.append(f"{marker} {state:<12} {_state_bar(count, snapshot.coverage)} {count}{suffix}")
+    return "\n".join(lines)
 
 
 def _findings_text(snapshot: RunSnapshot) -> str:
-    return "Findings\n" + _counts_text(snapshot.findings)
+    if not snapshot.findings:
+        return "Findings\n-"
+    chips = [
+        f"[{state}:{_count_value(count)}]" for state, count in sorted(snapshot.findings.items())
+    ]
+    return "Findings\n" + " ".join(chips)
 
 
 def _task_text(snapshot: RunSnapshot) -> str:
     prompt = snapshot.next_ready_prompt or "No ready task"
-    return f"Current task\n{prompt}"
-
-
-def _agent_text(snapshot: RunSnapshot) -> str:
     argv = " ".join(snapshot.command_argv) if snapshot.command_argv else "n/a"
-    return (
-        "Agent\n"
-        f"status={snapshot.agent_status} step={snapshot.step} "
-        f"elapsed={snapshot.elapsed_seconds:.1f}s\nargv={argv}"
-    )
+    return f"Current task\n{prompt}\ncommand {argv}"
+
+
+def _agent_activity_text(agent_status: str, *, activity_frame: int = 0) -> str:
+    if agent_status == "running":
+        return f"{_SPINNER_FRAMES[activity_frame % len(_SPINNER_FRAMES)]} running"
+    return f"· {agent_status}"
 
 
 def _events_text(events: tuple[RunEvent, ...]) -> str:
@@ -134,7 +221,26 @@ def _events_text(events: tuple[RunEvent, ...]) -> str:
     return "\n".join(lines)
 
 
-def _counts_text(counts: dict[str, object]) -> str:
-    if not counts:
-        return "-"
-    return "\n".join(f"{key}: {value}" for key, value in sorted(counts.items()))
+def _progress_bar(completed: int, total: int) -> str:
+    if total <= 0:
+        return "[" + "·" * _BAR_WIDTH + "]"
+    filled = round((completed / total) * _BAR_WIDTH)
+    return "[" + "█" * filled + "░" * (_BAR_WIDTH - filled) + "]"
+
+
+def _state_bar(count: int, all_counts: dict[str, object]) -> str:
+    total = sum(_count_value(value) for value in all_counts.values())
+    if total <= 0:
+        return "·" * 6
+    width = max(1, round((count / total) * 6)) if count else 0
+    return "■" * width + "·" * (6 - width)
+
+
+def _count_value(value: object) -> int:
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return max(0, value)
+    if isinstance(value, float):
+        return max(0, int(value))
+    return 0

@@ -251,3 +251,48 @@ def test_run_controller_refresh_snapshot_exposes_status(tmp_path: Path) -> None:
     assert snapshot.coverage == {"pending": 1}
     assert snapshot.findings == {"untriaged": 0}
     assert snapshot.next_ready_prompt == "ready prompt"
+
+
+def test_run_controller_snapshot_uses_finding_state_counts_fallback(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    controller = RunController(
+        root=tmp_path,
+        store=store,
+        config_path=None,
+        max_steps=1,
+        ready_prompt=lambda _store, _root: "ready prompt",
+        status_snapshot=lambda _store, _root: {
+            "coverage": {"pending": 1},
+            "finding_state_counts": {"untriaged": 2},
+        },
+        command_runner=lambda _config, _root, _state_dir, _prompt: SessionCommandResult(
+            argv=[], cwd=None, returncode=0, stdout="", stderr=""
+        ),
+    )
+
+    snapshot = controller.snapshot()
+
+    assert snapshot.findings == {"untriaged": 2}
+
+
+def test_run_controller_snapshot_prefers_legacy_findings_when_present(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    controller = RunController(
+        root=tmp_path,
+        store=store,
+        config_path=None,
+        max_steps=1,
+        ready_prompt=lambda _store, _root: "ready prompt",
+        status_snapshot=lambda _store, _root: {
+            "coverage": {"pending": 1},
+            "findings": {"legacy": 1},
+            "finding_state_counts": {"untriaged": 2},
+        },
+        command_runner=lambda _config, _root, _state_dir, _prompt: SessionCommandResult(
+            argv=[], cwd=None, returncode=0, stdout="", stderr=""
+        ),
+    )
+
+    snapshot = controller.snapshot()
+
+    assert snapshot.findings == {"legacy": 1}
