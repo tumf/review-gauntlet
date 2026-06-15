@@ -41,14 +41,14 @@ def test_should_use_tui_selection_rules() -> None:
     assert should_use_tui(output_format="text", no_tui=False, stdout_is_tty=False) is False
 
 
-def test_progress_metrics_exclude_superseded_and_treat_pending_stale_as_incomplete() -> None:
+def test_progress_metrics_exclude_superseded_and_only_count_known_completed_states() -> None:
     metrics = calculate_progress_metrics(
         {"reviewed": 3, "pending": 2, "stale": 1, "failed": 1, "superseded": 99}
     )
 
-    assert metrics.completed == 4
+    assert metrics.completed == 3
     assert metrics.total == 7
-    assert metrics.percent == 57
+    assert metrics.percent == 43
     assert metrics.incomplete == 3
     assert metrics.pending == 2
     assert metrics.stale == 1
@@ -63,6 +63,22 @@ def test_progress_metrics_handle_zero_cell_sessions() -> None:
     assert metrics.percent == 0
     assert metrics.incomplete == 0
     assert metrics.superseded == 2
+
+
+def test_progress_metrics_ignore_boolean_counts() -> None:
+    metrics = calculate_progress_metrics({"reviewed": True, "pending": True, "stale": False})
+
+    assert metrics.completed == 0
+    assert metrics.total == 0
+    assert metrics.percent == 0
+    assert metrics.incomplete == 0
+
+
+def test_progress_metrics_never_exceed_total() -> None:
+    metrics = calculate_progress_metrics({"reviewed": 5})
+
+    assert metrics.completed == metrics.total
+    assert metrics.percent == 100
 
 
 def test_elapsed_time_formatting() -> None:
@@ -272,6 +288,19 @@ def test_event_time_and_session_shortening_helpers() -> None:
     assert format_event_time("not a date") == "--:--:--"
     assert short_session_id("RGS-1234567890") == "RGS-1234…7890"
     assert short_session_id(None) == "none"
+
+
+def test_plain_text_collapses_control_whitespace() -> None:
+    plain_text = cast(Callable[[object], str], run_tui.__dict__["_plain_text"])
+
+    assert plain_text("ok\nnext\rprev\ttab") == r"ok next prev tab"
+
+
+def test_progress_bar_clamps_filled_width() -> None:
+    progress_bar = cast(Callable[[int, int], str], run_tui.__dict__["_progress_bar"])
+
+    assert progress_bar(20, 10) == "[" + "█" * 24 + "]"
+    assert progress_bar(-1, 10) == "[" + "░" * 24 + "]"
 
 
 def test_compact_dashboard_text_keeps_required_sections() -> None:

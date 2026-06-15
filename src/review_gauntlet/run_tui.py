@@ -26,6 +26,7 @@ def create_run_app(controller: RunController) -> object:
     try:
         from textual.app import App, ComposeResult
         from textual.containers import Horizontal, Vertical
+        from textual.css.query import NoMatches
         from textual.widgets import Static
     except ImportError as exc:
         raise RuntimeError(TUI_FALLBACK_WARNING) from exc
@@ -105,16 +106,32 @@ def create_run_app(controller: RunController) -> object:
             view = dashboard_state(
                 self.snapshot, self.controller.events, activity_frame=self._activity_frame
             )
-            self.query_one("#session_header", Static).update(header_text(view))
-            self.query_one("#session_header", Static).set_class(True, view.state_class)
-            self.query_one("#coverage_panel", Static).update(coverage_text(self.snapshot))
-            self.query_one("#findings_panel", Static).update(findings_text(self.snapshot))
-            self.query_one("#task_panel", Static).update(current_operation_text(view))
-            self.query_one("#activity_timeline", Static).update(activity_text(view))
+            try:
+                session_header = self.query_one("#session_header", Static)
+                coverage_panel = self.query_one("#coverage_panel", Static)
+                findings_panel = self.query_one("#findings_panel", Static)
+                task_panel = self.query_one("#task_panel", Static)
+                activity_timeline = self.query_one("#activity_timeline", Static)
+            except NoMatches:
+                return
+            session_header.update(header_text(view))
+            for state_class in (
+                "panel",
+                "panel-active",
+                "panel-blocked",
+                "panel-failed",
+                "panel-finalized",
+            ):
+                session_header.set_class(state_class == view.state_class, state_class)
+            coverage_panel.update(coverage_text(self.snapshot))
+            findings_panel.update(findings_text(self.snapshot))
+            task_panel.update(current_operation_text(view))
+            activity_timeline.update(activity_text(view))
 
     return RunApp(controller)
 
 
+COMPLETED_COVERAGE_STATES = frozenset({"covered", "reviewed", "done"})
 INCOMPLETE_COVERAGE_STATES = frozenset({"pending", "stale"})
 EXCLUDED_COVERAGE_STATES = frozenset({"superseded"})
 FINDING_STATES = (
@@ -182,10 +199,13 @@ def calculate_progress_metrics(coverage: dict[str, object]) -> ProgressMetrics:
             superseded += count
             continue
         total += count
-        if state not in INCOMPLETE_COVERAGE_STATES:
+        if state in COMPLETED_COVERAGE_STATES:
             completed += count
-    percent = round((completed / total) * 100) if total else 0
-    return ProgressMetrics(completed, total, percent, superseded, pending + stale, pending, stale)
+    displayed_completed = min(completed, total)
+    percent = round((displayed_completed / total) * 100) if total else 0
+    return ProgressMetrics(
+        displayed_completed, total, percent, superseded, pending + stale, pending, stale
+    )
 
 
 def format_elapsed_time(seconds: float) -> str:
@@ -417,7 +437,9 @@ def _plain_text(value: object) -> str:
 
 
 def _plain_character(character: str) -> str:
-    if character in {"\n", "\t"} or (ord(character) >= 32 and ord(character) != 127):
+    if character in {"\n", "\r", "\t"}:
+        return " "
+    if ord(character) >= 32 and ord(character) != 127:
         return character
     return "�"
 
@@ -432,15 +454,17 @@ def _summarize_text(value: object, *, limit: int) -> str:
 def _progress_bar(completed: int, total: int) -> str:
     if total <= 0:
         return "[" + "·" * _BAR_WIDTH + "]"
-    filled = round((completed / total) * _BAR_WIDTH)
+    filled = min(_BAR_WIDTH, max(0, round((completed / total) * _BAR_WIDTH)))
     return "[" + "█" * filled + "░" * (_BAR_WIDTH - filled) + "]"
 
 
 def _count_value(value: object) -> int:
     if isinstance(value, bool):
-        return int(value)
+        return 0
     if isinstance(value, int):
         return max(0, value)
+    if isinstance(value, float) and not value.is_integer():
+        return 0
     if isinstance(value, float):
         return max(0, int(value))
     return 0
