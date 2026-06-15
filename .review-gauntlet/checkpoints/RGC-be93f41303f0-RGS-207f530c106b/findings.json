@@ -1,0 +1,27 @@
+{
+  "checkpoint_id": "RGC-be93f41303f0-RGS-207f530c106b",
+  "findings": [
+    {
+      "checkpoint_id": "RGC-be93f41303f0-RGS-207f530c106b",
+      "content": "validate-verdict accepts structurally invalid precise locations such as start_line=0/end_line=5 or end_line < start_line. The command tells external adapters to use it as the pre-finish validator, but CommandReviewAdapter later rejects the same ranges in _validated_comments_for_cell, so an adapter can see validation pass and still fail the review run. Mirror the adapter's basic line-range validation here for non-imprecise comments.",
+      "finding_id": "RGF-0129",
+      "fingerprint": "65501a6329ab03a163483858e79ce2ca46c5cbe8e478189f289ff2059911c3c2",
+      "latest_occurrence": {
+        "cell_id": "RGC-6cefdd41be393570",
+        "end_line": 652,
+        "finding_id": "RGF-0129",
+        "imprecise": 0,
+        "occurrence_id": 129,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 121,
+        "start_line": 650
+      },
+      "metadata": "{\"fingerprint\":\"65501a6329ab03a163483858e79ce2ca46c5cbe8e478189f289ff2059911c3c2\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"data-validation\",\"content\":\"validate-verdict accepts structurally invalid precise locations such as start_line=0/end_line=5 or end_line < start_line. The command tells external adapters to use it as the pre-finish validator, but CommandReviewAdapter later rejects the same ranges in _validated_comments_for_cell, so an adapter can see validation pass and still fail the review run. Mirror the adapter's basic line-range validation here for non-imprecise comments.\",\"suggestion_code\":\"        payload = validate_verdict_json(path.read_text(encoding=\\\"utf-8\\\"))\\n        for index, comment in enumerate(payload.comments):\\n            if not comment.imprecise and (comment.start_line < 1 or comment.end_line < comment.start_line):\\n                raise ValueError(\\n                    \\\"comment has an invalid line range: \\\"\\n                    f\\\"index={index} start_line={comment.start_line} end_line={comment.end_line}\\\"\\n                )\\n        expected_path = args.expected_path\",\"existing_code\":\"        payload = validate_verdict_json(path.read_text(encoding=\\\"utf-8\\\"))\\n        expected_path = args.expected_path\",\"start_line\":650,\"end_line\":652,\"thinking\":\"The CLI validator is used in the generated prompt as the authoritative validation step, but it omits the range checks enforced by the real adapter. This is a data-validation gap in cli.py.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-207f530c106b",
+      "state": "fixed_verified"
+    }
+  ],
+  "schema_version": 1
+}

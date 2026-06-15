@@ -1,0 +1,26 @@
+{
+  "checkpoint_id": "RGC-be93f41303f0-RGS-207f530c106b",
+  "events": [
+    {
+      "checkpoint_id": "RGC-be93f41303f0-RGS-207f530c106b",
+      "created_at": "2026-06-15 06:10:09",
+      "event_id": 268,
+      "finding_id": "RGF-0129",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "validate-verdict now rejects invalid precise line ranges before adapter execution",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-be93f41303f0-RGS-207f530c106b",
+      "created_at": "2026-06-15 06:11:35",
+      "event_id": 269,
+      "finding_id": "RGF-0129",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    }
+  ],
+  "schema_version": 1
+}
