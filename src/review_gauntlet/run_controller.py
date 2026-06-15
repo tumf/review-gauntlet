@@ -159,6 +159,7 @@ class RunController:
                 )
             self._emit("step_started", step=step_number, prompt=prompt)
             self._agent_status = "running"
+            self._emit("agent_started", argv=[], step=step_number)
             try:
                 command_result = self._command_runner(
                     effective_config.adapter,
@@ -171,7 +172,6 @@ class RunController:
                 self._emit("interrupted", step=step_number, session_id=session_id)
                 return self._interrupted_result(steps)
             self._command_argv = tuple(command_result.argv)
-            self._emit("agent_started", argv=command_result.argv, step=step_number)
             step_payload = _run_step_payload(step_number, prompt, command_result)
             steps.append(step_payload)
             self._agent_status = "idle"

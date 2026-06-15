@@ -55,10 +55,13 @@ def test_run_controller_completes_when_command_finalizes_session(tmp_path: Path)
     store = _store(tmp_path)
     prompts: list[str] = []
 
+    events_during_command: list[str] = []
+
     def command(
         config: CommandAdapterConfig, root: Path, state_dir: Path, prompt: str
     ) -> SessionCommandResult:
         prompts.append(prompt)
+        events_during_command.extend(event.type for event in controller.events)
         store.active_path.unlink()
         return SessionCommandResult(
             argv=[config.command, prompt], cwd=str(root), returncode=0, stdout="ok", stderr=""
@@ -80,6 +83,8 @@ def test_run_controller_completes_when_command_finalizes_session(tmp_path: Path)
     assert result["reason"] == "completed"
     assert result["step_count"] == 1
     assert prompts == ["ready prompt"]
+    assert "agent_started" in events_during_command
+    assert "agent_finished" not in events_during_command
     assert [event.type for event in controller.events] == [
         "run_started",
         "status_refreshed",
