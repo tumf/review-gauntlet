@@ -157,7 +157,7 @@ Status and freshness computations SHALL use the same resolved repository root fo
 
 `review-gauntlet ready` SHALL expose whether a continuation task is available through both stdout and process exit status. When a ready prompt exists, the command SHALL emit the existing prompt output and exit `0`. When no continuation task exists, the command SHALL preserve the existing no-task output while exiting `1` so external orchestrators can distinguish no-op completion without parsing stdout. When current review cells are pending, `ready` SHALL prompt for pending review before prompting for reopened, untriaged, confirmed, fixed-pending, or stale work. When pending cells are exhausted but current review cells are stale, `ready` SHALL prompt for live finding work before prompting for generic stale review work. Live finding work SHALL include reopened findings, untriaged findings, confirmed findings, and fixed-pending verification. After review-cell and finding continuation work is exhausted, `ready` SHALL treat dirty working-tree finalize blockers as actionable by returning a prompt that instructs the agent to commit intended git changes before finalizing. Commit-resolvable dirty blockers include dirty review-universe files relative to `HEAD` and uncommitted non-review files. `ready` SHALL NOT treat non-dirty finalize blockers as commit-resolvable. `ready` SHALL NOT return a target-digest-drift review prompt solely because whole-target digest drift exists when current target-cell coverage is complete.
 
-`review-gauntlet run` SHALL orchestrate an active session by repeatedly using the same continuation task prompt that `review-gauntlet ready` would emit. `run` SHALL NOT maintain independent task-selection priority logic. `run` SHALL invoke the configured command adapter as a session-level task runner with the ready prompt and then re-evaluate the active session. `run` SHALL NOT require the session-level agent invocation to emit OCR verdict JSON, and SHALL NOT use review-cell verdict parsing as the success criterion for a session-level task. `run` SHALL stop successfully when the active session has been finalized and the active-session marker is gone. `run` SHALL stop unsuccessfully when no ready task exists while a session remains active, when the configured command fails, or when the configured maximum step count is reached while the session remains active.
+`review-gauntlet run` SHALL orchestrate an active session by repeatedly using the same continuation task prompt that `review-gauntlet ready` would emit. `run` SHALL NOT maintain independent task-selection priority logic. `run` SHALL invoke the configured command adapter as a session-level task runner with the ready prompt and then re-evaluate the active session. `run` SHALL NOT require the session-level agent invocation to emit OCR verdict JSON, and SHALL NOT use review-cell verdict parsing as the success criterion for a session-level task. `run` SHALL stop successfully when the active session has been finalized and the active-session marker is gone. `run` SHALL stop unsuccessfully when no ready task exists while a session remains active, when the configured command fails, when the configured maximum step count is reached while the session remains active, or when a user-requested stop after the current step leaves the session active. Interactive text executions of `review-gauntlet run` SHOULD use a Textual TUI by default when TUI support is installed, stdout is a TTY, `--format text` is selected, and `--no-tui` is not provided. `run --format json`, `run --no-tui`, and non-TTY executions SHALL NOT launch the TUI. TUI presentation SHALL NOT change task selection, command execution semantics, run result semantics, or session finalization semantics. TUI dependencies SHALL be optional; when TUI support is unavailable for an otherwise TUI-eligible run, the command SHALL warn and fall back to non-TUI text mode.
 
 #### Scenario: Run invokes the same prompt as ready
 
@@ -209,6 +209,62 @@ Status and freshness computations SHALL use the same resolved repository root fo
 **When**: the developer runs `review-gauntlet run --max-steps 1 --format json`
 **Then**: the command does not fail solely because the session-level command output is not OCR verdict JSON
 **And**: success or failure is determined by process exit status, max-step state, and active-session completion state
+
+#### Scenario: Run launches TUI only for eligible interactive text executions
+
+**Given**: an active session with a ready task
+**And**: TUI support is installed
+**And**: stdout is a TTY
+**When**: the developer runs `review-gauntlet run`
+**Then**: the command launches the Textual TUI presentation
+**And**: the TUI uses the same run controller semantics as non-TUI run
+**And**: TUI presentation changes only how state is displayed
+
+#### Scenario: Run disables TUI for JSON output
+
+**Given**: an active session with a ready task
+**When**: the developer runs `review-gauntlet run --format json`
+**Then**: no TUI is launched
+**And**: stdout contains parseable JSON using the existing run result contract
+
+#### Scenario: Run disables TUI when explicitly requested
+
+**Given**: an active session with a ready task
+**When**: the developer runs `review-gauntlet run --no-tui`
+**Then**: no TUI is launched
+**And**: text output uses the non-TUI run presentation
+
+#### Scenario: Run disables TUI for non-TTY output
+
+**Given**: an active session with a ready task
+**And**: stdout is not a TTY
+**When**: the developer runs `review-gauntlet run`
+**Then**: no TUI is launched
+**And**: output remains suitable for redirected logs or shell pipelines
+
+#### Scenario: Run falls back when TUI dependency is missing
+
+**Given**: TUI support is not installed
+**And**: stdout is a TTY
+**When**: the developer runs `review-gauntlet run`
+**Then**: the command does not fail solely because Textual is missing
+**And**: it emits a warning explaining how to install `review-gauntlet[tui]`
+**And**: it continues with non-TUI text mode
+
+#### Scenario: TUI stop request stops after current step
+
+**Given**: the TUI run is executing a session-level agent step
+**When**: the developer requests stop after current step
+**Then**: the currently running step is allowed to finish
+**And**: no additional ready prompt execution is started
+**And**: the run exits unsuccessfully if the active session remains available for continuation
+
+#### Scenario: TUI refresh does not mutate session state
+
+**Given**: the TUI is displaying an active session
+**When**: the developer requests refresh
+**Then**: the TUI refreshes its display from durable session state through the run controller
+**And**: no finding, review cell, or session state is mutated by the TUI itself
 
 ### Requirement: Finalize SHALL validate completion without running review work
 

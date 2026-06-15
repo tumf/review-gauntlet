@@ -59,6 +59,14 @@ from review_gauntlet.review_adapter import (
     validate_verdict_json,
 )
 from review_gauntlet.review_cells import CellState, ReviewCell, cells_from_plan
+from review_gauntlet.run_controller import RunController, SessionCommandResult
+from review_gauntlet.run_tui import (
+    TUI_FALLBACK_WARNING,
+    TUI_INSTALL_GUIDANCE,
+    create_run_app,
+    should_use_tui,
+    textual_available,
+)
 from review_gauntlet.session_store import SessionStore
 from review_gauntlet.targets import (
     TargetSpec,
@@ -210,6 +218,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Maximum ready-prompt executions before stopping (default: 100)",
     )
     run.add_argument("--config", type=Path)
+    run.add_argument(
+        "--no-tui",
+        action="store_true",
+        help="Disable the interactive Textual TUI and use text output (default: false)",
+    )
     _output_format_arg(run)
 
     findings = subparsers.add_parser("findings")
@@ -696,7 +709,8 @@ def _run_session_command(args: argparse.Namespace, root: Path) -> None:
             raise SystemExit(1)
     elif args.command == "run":
         result = _cmd_run(args, root, store)
-        _emit_run(result, args.format)
+        if not bool(getattr(args, "_tui_rendered", False)):
+            _emit_run(result, args.format)
         if not result["completed"]:
             raise SystemExit(1)
     elif args.command == "findings":
@@ -1350,16 +1364,6 @@ def _finalize_blocker_is_commit_resolvable(reason: str) -> bool:
     )
 
 
-@dataclass(frozen=True)
-class SessionCommandResult:
-    argv: list[str]
-    cwd: str | None
-    returncode: int | None
-    stdout: str
-    stderr: str
-    failure: dict[str, object] | None = None
-
-
 _SESSION_TEMPLATE_VARIABLES = frozenset({"repo_root", "state_dir", "prompt"})
 
 
@@ -1372,88 +1376,35 @@ def _process_session_output_text(value: str | bytes | None) -> str:
 
 
 def _cmd_run(args: argparse.Namespace, root: Path, store: SessionStore) -> dict[str, object]:
-    config = load_config(root, args.config)
-    if config is None:
-        raise ValueError(_missing_config_guidance("run"))
-    _config_path, effective_config = config
-    steps: list[dict[str, object]] = []
-    max_steps = int(args.max_steps)
-    for step_number in range(1, max_steps + 1):
-        session_id = store.active_session_id()
-        prompt = _ready_prompt(store, root)
-        if prompt is None:
-            return _run_result(
-                completed=False,
-                steps=steps,
-                reason="no_ready_task",
-                error="active session remains but no ready task is actionable",
-                session_id=session_id,
-            )
-        command_result = _run_session_command_step(
-            config=effective_config.adapter,
-            root=root,
-            state_dir=store.state_dir,
-            prompt=prompt,
-        )
-        step_payload = _run_step_payload(step_number, prompt, command_result)
-        steps.append(step_payload)
-        if command_result.failure is not None:
-            return _run_result(
-                completed=False,
-                steps=steps,
-                reason=str(command_result.failure.get("reason", "command_failed")),
-                error=str(command_result.failure.get("error", "command failed")),
-                session_id=session_id,
-            )
-        if not store.active_path.exists():
-            return _run_result(
-                completed=True,
-                steps=steps,
-                reason="completed",
-                error=None,
-                session_id=session_id,
-            )
-    try:
-        session_id = store.active_session_id()
-    except LookupError:
-        return _run_result(
-            completed=True,
-            steps=steps,
-            reason="completed",
-            error=None,
-            session_id=None,
-        )
-    return _run_result(
-        completed=False,
-        steps=steps,
-        reason="max_steps_exhausted",
-        error=f"active session remains after {max_steps} run step(s)",
-        session_id=session_id,
-        max_steps=max_steps,
+    controller = RunController(
+        root=root,
+        store=store,
+        config_path=args.config,
+        max_steps=int(args.max_steps),
+        ready_prompt=_ready_prompt,
+        status_snapshot=lambda session_store, repo_root: _status(session_store, repo_root),
+        command_runner=_run_session_command_step_from_config,
     )
+    use_tui = should_use_tui(
+        output_format=str(args.format),
+        no_tui=bool(getattr(args, "no_tui", False)),
+        stdout_is_tty=sys.stdout.isatty(),
+    )
+    if use_tui:
+        if textual_available():
+            app = create_run_app(controller)
+            result = cast(Any, app).run()
+            args._tui_rendered = True
+            return cast(dict[str, object], result)
+        print(TUI_FALLBACK_WARNING, file=sys.stderr)
+        print(TUI_INSTALL_GUIDANCE, file=sys.stderr)
+    return controller.run()
 
 
-def _run_result(
-    *,
-    completed: bool,
-    steps: list[dict[str, object]],
-    reason: str,
-    error: str | None,
-    session_id: str | None,
-    max_steps: int | None = None,
-) -> dict[str, object]:
-    result: dict[str, object] = {
-        "completed": completed,
-        "reason": reason,
-        "steps": steps,
-        "step_count": len(steps),
-        "session_id": session_id,
-    }
-    if error is not None:
-        result["error"] = error
-    if max_steps is not None:
-        result["max_steps"] = max_steps
-    return result
+def _run_session_command_step_from_config(
+    config: CommandAdapterConfig, root: Path, state_dir: Path, prompt: str
+) -> SessionCommandResult:
+    return _run_session_command_step(config=config, root=root, state_dir=state_dir, prompt=prompt)
 
 
 def _run_session_command_step(
@@ -1534,23 +1485,6 @@ def _run_session_command_step(
         stderr=completed.stderr,
         failure=failure,
     )
-
-
-def _run_step_payload(
-    step_number: int, prompt: str, result: SessionCommandResult
-) -> dict[str, object]:
-    payload: dict[str, object] = {
-        "step": step_number,
-        "prompt": prompt,
-        "argv": result.argv,
-        "cwd": result.cwd,
-        "returncode": result.returncode,
-        "stdout": result.stdout,
-        "stderr": result.stderr,
-    }
-    if result.failure is not None:
-        payload["failure"] = result.failure
-    return payload
 
 
 def _expand_session_template(value: str, variables: dict[str, str]) -> str:
