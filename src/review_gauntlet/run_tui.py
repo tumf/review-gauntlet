@@ -239,6 +239,15 @@ _AGENT_STATUS_LABELS = {
     "max_steps_exhausted": "max steps exhausted",
     "failed": "failed",
 }
+_NEXT_ACTION_GATE_INDEX = {
+    "run_review": 1,
+    "triage_findings": 2,
+    "fix_confirmed_findings": 3,
+    "run_verify_fixes": 4,
+    "resolve_finalize_blockers": 5,
+    "finalize": 6,
+    "cleanup_git_worktree": 6,
+}
 
 
 @dataclass(frozen=True)
@@ -415,10 +424,7 @@ def dashboard_state(
     status_summary, state_class = terminal_state(snapshot.agent_status)
     command_label = format_command_label(snapshot)
     gates = derive_finalize_gates(snapshot)
-    active_gate = next(
-        (gate for gate in gates if gate.state in {"running", "blocked", "failed", "next"}),
-        gates[-1],
-    )
+    active_gate = select_active_gate(snapshot, gates)
     timeline_events = tuple(format_activity_event(event) for event in events[-10:])
     output_events = tuple(
         format_agent_output_entry(entry) for entry in snapshot.agent_lifecycle.output_tail[-6:]
@@ -450,6 +456,16 @@ def dashboard_state(
         liveness_detail=liveness_detail,
         artifact_path=artifact_path,
         elapsed=format_elapsed_time(snapshot.elapsed_seconds),
+    )
+
+
+def select_active_gate(snapshot: RunSnapshot, gates: tuple[FinalizeGate, ...]) -> FinalizeGate:
+    mapped_index = _NEXT_ACTION_GATE_INDEX.get(snapshot.next_required_action or "")
+    if mapped_index is not None:
+        return gates[mapped_index - 1]
+    return next(
+        (gate for gate in gates if gate.state in {"running", "blocked", "failed", "next"}),
+        gates[-1],
     )
 
 
