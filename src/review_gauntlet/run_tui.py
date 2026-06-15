@@ -222,19 +222,6 @@ def _plain_character(character: str) -> str:
     return "�"
 
 
-def _agent_text(snapshot: RunSnapshot) -> str:
-    argv = (
-        " ".join(_plain_text(argument) for argument in snapshot.command_argv)
-        if snapshot.command_argv
-        else "n/a"
-    )
-    return (
-        "Agent\n"
-        f"status={_plain_text(snapshot.agent_status)} step={snapshot.step} "
-        f"elapsed={snapshot.elapsed_seconds:.1f}s\nargv={argv}"
-    )
-
-
 def _events_text(events: tuple[RunEvent, ...]) -> str:
     lines = ["Events"]
     for event in events[-12:]:
@@ -268,11 +255,3 @@ def _count_value(value: object) -> int:
     if isinstance(value, float):
         return max(0, int(value))
     return 0
-
-
-def _counts_text(counts: dict[str, object]) -> str:
-    if not counts:
-        return "-"
-    return "\n".join(
-        f"{_plain_text(key)}: {_plain_text(value)}" for key, value in sorted(counts.items())
-    )
