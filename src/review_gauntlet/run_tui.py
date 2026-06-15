@@ -12,7 +12,7 @@ TUI_FALLBACK_WARNING = "TUI support is not installed; falling back to text mode.
 TUI_INSTALL_GUIDANCE = 'Install with: uv tool install "review-gauntlet[tui]"'
 PANEL_TITLES = {
     "header": "Review Gauntlet",
-    "finalize_path": "Next to finalize",
+    "finalize_path": "Finalize checklist",
     "agent": "Agent",
     "session": "Session",
     "activity": "Activity",
