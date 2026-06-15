@@ -221,7 +221,7 @@ def test_tui_panel_body_helpers_omit_standalone_section_headings() -> None:
 
     bodies = {
         "Activity": activity_text(view),
-        "Finalize path": run_tui.finalize_path_text(view),
+        "Finalize checklist": run_tui.finalize_path_text(view),
         "Session metrics": coverage_text(snapshot),
         "Findings": findings_text(snapshot),
         "Current operation": run_tui.current_operation_text(view),
@@ -246,6 +246,12 @@ def test_compact_dashboard_text_uses_shared_panel_titles() -> None:
 
     for title in PANEL_TITLES.values():
         assert title in compact
+
+    assert compact.index("Review Gauntlet") < compact.index("Finalize checklist")
+    assert compact.index("Finalize checklist") < compact.index("Agent")
+    assert compact.index("Agent") < compact.index("Session")
+    assert compact.index("Session") < compact.index("Activity")
+    assert "Next to finalize" not in compact
 
 
 @pytest.mark.parametrize(
@@ -426,7 +432,8 @@ def test_compact_dashboard_text_keeps_required_sections() -> None:
     compact = compact_dashboard_text(snapshot)
 
     assert "Review Gauntlet" in compact
-    assert "Next to finalize" in compact
+    assert "Finalize checklist" in compact
+    assert "Next to finalize" not in compact
     assert "Session metrics" not in compact
     assert "Current operation" not in compact
     assert "Finalize path" not in compact
