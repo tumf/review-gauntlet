@@ -116,7 +116,7 @@ def test_dashboard_header_contains_human_run_state_and_short_session() -> None:
     assert "current cells" not in text
 
 
-def test_header_and_current_operation_show_quiet_timeout_and_artifact_liveness() -> None:
+def test_header_omits_timeout_and_agent_summary_keeps_quiet_timeout_artifact_liveness() -> None:
     snapshot = RunSnapshot(
         session_id="RGS-liveness-1234",
         coverage={"reviewed": 1},
@@ -141,9 +141,9 @@ def test_header_and_current_operation_show_quiet_timeout_and_artifact_liveness()
     activity = activity_text(view)
 
     assert "quiet 7s" in header
-    assert "timeout 53s" not in header
+    assert "timeout" not in header
+    assert "53s" not in header
     assert "last output 7s ago" not in header
-    assert "timeout in 53s" not in header
     assert "agent alive no output" not in activity
     assert "waiting for run activity" in activity
     assert "artifact .review-gauntlet/runs/run-1/activity.jsonl" in operation

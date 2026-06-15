@@ -157,9 +157,9 @@ When `review-gauntlet run` detects that an agent step successfully finalized the
 
 `review-gauntlet run` SHALL continue to orchestrate active sessions without changing task selection, command execution, result payloads, interruption behavior, JSON output behavior, non-TUI behavior, fallback behavior, or session finalization semantics except for the run-only post-finalize checkpoint commit attempt described above.
 
-Interactive `run` TUI presentation SHALL render a compact dashboard that is faithful to the target user-facing structure: a `Review Gauntlet` header, a `Next to finalize` checklist, side-by-side `Agent` and `Session` summary panels where terminal width allows, an `Activity` timeline, and compact implemented controls. The TUI SHALL derive a human-facing dashboard view model from raw controller and session state before rendering. That view model SHALL include header fields, finalize checklist rows, agent summary fields, session summary fields, and normalized activity rows. TUI widgets SHALL render the view model rather than directly dumping raw prompt text, raw argv payloads, raw event payloads, raw full session IDs, raw finalize action names, or raw blocker lists.
+Interactive `run` TUI presentation SHALL render a compact dashboard that is faithful to the target user-facing structure: a `Review Gauntlet` header, a `Next to finalize` checklist, side-by-side `Agent` and `Session` summary panels where terminal width allows, an `Activity` timeline, and compact implemented controls. The TUI SHALL derive a human-facing dashboard view model from raw controller and session state before rendering. That view model SHALL include header fields, finalize checklist rows, agent summary fields, session summary fields, and normalized activity rows. TUI widgets SHALL render the view model rather than directly dumping raw prompt text, raw argv payloads, raw full session IDs, raw finalize action names, or raw blocker lists.
 
-The header SHALL use a concise two-line summary. The first line SHALL include terminal run status, `gate x/6`, and the current checklist title. The second line SHALL include shortened session id, agent or command display name, a concise liveness label, and timeout label when known. Gate numbering SHALL be displayed in the header only and SHALL NOT be repeated on each checklist row.
+The header SHALL use a concise two-line summary. The first line SHALL include terminal run status, `gate x/6`, and the current checklist title. The second line SHALL include shortened session id, agent or command display name, and a concise liveness label such as `quiet 7s` when the active agent is quiet. The header SHALL NOT display timeout remaining. Gate numbering SHALL be displayed in the header only and SHALL NOT be repeated on each checklist row.
 
 The primary progress panel SHALL be titled `Next to finalize` and SHALL render exactly these six ordered checklist rows: Review coverage, Triage findings, Fix confirmed findings, Verify fixes, Final checks, and Finalize checkpoint. Each row SHALL use only one of these TUI state labels: `running`, `done`, `next`, `later`, `blocked`, or `failed`. Internal states such as `pending`, `stale`, `untriaged`, `confirmed`, `reopened`, and `fixed_pending_verification` MAY appear in row details but SHALL NOT be used as primary row states. The TUI SHALL NOT render the old `Resolve finalize blockers` checklist row.
 
@@ -219,24 +219,17 @@ The Activity panel SHALL mix normalized Review Gauntlet events and bounded agent
 **Then**: the existing session-worktree commit and merge behavior remains authoritative
 **And**: the new normal-run checkpoint commit path does not create an additional duplicate checkpoint commit
 
-#### Scenario: Run TUI renders the mock-aligned dashboard structure
+<!-- Expected canonical result after archive: the canonical review-sessions spec will keep quiet/liveness in the run TUI Header, remove timeout remaining from the Header, and keep timeout remaining in the Agent summary panel. -->
 
-**Given**: an active review session with a configured command adapter
-**And**: the `run` TUI is eligible for an interactive text execution
-**When**: the TUI renders the session snapshot
-**Then**: the dashboard contains panels titled `Review Gauntlet`, `Next to finalize`, `Agent`, `Session`, and `Activity` in that order
-**And**: the dashboard does not render standalone `Session metrics`, `Current operation`, or `Finalize path` panel labels
-**And**: task selection, command execution, result payloads, interruption behavior, JSON output behavior, non-TUI behavior, and fallback behavior remain unchanged
-
-#### Scenario: Run TUI renders a two-line header without noisy duplicates
+#### Scenario: Run TUI renders a two-line header without timeout details
 
 **Given**: an active session whose current checklist row is Review coverage
 **And**: the command adapter is `opencode`
 **And**: the agent is quiet with a known timeout remaining
 **When**: the TUI renders the header
 **Then**: the first header line includes `RUNNING`, `gate 1/6`, and `Review coverage`
-**And**: the second header line includes the shortened session id, `agent opencode`, a quiet liveness label, and timeout label
-**And**: the header does not render raw argv, a full session id, or repeated last-output and quiet labels for the same liveness signal
+**And**: the second header line includes the shortened session id, `agent opencode`, and a quiet liveness label
+**And**: the header does not render timeout remaining, raw argv, a full session id, or repeated last-output and quiet labels for the same liveness signal
 
 #### Scenario: Run TUI renders next-to-finalize checklist without gate numbering
 
@@ -280,7 +273,7 @@ The Activity panel SHALL mix normalized Review Gauntlet events and bounded agent
 
 #### Scenario: Run TUI renders compact Agent and Session summaries
 
-**Given**: an active session with a command label, agent lifecycle state, coverage counts, finding counts, and agent step
+**Given**: an active session with a command label, agent lifecycle state, timeout remaining, coverage counts, finding counts, and agent step
 **When**: the TUI renders the summary panels
 **Then**: the Agent panel shows the command label, status/liveness, output recency, and timeout when known
 **And**: the Session panel shows compact coverage percent and reviewed/total counts
