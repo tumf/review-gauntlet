@@ -382,7 +382,6 @@ def dashboard_state(
         format_agent_output_entry(entry) for entry in snapshot.agent_lifecycle.output_tail[-6:]
     )
     liveness_detail = agent_liveness_detail(snapshot)
-    heartbeat_events = heartbeat_timeline_events(snapshot, activity_frame=activity_frame)
     coverage = calculate_progress_metrics(snapshot.coverage)
     task = format_task_title(snapshot.next_ready_prompt)
     artifact_path = snapshot.agent_lifecycle.artifact_path
@@ -402,7 +401,7 @@ def dashboard_state(
         command_label=command_label,
         agent_summary=build_agent_summary(snapshot, command_label, liveness_detail, artifact_path),
         session_summary=build_session_summary(snapshot, coverage, active_gate),
-        timeline_events=timeline_events + heartbeat_events + output_events,
+        timeline_events=timeline_events + output_events,
         activity=agent_activity_text(
             _display_agent_status(snapshot), activity_frame=activity_frame
         ),
@@ -572,23 +571,6 @@ def agent_liveness_detail(snapshot: RunSnapshot) -> str:
             return f"quiet {format_duration(quiet_for)}"
         return "quiet but alive"
     return agent_activity_text(display_status)
-
-
-def heartbeat_timeline_events(
-    snapshot: RunSnapshot, *, activity_frame: int = 0
-) -> tuple[TimelineEvent, ...]:
-    display_status = _display_agent_status(snapshot)
-    if display_status != "quiet":
-        return ()
-    quiet_for = snapshot.agent_lifecycle.last_output_age_seconds
-    detail = (
-        f"agent alive no output for {format_duration(quiet_for)}"
-        if quiet_for is not None
-        else "agent alive no output yet"
-    )
-    if activity_frame % 4 != 0:
-        return ()
-    return (TimelineEvent("--:--:--", "event", detail),)
 
 
 def format_duration(seconds: float) -> str:

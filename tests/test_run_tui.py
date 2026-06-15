@@ -144,14 +144,15 @@ def test_header_and_current_operation_show_quiet_timeout_and_artifact_liveness()
     assert "timeout 53s" in header
     assert "last output 7s ago" not in header
     assert "timeout in 53s" not in header
-    assert "event - agent alive no output for 7s" in activity
+    assert "agent alive no output" not in activity
+    assert "waiting for run activity" in activity
     assert "artifact .review-gauntlet/runs/run-1/activity.jsonl" in operation
     assert "status  quiet 7s" in operation
     assert "output  last output 7s ago" in operation
     assert "timeout timeout in 53s" in operation
 
 
-def test_liveness_synthesizes_non_flooding_quiet_heartbeat_rows() -> None:
+def test_liveness_omits_quiet_heartbeat_rows_across_animation_frames() -> None:
     snapshot = RunSnapshot(
         session_id="RGS-liveness",
         coverage={"reviewed": 1},
@@ -164,12 +165,15 @@ def test_liveness_synthesizes_non_flooding_quiet_heartbeat_rows() -> None:
         agent_lifecycle=AgentLifecycle(status="quiet", last_output_age_seconds=9.0),
     )
 
-    assert "agent alive no output for 9s" in activity_text(
-        dashboard_state(snapshot, (), activity_frame=0)
-    )
-    assert "agent alive no output for 9s" not in activity_text(
-        dashboard_state(snapshot, (), activity_frame=1)
-    )
+    for frame in range(8):
+        view = dashboard_state(snapshot, (), activity_frame=frame)
+        activity = activity_text(view)
+
+        assert "agent alive no output" not in activity
+        assert "waiting for run activity" in activity
+        assert "quiet 9s" in run_tui.header_text(view)
+        assert "status  quiet 9s" in run_tui.agent_summary_text(view)
+        assert "output  last output 9s ago" in run_tui.agent_summary_text(view)
 
 
 def test_coverage_and_findings_render_dashboard_metrics_without_old_markers() -> None:
@@ -575,7 +579,7 @@ def test_agent_session_summary_and_activity_rows_are_human_facing_and_sanitized(
     assert "Current   review coverage" in session
     assert "Agent step 1" in session
     assert "event - run started session RGS-summ…1234" in activity
-    assert "event - agent alive no output for 2m00s" in activity
+    assert "agent alive no output" not in activity
     assert "stdout - hello <redacted>" in activity
     assert "stderr - warn <redacted>" in activity
     assert "supersecret" not in activity
