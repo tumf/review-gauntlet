@@ -48,9 +48,17 @@ def create_run_app(controller: RunController) -> object:
 
     class RunApp(App[dict[str, object]]):
         CSS = """
+        $brand: #d97757;
         Screen { layout: vertical; }
         #body { height: 1fr; padding: 1; }
         #session_header { border: round $primary; padding: 1; height: auto; }
+        #header_title { color: $brand; text-style: bold; }
+        #header_status { text-style: bold; }
+        #header_meta { color: $text-muted; }
+        .panel-active #header_status { color: $success; }
+        .panel-blocked #header_status { color: $warning; }
+        .panel-failed #header_status { color: $error; }
+        .panel-finalized #header_status { color: $success; }
         #summary { height: auto; }
         #agent_panel { width: 1fr; }
         #session_panel { width: 1fr; }
@@ -87,7 +95,10 @@ def create_run_app(controller: RunController) -> object:
                 self.snapshot, self.controller.events, activity_frame=self._activity_frame
             )
             with Vertical(id="body"):
-                yield Static(header_text(view), id="session_header", classes=view.state_class)
+                with Vertical(id="session_header", classes=view.state_class):
+                    yield Static(header_title_text(), id="header_title")
+                    yield Static(header_status_text(view), id="header_status")
+                    yield Static(header_meta_text(view), id="header_meta")
                 yield titled_panel(
                     PANEL_TITLES["finalize_path"],
                     Static(finalize_path_text(view), id="finalize_path"),
@@ -151,7 +162,9 @@ def create_run_app(controller: RunController) -> object:
                 self.snapshot, self.controller.events, activity_frame=self._activity_frame
             )
             try:
-                session_header = self.query_one("#session_header", Static)
+                session_header = self.query_one("#session_header", Vertical)
+                header_status = self.query_one("#header_status", Static)
+                header_meta = self.query_one("#header_meta", Static)
                 finalize_path_panel = self.query_one("#finalize_path_panel", Vertical)
                 finalize_path = self.query_one("#finalize_path", Static)
                 agent_panel_container = self.query_one("#agent_panel_container", Vertical)
@@ -162,7 +175,8 @@ def create_run_app(controller: RunController) -> object:
                 activity_timeline = self.query_one("#activity_timeline", Static)
             except NoMatches:
                 return
-            session_header.update(header_text(view))
+            header_status.update(header_status_text(view))
+            header_meta.update(header_meta_text(view))
             for state_class in (
                 "panel",
                 "panel-active",
@@ -597,14 +611,20 @@ def terminal_state(agent_status: str) -> tuple[str, str]:
     return f"READY {status}", "panel"
 
 
+def header_title_text() -> str:
+    return "✻ Review Gauntlet"
+
+
+def header_status_text(view: RunViewState) -> str:
+    return f"{view.status_summary} · {view.gate_label} · {view.active_gate.title}"
+
+
+def header_meta_text(view: RunViewState) -> str:
+    return f"{view.session_short_id} · agent {view.agent_name} · {view.liveness_detail}"
+
+
 def header_text(view: RunViewState) -> str:
-    timeout = view.agent_summary.timeout.replace("timeout in ", "timeout ")
-    return (
-        "Review Gauntlet\n"
-        f"{view.status_summary} · {view.gate_label} · {view.active_gate.title}\n"
-        f"session {view.session_short_id} · agent {view.agent_name} · "
-        f"{view.liveness_detail} · {timeout}"
-    )
+    return "\n".join([header_title_text(), header_status_text(view), header_meta_text(view)])
 
 
 def progress_text(snapshot: RunSnapshot, *, activity_frame: int = 0) -> str:

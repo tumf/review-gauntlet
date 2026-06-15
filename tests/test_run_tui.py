@@ -141,7 +141,7 @@ def test_header_and_current_operation_show_quiet_timeout_and_artifact_liveness()
     activity = activity_text(view)
 
     assert "quiet 7s" in header
-    assert "timeout 53s" in header
+    assert "timeout 53s" not in header
     assert "last output 7s ago" not in header
     assert "timeout in 53s" not in header
     assert "agent alive no output" not in activity
@@ -609,6 +609,48 @@ def test_run_tui_source_uses_border_titles_and_semantic_title_styles() -> None:
     assert "border-title-style" in source
     assert "$warning" in source
     assert "$accent" not in source
+
+
+def test_header_title_carries_brand_sparkle_and_name() -> None:
+    title = run_tui.header_title_text()
+
+    assert "✻" in title
+    assert "Review Gauntlet" in title
+
+
+def test_header_first_line_is_brand_title_and_meta_omits_timeout() -> None:
+    snapshot = RunSnapshot(
+        session_id="RGS-brand-1234567890",
+        coverage={"reviewed": 1},
+        findings={},
+        next_ready_prompt=None,
+        step=1,
+        agent_status="running",
+        command_argv=("agent",),
+        elapsed_seconds=0,
+        command_label="agent",
+        agent_lifecycle=AgentLifecycle(
+            status="quiet",
+            last_output_age_seconds=7.0,
+            timeout_remaining_seconds=53.0,
+        ),
+    )
+    view = dashboard_state(snapshot, (), activity_frame=0)
+
+    assert run_tui.header_text(view).splitlines()[0] == run_tui.header_title_text()
+    meta = run_tui.header_meta_text(view)
+    assert "quiet 7s" in meta
+    assert "timeout" not in meta
+    assert "53s" not in meta
+
+
+def test_run_tui_source_styles_header_with_brand_accent_and_state_status() -> None:
+    source = Path("src/review_gauntlet/run_tui.py").read_text(encoding="utf-8")
+
+    assert "$brand: #d97757;" in source
+    assert "#header_title { color: $brand;" in source
+    assert ".panel-active #header_status { color: $success; }" in source
+    assert ".panel-failed #header_status { color: $error; }" in source
 
 
 def test_create_run_app_constructs_when_textual_available(tmp_path: Path) -> None:
