@@ -138,12 +138,15 @@ def test_header_and_current_operation_show_quiet_timeout_and_artifact_liveness()
     operation = run_tui.current_operation_text(view)
     activity = activity_text(view)
 
-    assert "last output 7s ago" in header
     assert "quiet 7s" in header
-    assert "timeout in 53s" in header
+    assert "timeout 53s" in header
+    assert "last output 7s ago" not in header
+    assert "timeout in 53s" not in header
     assert "event - agent alive no output for 7s" in activity
     assert "artifact .review-gauntlet/runs/run-1/activity.jsonl" in operation
-    assert "timeout in 53s" in operation
+    assert "status  quiet 7s" in operation
+    assert "output  last output 7s ago" in operation
+    assert "timeout timeout in 53s" in operation
 
 
 def test_liveness_synthesizes_non_flooding_quiet_heartbeat_rows() -> None:
@@ -491,6 +494,7 @@ def test_finalize_checklist_state_derivation_across_gates() -> None:
     assert fix[2].state == "running"
     assert verify[3].state == "running"
     assert final_blocked[4].state == "blocked"
+    assert final_blocked[4].detail == "working tree has uncommitted changes"
     assert all(gate.state == "done" for gate in finalized)
 
 
@@ -526,9 +530,10 @@ def test_agent_session_summary_and_activity_rows_are_human_facing_and_sanitized(
 
     assert "Agent" in agent
     assert "command opencode" in agent
-    assert "status  last output 2m00s ago | quiet 2m00s | timeout in 7m06s" in agent
+    assert "status  quiet 2m00s" in agent
     assert "output  last output 2m00s ago" in agent
     assert "timeout timeout in 7m06s" in agent
+    assert "last output 2m00s ago | quiet 2m00s" not in agent
     assert "artifact .review-gauntlet/runs/run-1/output.txt" in agent
     assert "Session" in session
     assert "Coverage  0%   0 / 9" in session

@@ -479,7 +479,7 @@ def derive_finalize_gates(snapshot: RunSnapshot) -> tuple[FinalizeGate, ...]:
         final_checks_detail = "checked after review/findings"
     elif blockers.final_checks:
         final_checks_state = "blocked"
-        final_checks_detail = f"{len(blockers.final_checks)} final check blocker(s)"
+        final_checks_detail = _summarize_text(blockers.final_checks[0], limit=64)
     else:
         final_checks_state = "done"
         final_checks_detail = "ready"
@@ -521,21 +521,14 @@ def _display_agent_status(snapshot: RunSnapshot) -> str:
 
 
 def agent_liveness_detail(snapshot: RunSnapshot) -> str:
-    parts: list[str] = []
     lifecycle = snapshot.agent_lifecycle
-    if lifecycle.last_output_age_seconds is not None:
-        parts.append(f"last output {format_duration(lifecycle.last_output_age_seconds)} ago")
-    if _display_agent_status(snapshot) == "quiet":
+    display_status = _display_agent_status(snapshot)
+    if display_status == "quiet":
         quiet_for = lifecycle.last_output_age_seconds
         if quiet_for is not None:
-            parts.append(f"quiet {format_duration(quiet_for)}")
-        else:
-            parts.append("quiet but alive")
-    if lifecycle.timeout_remaining_seconds is not None:
-        parts.append(f"timeout in {format_duration(lifecycle.timeout_remaining_seconds)}")
-    if not parts:
-        return agent_activity_text(_display_agent_status(snapshot))
-    return " | ".join(parts)
+            return f"quiet {format_duration(quiet_for)}"
+        return "quiet but alive"
+    return agent_activity_text(display_status)
 
 
 def heartbeat_timeline_events(
