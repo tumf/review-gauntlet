@@ -1,0 +1,300 @@
+{
+  "checkpoint_id": "RGC-ceb3e47cd92d-RGS-7b9e48e2abae",
+  "findings": [
+    {
+      "checkpoint_id": "RGC-ceb3e47cd92d-RGS-7b9e48e2abae",
+      "content": "`_positive_int` calls `int(value)` directly, so a non-integer value such as `--max-steps abc` raises an uncaught `ValueError` and prints a traceback instead of argparse's normal usage error. Wrap the conversion and raise `argparse.ArgumentTypeError` so invalid user input is reported consistently.",
+      "finding_id": "RGF-0106",
+      "fingerprint": "1c26cfdb585bb2dca67062ac850e524185c3c17c01629d160f54ff2324c4b37f",
+      "latest_occurrence": {
+        "cell_id": "RGC-6cefdd41be393570",
+        "end_line": 333,
+        "finding_id": "RGF-0106",
+        "imprecise": 0,
+        "occurrence_id": 106,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 94,
+        "start_line": 332
+      },
+      "metadata": "{\"fingerprint\":\"1c26cfdb585bb2dca67062ac850e524185c3c17c01629d160f54ff2324c4b37f\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"data-validation\",\"content\":\"`_positive_int` calls `int(value)` directly, so a non-integer value such as `--max-steps abc` raises an uncaught `ValueError` and prints a traceback instead of argparse's normal usage error. Wrap the conversion and raise `argparse.ArgumentTypeError` so invalid user input is reported consistently.\",\"suggestion_code\":\"def _positive_int(value: str) -> int:\\n    try:\\n        parsed = int(value)\\n    except ValueError as exc:\\n        raise argparse.ArgumentTypeError(\\\"must be an integer\\\") from exc\\n    if parsed < 1:\\n        raise argparse.ArgumentTypeError(\\\"must be a positive integer\\\")\\n    return parsed\",\"existing_code\":\"def _positive_int(value: str) -> int:\\n    parsed = int(value)\\n    if parsed < 1:\\n        raise argparse.ArgumentTypeError(\\\"must be a positive integer\\\")\\n    return parsed\",\"start_line\":332,\"end_line\":333,\"thinking\":\"This is a data validation issue in CLI argument parsing. argparse type functions should convert invalid input into ArgumentTypeError; otherwise malformed input escapes as an internal exception.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-7b9e48e2abae",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ceb3e47cd92d-RGS-7b9e48e2abae",
+      "content": "The controller emits `agent_started` only after `_command_runner` returns, so observers never see the agent as started while the potentially long-running command is executing. This makes the run status/event stream misleading and leaves the TUI unable to show an in-progress command before completion.",
+      "finding_id": "RGF-0107",
+      "fingerprint": "8b85cd366a132c1f4bd7ce89141807d81d48d852cc040cbfa13f490fc5aa52eb",
+      "latest_occurrence": {
+        "cell_id": "RGC-818ca3c0010eb49e",
+        "end_line": 170,
+        "finding_id": "RGF-0107",
+        "imprecise": 0,
+        "occurrence_id": 107,
+        "path": "src/review_gauntlet/run_controller.py",
+        "run_id": 94,
+        "start_line": 163
+      },
+      "metadata": "{\"fingerprint\":\"8b85cd366a132c1f4bd7ce89141807d81d48d852cc040cbfa13f490fc5aa52eb\",\"path\":\"src/review_gauntlet/run_controller.py\",\"rule_id\":\"test-evidence\",\"content\":\"The controller emits `agent_started` only after `_command_runner` returns, so observers never see the agent as started while the potentially long-running command is executing. This makes the run status/event stream misleading and leaves the TUI unable to show an in-progress command before completion.\",\"suggestion_code\":\"            self._command_argv = tuple(effective_config.adapter.argv_for_prompt(prompt))\\n            self._emit(\\\"agent_started\\\", argv=list(self._command_argv), step=step_number)\\n            command_result = self._command_runner(\\n                effective_config.adapter,\\n                self.root,\\n                self.store.state_dir,\\n                prompt,\\n            )\\n            self._command_argv = tuple(command_result.argv)\",\"existing_code\":\"            command_result = self._command_runner(\\n                effective_config.adapter,\\n                self.root,\\n                self.store.state_dir,\\n                prompt,\\n            )\\n            self._command_argv = tuple(command_result.argv)\\n            self._emit(\\\"agent_started\\\", argv=command_result.argv, step=step_number)\",\"start_line\":163,\"end_line\":170,\"thinking\":\"Events and snapshots are intended as progress channels. Emitting start after the blocking call means no test currently verifies real-time start/finish ordering around the command execution. The exact helper for deriving argv may differ, but the start event should be emitted before invoking the runner.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_controller.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-7b9e48e2abae",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ceb3e47cd92d-RGS-7b9e48e2abae",
+      "content": "`agent_started` is emitted only after `_command_runner` has returned, so event sinks and the TUI cannot observe that the external command is running while it is actually in progress. This makes the run contract misleading for long-running adapters: observers receive both start and finish only after the subprocess exits. Emit a pre-run event before calling `_command_runner` (or move argv rendering out of the runner so `agent_started` can be emitted before execution).",
+      "finding_id": "RGF-0108",
+      "fingerprint": "b016249c7b8deb332bbfcf3827de9ba407a117871b66db6a812dc882bc76ddfa",
+      "latest_occurrence": {
+        "cell_id": "RGC-e57d4d934b9b550e",
+        "end_line": 170,
+        "finding_id": "RGF-0108",
+        "imprecise": 0,
+        "occurrence_id": 108,
+        "path": "src/review_gauntlet/run_controller.py",
+        "run_id": 94,
+        "start_line": 162
+      },
+      "metadata": "{\"fingerprint\":\"b016249c7b8deb332bbfcf3827de9ba407a117871b66db6a812dc882bc76ddfa\",\"path\":\"src/review_gauntlet/run_controller.py\",\"rule_id\":\"cli-contract\",\"content\":\"`agent_started` is emitted only after `_command_runner` has returned, so event sinks and the TUI cannot observe that the external command is running while it is actually in progress. This makes the run contract misleading for long-running adapters: observers receive both start and finish only after the subprocess exits. Emit a pre-run event before calling `_command_runner` (or move argv rendering out of the runner so `agent_started` can be emitted before execution).\",\"suggestion_code\":\"\",\"existing_code\":\"            self._agent_status = \\\"running\\\"\\n            command_result = self._command_runner(\\n                effective_config.adapter,\\n                self.root,\\n                self.store.state_dir,\\n                prompt,\\n            )\\n            self._command_argv = tuple(command_result.argv)\\n            self._emit(\\\"agent_started\\\", argv=command_result.argv, step=step_number)\",\"start_line\":162,\"end_line\":170,\"thinking\":\"The event name indicates the process has started, but synchronous execution means the current ordering only reports it after completion.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_controller.py",
+      "rule_id": "cli-contract",
+      "session_id": "RGS-7b9e48e2abae",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ceb3e47cd92d-RGS-7b9e48e2abae",
+      "content": "`agent_started` is emitted only after `_command_runner` returns, so observers cannot see the command as started while it is actually running and the event ordering is misleading for long-running adapters. Build or expose the argv before invoking the runner, or rename/reorder this event so progress consumers do not receive a late start event.",
+      "finding_id": "RGF-0109",
+      "fingerprint": "916421b26745e968fc9058199cb08dc82412184372a3a20e2f4a3e7489aca7f6",
+      "latest_occurrence": {
+        "cell_id": "RGC-eaadb43273cd57a0",
+        "end_line": 170,
+        "finding_id": "RGF-0109",
+        "imprecise": 0,
+        "occurrence_id": 109,
+        "path": "src/review_gauntlet/run_controller.py",
+        "run_id": 94,
+        "start_line": 161
+      },
+      "metadata": "{\"fingerprint\":\"916421b26745e968fc9058199cb08dc82412184372a3a20e2f4a3e7489aca7f6\",\"path\":\"src/review_gauntlet/run_controller.py\",\"rule_id\":\"data-validation\",\"content\":\"`agent_started` is emitted only after `_command_runner` returns, so observers cannot see the command as started while it is actually running and the event ordering is misleading for long-running adapters. Build or expose the argv before invoking the runner, or rename/reorder this event so progress consumers do not receive a late start event.\",\"suggestion_code\":\"self._emit(\\\"step_started\\\", step=step_number, prompt=prompt)\\nself._agent_status = \\\"running\\\"\\nself._emit(\\\"agent_started\\\", step=step_number)\\ncommand_result = self._command_runner(\\n    effective_config.adapter,\\n    self.root,\\n    self.store.state_dir,\\n    prompt,\\n)\\nself._command_argv = tuple(command_result.argv)\",\"existing_code\":\"self._emit(\\\"step_started\\\", step=step_number, prompt=prompt)\\nself._agent_status = \\\"running\\\"\\ncommand_result = self._command_runner(\\n    effective_config.adapter,\\n    self.root,\\n    self.store.state_dir,\\n    prompt,\\n)\\nself._command_argv = tuple(command_result.argv)\\nself._emit(\\\"agent_started\\\", argv=command_result.argv, step=step_number)\",\"start_line\":161,\"end_line\":170,\"thinking\":\"The current event name implies the subprocess has started, but it is emitted after the potentially long-running command has already completed. TUI/event sinks relying on this event for progress will lag or show stale state.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_controller.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-7b9e48e2abae",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ceb3e47cd92d-RGS-7b9e48e2abae",
+      "content": "The TUI schedules the full controller run on the Textual UI thread. Because controller.run() can execute long-running external review commands synchronously, the event loop is blocked while a step runs, so documented TUI controls such as q/refresh/Ctrl-C cannot be processed until after the command returns. This breaks the interactive CLI contract for stopping or interrupting a running review from the TUI.",
+      "finding_id": "RGF-0110",
+      "fingerprint": "a1a19eab9366c45de7df7165817e9ddebb424d363fd5a3581a9d878493c4fd51",
+      "latest_occurrence": {
+        "cell_id": "RGC-991f1eaae6ca8e34",
+        "end_line": 72,
+        "finding_id": "RGF-0110",
+        "imprecise": 0,
+        "occurrence_id": 110,
+        "path": "src/review_gauntlet/run_tui.py",
+        "run_id": 94,
+        "start_line": 67
+      },
+      "metadata": "{\"fingerprint\":\"a1a19eab9366c45de7df7165817e9ddebb424d363fd5a3581a9d878493c4fd51\",\"path\":\"src/review_gauntlet/run_tui.py\",\"rule_id\":\"cli-contract\",\"content\":\"The TUI schedules the full controller run on the Textual UI thread. Because controller.run() can execute long-running external review commands synchronously, the event loop is blocked while a step runs, so documented TUI controls such as q/refresh/Ctrl-C cannot be processed until after the command returns. This breaks the interactive CLI contract for stopping or interrupting a running review from the TUI.\",\"suggestion_code\":\"        def on_mount(self) -> None:\\n            self.refresh_view()\\n            self.run_worker(self._run_controller, thread=True)\\n\\n        def _run_controller(self) -> None:\\n            self.call_from_thread(self.exit, self.controller.run())\",\"existing_code\":\"        def on_mount(self) -> None:\\n            self.refresh_view()\\n            self.call_later(self._run_controller)\\n\\n        def _run_controller(self) -> None:\\n            self.exit(self.controller.run())\",\"start_line\":67,\"end_line\":72,\"thinking\":\"call_later keeps the blocking controller.run() on the UI event loop. Running it in a worker thread keeps Textual responsive so key bindings can request stop/interrupt while the run is active.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_tui.py",
+      "rule_id": "cli-contract",
+      "session_id": "RGS-7b9e48e2abae",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ceb3e47cd92d-RGS-7b9e48e2abae",
+      "content": "`validate-verdict` only runs `validate_verdict_json`, so it accepts comments for any `path`. The OCR contract shown in the prompt requires every comment path to equal the active review cell path, but this command has no way to enforce that. A malformed adapter can return a valid verdict for a different file, pass validation, and only fail later in the adapter/session path instead of at the requested validation step.",
+      "finding_id": "RGF-0111",
+      "fingerprint": "b2cfe17c194988530c0061ee6af81411867d06c217e84c8c3c85d3c5dc0ee9f4",
+      "latest_occurrence": {
+        "cell_id": "RGC-98d51e4d6441e1d7",
+        "end_line": 642,
+        "finding_id": "RGF-0111",
+        "imprecise": 0,
+        "occurrence_id": 111,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 97,
+        "start_line": 642
+      },
+      "metadata": "{\"fingerprint\":\"b2cfe17c194988530c0061ee6af81411867d06c217e84c8c3c85d3c5dc0ee9f4\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"cli-contract\",\"content\":\"`validate-verdict` only runs `validate_verdict_json`, so it accepts comments for any `path`. The OCR contract shown in the prompt requires every comment path to equal the active review cell path, but this command has no way to enforce that. A malformed adapter can return a valid verdict for a different file, pass validation, and only fail later in the adapter/session path instead of at the requested validation step.\",\"suggestion_code\":\"def _cmd_validate_verdict(args: argparse.Namespace) -> None:\\n    path = Path(args.path)\\n    expected_comment_path = getattr(args, \\\"expected_path\\\", None)\",\"existing_code\":\"def _cmd_validate_verdict(args: argparse.Namespace) -> None:\\n    path = Path(args.path)\",\"start_line\":642,\"end_line\":642,\"thinking\":\"The CLI contract command should validate the adapter-facing invariants it asks reviewers to satisfy; currently it validates schema only.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "cli-contract",
+      "session_id": "RGS-7b9e48e2abae",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ceb3e47cd92d-RGS-7b9e48e2abae",
+      "content": "The TUI displays the next ready prompt directly from session data without escaping Rich/Textual markup or control sequences. If a prompt contains Rich markup (for example bracketed tags) or terminal control characters, it can alter or corrupt the TUI rendering instead of being shown as literal task text. Escape or render it as plain text before passing it to Static.",
+      "finding_id": "RGF-0112",
+      "fingerprint": "aa27c54685cd750344d32c366849afbf6590b377524814cbda8bc7a42a0db240",
+      "latest_occurrence": {
+        "cell_id": "RGC-8610c7a6f661b70a",
+        "end_line": 117,
+        "finding_id": "RGF-0112",
+        "imprecise": 0,
+        "occurrence_id": 112,
+        "path": "src/review_gauntlet/run_tui.py",
+        "run_id": 97,
+        "start_line": 115
+      },
+      "metadata": "{\"fingerprint\":\"aa27c54685cd750344d32c366849afbf6590b377524814cbda8bc7a42a0db240\",\"path\":\"src/review_gauntlet/run_tui.py\",\"rule_id\":\"data-validation\",\"content\":\"The TUI displays the next ready prompt directly from session data without escaping Rich/Textual markup or control sequences. If a prompt contains Rich markup (for example bracketed tags) or terminal control characters, it can alter or corrupt the TUI rendering instead of being shown as literal task text. Escape or render it as plain text before passing it to Static.\",\"suggestion_code\":\"def _plain_text(value: object) -> str:\\n    return str(value).replace(\\\"\\\\x1b\\\", \\\"\\\")\\n\\n\\ndef _task_text(snapshot: RunSnapshot) -> str:\\n    prompt = _plain_text(snapshot.next_ready_prompt or \\\"No ready task\\\")\\n    return f\\\"Current task\\\\n{prompt}\\\"\",\"existing_code\":\"def _task_text(snapshot: RunSnapshot) -> str:\\n    prompt = snapshot.next_ready_prompt or \\\"No ready task\\\"\\n    return f\\\"Current task\\\\n{prompt}\\\"\",\"start_line\":115,\"end_line\":117,\"thinking\":\"next_ready_prompt originates from review session data and can include arbitrary generated text; rendering it through Textual Static as a string allows markup/control interpretation unless normalized.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_tui.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-7b9e48e2abae",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ceb3e47cd92d-RGS-7b9e48e2abae",
+      "content": "The TUI tests skip entirely when the optional Textual dependency is missing, so CI can pass without exercising create_run_app(), refresh_view(), or the worker/exit path even though this module is part of the shipped runtime behavior. This leaves regressions in the text-mode-to-TUI integration undetected unless the local environment happens to have the optional extra installed. Add non-optional unit coverage by monkeypatching the textual modules used here, or ensure the TUI extra is installed in the test environment that owns these assertions.",
+      "finding_id": "RGF-0113",
+      "fingerprint": "ee7810c638fbf11a84756f2e29f30ec31ee98bd77a40d0e878e51b97791f66dc",
+      "latest_occurrence": {
+        "cell_id": "RGC-c1ad423b70f325a0",
+        "end_line": 30,
+        "finding_id": "RGF-0113",
+        "imprecise": 0,
+        "occurrence_id": 113,
+        "path": "src/review_gauntlet/run_tui.py",
+        "run_id": 97,
+        "start_line": 24
+      },
+      "metadata": "{\"fingerprint\":\"ee7810c638fbf11a84756f2e29f30ec31ee98bd77a40d0e878e51b97791f66dc\",\"path\":\"src/review_gauntlet/run_tui.py\",\"rule_id\":\"test-evidence\",\"content\":\"The TUI tests skip entirely when the optional Textual dependency is missing, so CI can pass without exercising create_run_app(), refresh_view(), or the worker/exit path even though this module is part of the shipped runtime behavior. This leaves regressions in the text-mode-to-TUI integration undetected unless the local environment happens to have the optional extra installed. Add non-optional unit coverage by monkeypatching the textual modules used here, or ensure the TUI extra is installed in the test environment that owns these assertions.\",\"suggestion_code\":\"    try:\\n        from textual.app import App, ComposeResult\\n        from textual.containers import Horizontal, Vertical\\n        from textual.widgets import Footer, Header, Static\\n    except ImportError as exc:\\n        raise RuntimeError(TUI_FALLBACK_WARNING) from exc\",\"existing_code\":\"    try:\\n        from textual.app import App, ComposeResult\\n        from textual.containers import Horizontal, Vertical\\n        from textual.widgets import Footer, Header, Static\\n    except ImportError as exc:\\n        raise RuntimeError(TUI_FALLBACK_WARNING) from exc\",\"start_line\":24,\"end_line\":30,\"thinking\":\"Selected rule is test-evidence. tests/test_run_tui.py skips the create/run coverage when textual_available() is false, so the behavior in this file can be untested in default environments without the optional extra.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_tui.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-7b9e48e2abae",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ceb3e47cd92d-RGS-7b9e48e2abae",
+      "content": "Event payload values are rendered without the same plain-text normalization used for prompts, even though step_started events include the review prompt and other payload fields can come from external adapter data. Control characters or Rich/Textual markup in those values can corrupt the TUI display or be interpreted as markup. Normalize keys and values with _plain_text before concatenating them into the Static renderable.",
+      "finding_id": "RGF-0114",
+      "fingerprint": "441f9170a7d538b4955ccd4bf4d6317cf5246c5cc739725c6162b435c28e8f30",
+      "latest_occurrence": {
+        "cell_id": "RGC-8610c7a6f661b70a",
+        "end_line": 143,
+        "finding_id": "RGF-0114",
+        "imprecise": 0,
+        "occurrence_id": 114,
+        "path": "src/review_gauntlet/run_tui.py",
+        "run_id": 99,
+        "start_line": 142
+      },
+      "metadata": "{\"fingerprint\":\"441f9170a7d538b4955ccd4bf4d6317cf5246c5cc739725c6162b435c28e8f30\",\"path\":\"src/review_gauntlet/run_tui.py\",\"rule_id\":\"data-validation\",\"content\":\"Event payload values are rendered without the same plain-text normalization used for prompts, even though step_started events include the review prompt and other payload fields can come from external adapter data. Control characters or Rich/Textual markup in those values can corrupt the TUI display or be interpreted as markup. Normalize keys and values with _plain_text before concatenating them into the Static renderable.\",\"suggestion_code\":\"        payload = \\\" \\\".join(\\n            f\\\"{_plain_text(key)}={_plain_text(value)}\\\"\\n            for key, value in event.payload.items()\\n        )\\n        lines.append(\\n            f\\\"{_plain_text(event.timestamp)} {_plain_text(event.type)} {payload}\\\".rstrip()\\n        )\",\"existing_code\":\"        payload = \\\" \\\".join(f\\\"{key}={value}\\\" for key, value in event.payload.items())\\n        lines.append(f\\\"{event.timestamp} {event.type} {payload}\\\".rstrip())\",\"start_line\":142,\"end_line\":143,\"thinking\":\"RunController emits the prompt in event.payload at run_controller.py:160, while this file only sanitizes snapshot.next_ready_prompt in _task_text. The events panel should apply the same validation boundary.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_tui.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-7b9e48e2abae",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ceb3e47cd92d-RGS-7b9e48e2abae",
+      "content": "The TUI sanitizes the current task text, but other user- or adapter-controlled strings are rendered directly. command_argv and event payload values can contain Textual/Rich markup or control characters, which may alter the display or hide content in the TUI. Apply the same plain-text normalization used for task prompts before rendering argv and event payloads.",
+      "finding_id": "RGF-0115",
+      "fingerprint": "ad845545b67c7f693bebaaf99e6c8831ab9831cf8127560feace522a0025c209",
+      "latest_occurrence": {
+        "cell_id": "RGC-c1ad423b70f325a0",
+        "end_line": 144,
+        "finding_id": "RGF-0115",
+        "imprecise": 0,
+        "occurrence_id": 115,
+        "path": "src/review_gauntlet/run_tui.py",
+        "run_id": 99,
+        "start_line": 130
+      },
+      "metadata": "{\"fingerprint\":\"ad845545b67c7f693bebaaf99e6c8831ab9831cf8127560feace522a0025c209\",\"path\":\"src/review_gauntlet/run_tui.py\",\"rule_id\":\"test-evidence\",\"content\":\"The TUI sanitizes the current task text, but other user- or adapter-controlled strings are rendered directly. command_argv and event payload values can contain Textual/Rich markup or control characters, which may alter the display or hide content in the TUI. Apply the same plain-text normalization used for task prompts before rendering argv and event payloads.\",\"suggestion_code\":\"def _agent_text(snapshot: RunSnapshot) -> str:\\n    argv = _plain_text(\\\" \\\".join(snapshot.command_argv)) if snapshot.command_argv else \\\"n/a\\\"\\n    return (\\n        \\\"Agent\\\\n\\\"\\n        f\\\"status={_plain_text(snapshot.agent_status)} step={snapshot.step} \\\"\\n        f\\\"elapsed={snapshot.elapsed_seconds:.1f}s\\\\nargv={argv}\\\"\\n    )\\n\\n\\ndef _events_text(events: tuple[RunEvent, ...]) -> str:\\n    lines = [\\\"Events\\\"]\\n    for event in events[-12:]:\\n        payload = \\\" \\\".join(\\n            f\\\"{_plain_text(key)}={_plain_text(value)}\\\" for key, value in event.payload.items()\\n        )\\n        lines.append(\\n            f\\\"{event.timestamp} {_plain_text(event.type)} {payload}\\\".rstrip()\\n        )\\n    return \\\"\\\\n\\\".join(lines)\",\"existing_code\":\"def _agent_text(snapshot: RunSnapshot) -> str:\\n    argv = \\\" \\\".join(snapshot.command_argv) if snapshot.command_argv else \\\"n/a\\\"\\n    return (\\n        \\\"Agent\\\\n\\\"\\n        f\\\"status={snapshot.agent_status} step={snapshot.step} \\\"\\n        f\\\"elapsed={snapshot.elapsed_seconds:.1f}s\\\\nargv={argv}\\\"\\n    )\\n\\n\\ndef _events_text(events: tuple[RunEvent, ...]) -> str:\\n    lines = [\\\"Events\\\"]\\n    for event in events[-12:]:\\n        payload = \\\" \\\".join(f\\\"{key}={value}\\\" for key, value in event.payload.items())\\n        lines.append(f\\\"{event.timestamp} {event.type} {payload}\\\".rstrip())\\n    return \\\"\\\\n\\\".join(lines)\",\"start_line\":130,\"end_line\":144,\"thinking\":\"_task_text explicitly escapes markup/control characters, but adjacent TUI panels do not. These values can originate from config, adapter output, or runtime events and are displayed as Textual Static strings.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_tui.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-7b9e48e2abae",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ceb3e47cd92d-RGS-7b9e48e2abae",
+      "content": "The TUI renders `snapshot.command_argv` without applying the same plain-text sanitization used for prompts and event payloads. Because command adapter argv values can come from configuration, a value containing Textual/Rich markup such as `[red]...[/red]` or terminal control characters can alter the UI rendering instead of being displayed literally.",
+      "finding_id": "RGF-0116",
+      "fingerprint": "9206c8ef6c9f3780e7524d176293d9680e58f29736f73683fad7bfec7930e26c",
+      "latest_occurrence": {
+        "cell_id": "RGC-8610c7a6f661b70a",
+        "end_line": 135,
+        "finding_id": "RGF-0116",
+        "imprecise": 0,
+        "occurrence_id": 116,
+        "path": "src/review_gauntlet/run_tui.py",
+        "run_id": 100,
+        "start_line": 131
+      },
+      "metadata": "{\"fingerprint\":\"9206c8ef6c9f3780e7524d176293d9680e58f29736f73683fad7bfec7930e26c\",\"path\":\"src/review_gauntlet/run_tui.py\",\"rule_id\":\"data-validation\",\"content\":\"The TUI renders `snapshot.command_argv` without applying the same plain-text sanitization used for prompts and event payloads. Because command adapter argv values can come from configuration, a value containing Textual/Rich markup such as `[red]...[/red]` or terminal control characters can alter the UI rendering instead of being displayed literally.\",\"suggestion_code\":\"    argv = (\\n        \\\" \\\".join(_plain_text(argument) for argument in snapshot.command_argv)\\n        if snapshot.command_argv\\n        else \\\"n/a\\\"\\n    )\\n    return (\\n        \\\"Agent\\\\n\\\"\\n        f\\\"status={_plain_text(snapshot.agent_status)} step={snapshot.step} \\\"\\n        f\\\"elapsed={snapshot.elapsed_seconds:.1f}s\\\\nargv={argv}\\\"\\n    )\",\"existing_code\":\"    argv = \\\" \\\".join(snapshot.command_argv) if snapshot.command_argv else \\\"n/a\\\"\\n    return (\\n        \\\"Agent\\\\n\\\"\\n        f\\\"status={snapshot.agent_status} step={snapshot.step} \\\"\\n        f\\\"elapsed={snapshot.elapsed_seconds:.1f}s\\\\nargv={argv}\\\"\\n    )\",\"start_line\":131,\"end_line\":135,\"thinking\":\"Other dynamic TUI fields use _plain_text before rendering; argv should follow the same data-validation boundary.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_tui.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-7b9e48e2abae",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ceb3e47cd92d-RGS-7b9e48e2abae",
+      "content": "Coverage/findings keys and values are rendered directly in the Textual/Rich view, unlike prompts/events/argv which pass through _plain_text. If a session status contains Rich markup or control characters in these fields, the TUI can render misleading formatting or unreadable control output. Sanitize both keys and values through the same plain-text helper before joining them.",
+      "finding_id": "RGF-0117",
+      "fingerprint": "f7bf8cd42782c993276cf6c4fffd2a93e7007b0f68c0ae048e68926bcb2df5cb",
+      "latest_occurrence": {
+        "cell_id": "RGC-8610c7a6f661b70a",
+        "end_line": 156,
+        "finding_id": "RGF-0117",
+        "imprecise": 0,
+        "occurrence_id": 117,
+        "path": "src/review_gauntlet/run_tui.py",
+        "run_id": 101,
+        "start_line": 156
+      },
+      "metadata": "{\"fingerprint\":\"f7bf8cd42782c993276cf6c4fffd2a93e7007b0f68c0ae048e68926bcb2df5cb\",\"path\":\"src/review_gauntlet/run_tui.py\",\"rule_id\":\"data-validation\",\"content\":\"Coverage/findings keys and values are rendered directly in the Textual/Rich view, unlike prompts/events/argv which pass through _plain_text. If a session status contains Rich markup or control characters in these fields, the TUI can render misleading formatting or unreadable control output. Sanitize both keys and values through the same plain-text helper before joining them.\",\"suggestion_code\":\"    return \\\"\\\\n\\\".join(\\n        f\\\"{_plain_text(key)}: {_plain_text(value)}\\\" for key, value in sorted(counts.items())\\n    )\",\"existing_code\":\"    return \\\"\\\\n\\\".join(f\\\"{key}: {value}\\\" for key, value in sorted(counts.items()))\",\"start_line\":156,\"end_line\":156,\"thinking\":\"run_tui.py already treats next_ready_prompt, command argv, and event payload as untrusted display data via _plain_text; coverage/findings are also status-derived display data and should receive the same validation/sanitization.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_tui.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-7b9e48e2abae",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ceb3e47cd92d-RGS-7b9e48e2abae",
+      "content": "Ctrl-C in the TUI exits with a hand-built interrupted result that omits the active session_id and the standard error field returned by the non-TUI KeyboardInterrupt path. This makes `review-gauntlet run` return different JSON shapes for the same interrupt depending on whether stdout is a TTY, violating the CLI contract and making callers unable to identify the interrupted session from TUI output.",
+      "finding_id": "RGF-0118",
+      "fingerprint": "66a7afafe762c750be95aab78f5c713b4fee2033cfec63c52670e2da5057c5e1",
+      "latest_occurrence": {
+        "cell_id": "RGC-991f1eaae6ca8e34",
+        "end_line": 82,
+        "finding_id": "RGF-0118",
+        "imprecise": 0,
+        "occurrence_id": 118,
+        "path": "src/review_gauntlet/run_tui.py",
+        "run_id": 106,
+        "start_line": 80
+      },
+      "metadata": "{\"fingerprint\":\"66a7afafe762c750be95aab78f5c713b4fee2033cfec63c52670e2da5057c5e1\",\"path\":\"src/review_gauntlet/run_tui.py\",\"rule_id\":\"cli-contract\",\"content\":\"Ctrl-C in the TUI exits with a hand-built interrupted result that omits the active session_id and the standard error field returned by the non-TUI KeyboardInterrupt path. This makes `review-gauntlet run` return different JSON shapes for the same interrupt depending on whether stdout is a TTY, violating the CLI contract and making callers unable to identify the interrupted session from TUI output.\",\"suggestion_code\":\"        def action_interrupt(self) -> None:\\n            self.controller.interrupt()\",\"existing_code\":\"        def action_interrupt(self) -> None:\\n            self.controller.interrupt()\\n            self.exit({\\\"completed\\\": False, \\\"reason\\\": \\\"interrupted\\\", \\\"steps\\\": [], \\\"step_count\\\": 0})\",\"start_line\":80,\"end_line\":82,\"thinking\":\"Non-TUI interrupts are normalized by _interrupted_run_result in cli.py or RunController._interrupted_result, both include session_id and error. The TUI path bypasses that normalization.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_tui.py",
+      "rule_id": "cli-contract",
+      "session_id": "RGS-7b9e48e2abae",
+      "state": "accepted_risk"
+    },
+    {
+      "checkpoint_id": "RGC-ceb3e47cd92d-RGS-7b9e48e2abae",
+      "content": "Ctrl-C exits the TUI immediately while the controller worker thread may still be running the current command. This can make `review-gauntlet run` report an interrupted result even though the agent subprocess continues mutating the session in the background, which is especially risky for a review orchestration command. Wait for the controller worker to finish after requesting interruption, or make the controller/command runner actually terminate the in-flight command before returning the interrupted result.",
+      "finding_id": "RGF-0119",
+      "fingerprint": "cc20cbe8efe3ac585f4aaab9a59ce00d7698870fe4075a770f6e895ae207c9de",
+      "latest_occurrence": {
+        "cell_id": "RGC-c1ad423b70f325a0",
+        "end_line": 82,
+        "finding_id": "RGF-0119",
+        "imprecise": 0,
+        "occurrence_id": 119,
+        "path": "src/review_gauntlet/run_tui.py",
+        "run_id": 106,
+        "start_line": 80
+      },
+      "metadata": "{\"fingerprint\":\"cc20cbe8efe3ac585f4aaab9a59ce00d7698870fe4075a770f6e895ae207c9de\",\"path\":\"src/review_gauntlet/run_tui.py\",\"rule_id\":\"test-evidence\",\"content\":\"Ctrl-C exits the TUI immediately while the controller worker thread may still be running the current command. This can make `review-gauntlet run` report an interrupted result even though the agent subprocess continues mutating the session in the background, which is especially risky for a review orchestration command. Wait for the controller worker to finish after requesting interruption, or make the controller/command runner actually terminate the in-flight command before returning the interrupted result.\",\"suggestion_code\":\"        def action_interrupt(self) -> None:\\n            self.controller.interrupt()\\n            self.notify(\\\"Interrupt requested; waiting for the current command to stop.\\\")\",\"existing_code\":\"        def action_interrupt(self) -> None:\\n            self.controller.interrupt()\\n            self.exit({\\\"completed\\\": False, \\\"reason\\\": \\\"interrupted\\\", \\\"steps\\\": [], \\\"step_count\\\": 0})\",\"start_line\":80,\"end_line\":82,\"thinking\":\"The worker launched at on_mount runs controller.run() in a thread. Exiting the app from the UI thread does not prove that worker or its command runner has stopped, so the returned result can diverge from actual side effects.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_tui.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-7b9e48e2abae",
+      "state": "accepted_risk"
+    }
+  ],
+  "schema_version": 1
+}

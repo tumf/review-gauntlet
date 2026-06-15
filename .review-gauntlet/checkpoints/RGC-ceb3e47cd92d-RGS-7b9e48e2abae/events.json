@@ -1,0 +1,312 @@
+{
+  "checkpoint_id": "RGC-ceb3e47cd92d-RGS-7b9e48e2abae",
+  "events": [
+    {
+      "checkpoint_id": "RGC-ceb3e47cd92d-RGS-7b9e48e2abae",
+      "created_at": "2026-06-15 01:46:13",
+      "event_id": 218,
+      "finding_id": "RGF-0106",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Valid: _positive_int lets ValueError escape for non-integer argparse input",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ceb3e47cd92d-RGS-7b9e48e2abae",
+      "created_at": "2026-06-15 01:46:13",
+      "event_id": 219,
+      "finding_id": "RGF-0109",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Duplicate of RGF-0108/RGF-0107 agent_started ordering issue; keep one representative finding",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ceb3e47cd92d-RGS-7b9e48e2abae",
+      "created_at": "2026-06-15 01:46:13",
+      "event_id": 220,
+      "finding_id": "RGF-0108",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Valid: agent_started is emitted only after the blocking command runner returns",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ceb3e47cd92d-RGS-7b9e48e2abae",
+      "created_at": "2026-06-15 01:46:13",
+      "event_id": 221,
+      "finding_id": "RGF-0107",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Duplicate of RGF-0108 agent_started ordering issue; no separate finding needed",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ceb3e47cd92d-RGS-7b9e48e2abae",
+      "created_at": "2026-06-15 01:46:13",
+      "event_id": 222,
+      "finding_id": "RGF-0110",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Already fixed in current code: run_tui uses run_worker(thread=True) and call_from_thread",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ceb3e47cd92d-RGS-7b9e48e2abae",
+      "created_at": "2026-06-15 01:48:22",
+      "event_id": 223,
+      "finding_id": "RGF-0106",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Wrapped _positive_int conversion errors in argparse.ArgumentTypeError and added CLI regression test.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ceb3e47cd92d-RGS-7b9e48e2abae",
+      "created_at": "2026-06-15 01:49:44",
+      "event_id": 224,
+      "finding_id": "RGF-0108",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Emitted agent_started before running command_runner and added regression coverage for event ordering.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ceb3e47cd92d-RGS-7b9e48e2abae",
+      "created_at": "2026-06-15 01:51:53",
+      "event_id": 225,
+      "finding_id": "RGF-0106",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ceb3e47cd92d-RGS-7b9e48e2abae",
+      "created_at": "2026-06-15 01:51:53",
+      "event_id": 226,
+      "finding_id": "RGF-0108",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ceb3e47cd92d-RGS-7b9e48e2abae",
+      "created_at": "2026-06-15 02:00:41",
+      "event_id": 227,
+      "finding_id": "RGF-0111",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "validate-verdict validates schema but has no expected path argument, so it cannot enforce the prompt contract that every comment.path equals the active review cell path.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ceb3e47cd92d-RGS-7b9e48e2abae",
+      "created_at": "2026-06-15 02:00:41",
+      "event_id": 228,
+      "finding_id": "RGF-0113",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "tests/test_run_tui.py skips TUI runtime coverage when optional Textual is absent, leaving shipped run_tui behavior untested in default environments without the extra.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ceb3e47cd92d-RGS-7b9e48e2abae",
+      "created_at": "2026-06-15 02:00:41",
+      "event_id": 229,
+      "finding_id": "RGF-0112",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "run_tui renders next_ready_prompt directly into Static text without normalizing markup/control sequences, so arbitrary prompt text can affect TUI rendering.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ceb3e47cd92d-RGS-7b9e48e2abae",
+      "created_at": "2026-06-15 02:03:29",
+      "event_id": 230,
+      "finding_id": "RGF-0111",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Added --expected-path validation for validate-verdict, updated file-json prompt command, and covered mismatched comment paths with tests.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ceb3e47cd92d-RGS-7b9e48e2abae",
+      "created_at": "2026-06-15 02:08:44",
+      "event_id": 231,
+      "finding_id": "RGF-0112",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Escaped task prompt markup/control characters before TUI rendering and added regression coverage.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ceb3e47cd92d-RGS-7b9e48e2abae",
+      "created_at": "2026-06-15 02:10:08",
+      "event_id": 232,
+      "finding_id": "RGF-0113",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Added rich/textual to the dev dependency group so default uv sync --all-groups CI installs TUI dependencies and executes TUI tests instead of skipping them.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ceb3e47cd92d-RGS-7b9e48e2abae",
+      "created_at": "2026-06-15 02:12:54",
+      "event_id": 233,
+      "finding_id": "RGF-0112",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ceb3e47cd92d-RGS-7b9e48e2abae",
+      "created_at": "2026-06-15 02:12:54",
+      "event_id": 234,
+      "finding_id": "RGF-0111",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ceb3e47cd92d-RGS-7b9e48e2abae",
+      "created_at": "2026-06-15 02:12:54",
+      "event_id": 235,
+      "finding_id": "RGF-0113",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ceb3e47cd92d-RGS-7b9e48e2abae",
+      "created_at": "2026-06-15 02:13:54",
+      "event_id": 236,
+      "finding_id": "RGF-0114",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "TUI events render adapter/user-controlled payload values without _plain_text normalization; run_controller emits the full prompt in step_started payload.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ceb3e47cd92d-RGS-7b9e48e2abae",
+      "created_at": "2026-06-15 02:14:22",
+      "event_id": 237,
+      "finding_id": "RGF-0115",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Duplicate of RGF-0114; same run_tui.py normalization issue covers argv/event payload rendering.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ceb3e47cd92d-RGS-7b9e48e2abae",
+      "created_at": "2026-06-15 02:16:24",
+      "event_id": 238,
+      "finding_id": "RGF-0114",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Normalized TUI event keys, values, timestamps, and event types with _plain_text before rendering; make check passes",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ceb3e47cd92d-RGS-7b9e48e2abae",
+      "created_at": "2026-06-15 02:18:34",
+      "event_id": 239,
+      "finding_id": "RGF-0114",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ceb3e47cd92d-RGS-7b9e48e2abae",
+      "created_at": "2026-06-15 02:19:53",
+      "event_id": 240,
+      "finding_id": "RGF-0116",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Confirmed: run_tui._agent_text renders command_argv and agent_status without _plain_text while other dynamic TUI fields sanitize markup/control characters.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ceb3e47cd92d-RGS-7b9e48e2abae",
+      "created_at": "2026-06-15 02:22:53",
+      "event_id": 241,
+      "finding_id": "RGF-0116",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Sanitized TUI agent status and command argv with _plain_text before rendering; added regression coverage.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ceb3e47cd92d-RGS-7b9e48e2abae",
+      "created_at": "2026-06-15 02:24:44",
+      "event_id": 242,
+      "finding_id": "RGF-0116",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ceb3e47cd92d-RGS-7b9e48e2abae",
+      "created_at": "2026-06-15 02:26:07",
+      "event_id": 243,
+      "finding_id": "RGF-0117",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "run_tui.py sanitizes prompts/events/argv with _plain_text, but _counts_text renders status-derived coverage/finding keys and values directly; this is a real display-sanitization gap.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ceb3e47cd92d-RGS-7b9e48e2abae",
+      "created_at": "2026-06-15 02:28:28",
+      "event_id": 244,
+      "finding_id": "RGF-0117",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Sanitized coverage and finding count keys/values through _plain_text in run_tui counts rendering; focused TUI tests and make check passed.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ceb3e47cd92d-RGS-7b9e48e2abae",
+      "created_at": "2026-06-15 02:30:14",
+      "event_id": 245,
+      "finding_id": "RGF-0117",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ceb3e47cd92d-RGS-7b9e48e2abae",
+      "created_at": "2026-06-15 02:43:23",
+      "event_id": 246,
+      "finding_id": "RGF-0118",
+      "from_state": "untriaged",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "Known TUI Ctrl-C behavior accepted for now: the interrupted result is returned promptly, and changing worker termination semantics needs separate design work.",
+      "to_state": "accepted_risk"
+    },
+    {
+      "checkpoint_id": "RGC-ceb3e47cd92d-RGS-7b9e48e2abae",
+      "created_at": "2026-06-15 02:43:23",
+      "event_id": 247,
+      "finding_id": "RGF-0119",
+      "from_state": "untriaged",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "Known TUI Ctrl-C behavior accepted for now: background command cancellation semantics require broader controller design, not a stale-review blocker.",
+      "to_state": "accepted_risk"
+    }
+  ],
+  "schema_version": 1
+}
