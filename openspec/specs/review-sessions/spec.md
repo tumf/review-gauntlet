@@ -145,7 +145,17 @@ When the same finding is detected while it is `fixed_pending_verification`, the 
 
 ### Requirement: Status and findings commands SHALL expose actionable session state
 
-`review-gauntlet run` SHALL continue to orchestrate active sessions without changing task selection, command execution, result payloads, interruption behavior, JSON output behavior, non-TUI behavior, fallback behavior, or session finalization semantics.
+`status` and `finalize` SHALL tolerate malformed persisted finding-event metadata without crashing. Malformed terminal-decision metadata SHALL be surfaced conservatively as a blocker so completion cannot hide invalid waiver or accepted-risk state.
+
+`review-gauntlet finalize` SHALL close a complete active review session into deterministic latest-only checkpoint files that are suitable for Git diff review and safe as the next review base. Finalization SHALL only write checkpoint files when completion blockers are absent, when review-universe files are clean relative to `HEAD`, and when current `HEAD` can be resolved to a commit. The checkpoint SHALL be derived from the existing durable session ledger, SHALL include review coverage, findings, triage events, and review-base metadata, and SHALL NOT replace the ledger as the source of truth before successful finalization.
+
+Dirty review-universe blockers SHALL identify that review-universe files are dirty relative to `HEAD` without including individual dirty file paths in `finalize_blockers`.
+
+When `review-gauntlet run` detects that an agent step successfully finalized the active session, the run workflow SHALL attempt a checkpoint-only git commit for the generated latest checkpoint artifacts before reporting final completion. The checkpoint commit SHALL stage only `.review-gauntlet/checkpoints/latest` and concrete generated checkpoint files. The run workflow SHALL NOT stage or commit product/source files, unrelated review artifacts, or unrelated dirty worktree changes. If checkpoint artifacts have no diff, the run workflow SHALL report a successful checkpoint-commit no-op. If unrelated dirty worktree state prevents a safe checkpoint-only commit, the run workflow SHALL surface a structured blocker instead of silently claiming full completion. Standalone `review-gauntlet finalize` and `finalize --merge` SHALL keep their existing commit and merge semantics.
+
+<!-- Expected canonical result after archive: the canonical review-sessions spec will require normal `review-gauntlet run` finalization to commit generated latest checkpoint files with checkpoint-only staging, while leaving standalone finalize and merge-finalize behavior unchanged. -->
+
+`review-gauntlet run` SHALL continue to orchestrate active sessions without changing task selection, command execution, result payloads, interruption behavior, JSON output behavior, non-TUI behavior, fallback behavior, or session finalization semantics except for the run-only post-finalize checkpoint commit attempt described above.
 
 Interactive `run` TUI presentation SHALL render a compact dashboard that is faithful to the target user-facing structure: a `Review Gauntlet` header, a `Next to finalize` checklist, side-by-side `Agent` and `Session` summary panels where terminal width allows, an `Activity` timeline, and compact implemented controls. The TUI SHALL derive a human-facing dashboard view model from raw controller and session state before rendering. That view model SHALL include header fields, finalize checklist rows, agent summary fields, session summary fields, and normalized activity rows. TUI widgets SHALL render the view model rather than directly dumping raw prompt text, raw argv payloads, raw event payloads, raw full session IDs, raw finalize action names, or raw blocker lists.
 
@@ -159,9 +169,55 @@ The TUI SHALL replace standalone `Session metrics`, standalone `Findings`, and s
 
 The Activity panel SHALL mix normalized Review Gauntlet events and bounded agent stdout/stderr tail rows in one timeline. Activity row kinds SHALL be human labels such as `event`, `stdout`, and `stderr`. The TUI MAY synthesize display-only activity rows such as `gate started` from the current view model, but it SHALL NOT synthesize quiet-running agent heartbeat rows such as `agent alive no output for 2m00s` in Activity. When an agent is quiet but still running, the TUI SHALL keep liveness visible in the Header and Agent summary instead of adding or removing Activity rows. Agent output displayed in Activity SHALL remain bounded, line-oriented, sanitized, truncated, and redacted, and full output artifacts SHALL remain the audit source of truth.
 
-The TUI SHALL avoid user-facing internal action names such as `run_review` and `resolve_finalize_blockers`. It SHALL map those internal actions to human wording such as `waiting`, `ready to finalize`, `waits for coverage`, `checked after review/findings`, or the relevant checklist title.
-
 <!-- Expected canonical result after archive: the canonical review-sessions spec will define that quiet-running liveness is displayed in Header and Agent summary, while Activity remains stable by omitting synthetic quiet heartbeat rows. -->
+
+#### Scenario: Successful run finalization commits checkpoint artifacts
+
+**Given**: an active review session with complete reviewed coverage and all live findings closed
+**And**: the command adapter invoked by `review-gauntlet run` finalizes the session successfully
+**And**: generated latest checkpoint files differ from `HEAD`
+**And**: no unrelated dirty worktree files are present
+**When**: the developer runs `review-gauntlet run --format json`
+**Then**: `.review-gauntlet/checkpoints/latest/status.json` is written
+**And**: `.review-gauntlet/checkpoints/latest/findings.json` is written
+**And**: `.review-gauntlet/checkpoints/latest/events.json` is written
+**And**: `.review-gauntlet/checkpoints/latest/summary.md` is written
+**And**: the run workflow creates a git commit containing the latest checkpoint artifacts
+**And**: the JSON result reports that checkpoint commit was attempted and created
+**And**: the JSON result includes the checkpoint commit SHA
+
+#### Scenario: Run checkpoint commit stages only checkpoint paths
+
+**Given**: an active review session that finalizes during `review-gauntlet run`
+**And**: a non-checkpoint source file has dirty staged, unstaged, deleted, renamed, or untracked changes after finalization
+**When**: the run workflow reaches checkpoint commit handling
+**Then**: the run workflow does not stage or commit the non-checkpoint source file
+**And**: the run result surfaces a structured checkpoint commit blocker
+**And**: the blocker makes the incomplete checkpoint commit state visible
+
+#### Scenario: Run checkpoint commit no-ops when checkpoint diff is empty
+
+**Given**: an active review session that finalizes during `review-gauntlet run`
+**And**: the latest checkpoint artifacts match `HEAD` after finalization
+**When**: the run workflow reaches checkpoint commit handling
+**Then**: no git commit is created
+**And**: the run result reports that checkpoint commit was attempted but not created
+**And**: the run result includes a no-op reason such as `no_checkpoint_diff`
+**And**: the finalized session remains finalized
+
+#### Scenario: Standalone finalize behavior remains unchanged
+
+**Given**: an active review session eligible for finalization
+**When**: the developer runs `review-gauntlet finalize --format json`
+**Then**: the command writes latest checkpoint files according to existing finalize semantics
+**And**: the standalone finalize command does not create the new run-only checkpoint commit
+
+#### Scenario: Merge finalization is not double-committed
+
+**Given**: an active Git-worktree-backed review session eligible for merge finalization
+**When**: the developer runs `review-gauntlet finalize --merge --format json`
+**Then**: the existing session-worktree commit and merge behavior remains authoritative
+**And**: the new normal-run checkpoint commit path does not create an additional duplicate checkpoint commit
 
 #### Scenario: Run TUI renders the mock-aligned dashboard structure
 
@@ -182,7 +238,7 @@ The TUI SHALL avoid user-facing internal action names such as `run_review` and `
 **And**: the second header line includes the shortened session id, `agent opencode`, a quiet liveness label, and timeout label
 **And**: the header does not render raw argv, a full session id, or repeated last-output and quiet labels for the same liveness signal
 
-#### Scenario: Run TUI renders Next to finalize as a checklist
+#### Scenario: Run TUI renders next-to-finalize checklist without gate numbering
 
 **Given**: an active session with 0 reviewed cells and 9 pending cells
 **And**: no open findings have been recorded yet
