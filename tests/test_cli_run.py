@@ -5,7 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from review_gauntlet.cli import main
+from review_gauntlet.cli import main, run_session_command_step_for_testing
+from review_gauntlet.config import CommandAdapterConfig
 from review_gauntlet.review_cells import CellState
 from review_gauntlet.session_store import SessionStore
 
@@ -263,6 +264,90 @@ def test_run_reports_max_steps_exhaustion(
     assert result["reason"] == "max_steps_exhausted"
     assert result["step_count"] == 1
     assert result["max_steps"] == 1
+
+
+def test_run_session_command_expands_repo_root_state_dir_and_defaults_cwd(
+    tmp_path: Path,
+) -> None:
+    state_dir = tmp_path / ".review-gauntlet"
+    state_dir.mkdir()
+    config = CommandAdapterConfig(
+        type="command",
+        command=sys.executable,
+        args=(
+            "-c",
+            "import json, os, sys; "
+            "print(json.dumps({'cwd': os.getcwd(), 'repo': sys.argv[1], "
+            "'state': sys.argv[2]}))",
+            "{repo_root}",
+            "{state_dir}",
+        ),
+        timeout_seconds=5,
+    )
+
+    result = run_session_command_step_for_testing(
+        config=config,
+        root=tmp_path,
+        state_dir=state_dir,
+        prompt="prompt",
+    )
+
+    assert result.failure is None
+    payload = json.loads(result.stdout)
+    assert payload == {
+        "cwd": str(tmp_path),
+        "repo": str(tmp_path),
+        "state": str(state_dir),
+    }
+    assert result.cwd == str(tmp_path)
+    assert result.stdout_artifact is not None
+    assert Path(result.stdout_artifact).is_relative_to(state_dir)
+
+
+def test_run_session_command_resolves_nested_cwd_and_rejects_escape(
+    tmp_path: Path,
+) -> None:
+    state_dir = tmp_path / ".review-gauntlet"
+    state_dir.mkdir()
+    nested = tmp_path / "nested"
+    nested.mkdir()
+    valid = CommandAdapterConfig(
+        type="command",
+        command=sys.executable,
+        args=("-c", "import os; print(os.getcwd())"),
+        cwd="nested",
+        timeout_seconds=5,
+    )
+
+    valid_result = run_session_command_step_for_testing(
+        config=valid,
+        root=tmp_path,
+        state_dir=state_dir,
+        prompt="prompt",
+    )
+
+    assert valid_result.failure is None
+    assert valid_result.cwd == str(nested.resolve())
+    assert valid_result.stdout == f"{nested.resolve()}\n"
+
+    escaping = CommandAdapterConfig(
+        type="command",
+        command=sys.executable,
+        args=("-c", "print('bad')"),
+        cwd="..",
+        timeout_seconds=5,
+    )
+
+    escaped_result = run_session_command_step_for_testing(
+        config=escaping,
+        root=tmp_path,
+        state_dir=state_dir,
+        prompt="prompt",
+    )
+
+    assert escaped_result.failure is not None
+    assert escaped_result.failure["reason"] == "template_error"
+    assert "adapter.cwd must stay inside repository root" in str(escaped_result.failure["error"])
 
 
 def test_run_rejects_cell_level_template_variables_for_session_runner(

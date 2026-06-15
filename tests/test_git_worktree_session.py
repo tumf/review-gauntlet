@@ -150,6 +150,133 @@ def test_merge_preflight_reports_conflict_without_mutating_session(
     assert _git(tmp_path, "branch", "--list", session_branch)
 
 
+def test_run_git_worktree_session_executes_agent_in_session_worktree_and_keeps_state_in_base(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_repo(tmp_path)
+    main(["init", str(tmp_path), "--all", "--git-worktree", "--format", "json"])
+    init_data = json.loads(capsys.readouterr().out)
+    git_metadata = init_data["git_worktree"]
+    session_worktree = tmp_path / git_metadata["worktree_path"]
+    observed = tmp_path / ".review-gauntlet" / "observed.json"
+    script = tmp_path / ".review-gauntlet" / "agent.py"
+    script.write_text(
+        """
+import json
+import os
+from pathlib import Path
+
+repo_root = Path(os.environ['RG_REPO_ROOT'])
+state_dir = Path(os.environ['RG_STATE_DIR'])
+observed = Path(os.environ['RG_OBSERVED'])
+(repo_root / 'agent-marker.txt').write_text('session worktree\\n', encoding='utf-8')
+observed.write_text(json.dumps({
+    'cwd': os.getcwd(),
+    'repo_root': str(repo_root),
+    'state_dir': str(state_dir),
+}), encoding='utf-8')
+(state_dir / 'active-session.json').unlink()
+print('done')
+""".strip(),
+        encoding="utf-8",
+    )
+    config = tmp_path / ".review-gauntlet" / "config.json"
+    config.write_text(
+        json.dumps(
+            {
+                "adapter": {
+                    "type": "command",
+                    "command": "python",
+                    "args": [str(script)],
+                    "env": {
+                        "RG_REPO_ROOT": "{repo_root}",
+                        "RG_STATE_DIR": "{state_dir}",
+                        "RG_OBSERVED": str(observed),
+                    },
+                    "timeout_seconds": 5,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    main(["run", str(tmp_path), "--config", str(config), "--format", "json"])
+
+    result = json.loads(capsys.readouterr().out)
+    assert result["completed"] is True
+    step = result["steps"][0]
+    assert step["cwd"] == str(session_worktree.resolve())
+    assert (session_worktree / "agent-marker.txt").read_text(
+        encoding="utf-8"
+    ) == "session worktree\n"
+    assert not (tmp_path / "agent-marker.txt").exists()
+    observation = json.loads(observed.read_text(encoding="utf-8"))
+    assert observation == {
+        "cwd": str(session_worktree.resolve()),
+        "repo_root": str(session_worktree.resolve()),
+        "state_dir": str(tmp_path / ".review-gauntlet"),
+    }
+    assert Path(step["stdout_artifact"]).is_relative_to(tmp_path / ".review-gauntlet")
+    assert not Path(step["stdout_artifact"]).is_relative_to(session_worktree)
+
+
+def test_run_git_worktree_session_changes_can_finalize_merge(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_repo(tmp_path)
+    main(["init", str(tmp_path), "--all", "--git-worktree", "--format", "json"])
+    init_data = json.loads(capsys.readouterr().out)
+    git_metadata = init_data["git_worktree"]
+    session_worktree = tmp_path / git_metadata["worktree_path"]
+    script = tmp_path / ".review-gauntlet" / "agent.py"
+    script.write_text(
+        """
+from pathlib import Path
+import os
+Path('agent-merge-marker.txt').write_text('merge me\\n', encoding='utf-8')
+print('marker written')
+""".strip(),
+        encoding="utf-8",
+    )
+    config = tmp_path / ".review-gauntlet" / "config.json"
+    config.write_text(
+        json.dumps(
+            {
+                "adapter": {
+                    "type": "command",
+                    "command": "python",
+                    "args": [str(script)],
+                    "env": {"RG_STATE_DIR": "{state_dir}"},
+                    "timeout_seconds": 5,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(SystemExit) as run_exit:
+        main(
+            ["run", str(tmp_path), "--config", str(config), "--max-steps", "1", "--format", "json"]
+        )
+    run_data = json.loads(capsys.readouterr().out)
+    assert run_exit.value.code == 1
+    assert run_data["reason"] == "max_steps_exhausted"
+    assert (session_worktree / "agent-merge-marker.txt").exists()
+
+    fixture = tmp_path / ".review-gauntlet" / "fixtures" / "fixture.json"
+    fixture.parent.mkdir(parents=True, exist_ok=True)
+    fixture.write_text("{}", encoding="utf-8")
+    main(["review", str(tmp_path), "--fixture", str(fixture), "--budget", "50", "--format", "json"])
+    review_data = json.loads(capsys.readouterr().out)
+    assert review_data["coverage"].get("pending", 0) == 0
+
+    main(["finalize", str(tmp_path), "--merge", "--allow-non-review-dirty", "--format", "json"])
+
+    data = json.loads(capsys.readouterr().out)
+    assert data["merged"] is True
+    assert (tmp_path / ".review-gauntlet" / "checkpoints" / "latest").is_file()
+
+
 def test_finalize_merge_commits_merges_and_cleans_up(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

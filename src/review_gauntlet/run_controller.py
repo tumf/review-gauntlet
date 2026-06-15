@@ -89,6 +89,37 @@ CommandRunner = Callable[[CommandAdapterConfig, Path, Path, str], SessionCommand
 EventSink = Callable[[RunEvent], None]
 
 
+@dataclass(frozen=True)
+class RunExecutionContext:
+    agent_root: Path
+    state_dir: Path
+
+    @classmethod
+    def from_active_session(
+        cls, *, root: Path, store: SessionStore, session_id: str
+    ) -> RunExecutionContext:
+        metadata = store.session_metadata(session_id)
+        git_metadata = metadata.get("git_worktree")
+        if not isinstance(git_metadata, Mapping):
+            return cls(agent_root=root, state_dir=store.state_dir)
+        typed_git_metadata = cast(Mapping[str, object], git_metadata)
+        if typed_git_metadata.get("enabled") is not True:
+            return cls(agent_root=root, state_dir=store.state_dir)
+        worktree_path = typed_git_metadata.get("worktree_path")
+        if not isinstance(worktree_path, str) or not worktree_path:
+            raise ValueError("Git-worktree-backed session metadata is missing worktree_path")
+        resolved = (root / worktree_path).resolve()
+        try:
+            resolved.relative_to(root.resolve())
+        except ValueError as exc:
+            raise ValueError(
+                f"Git-worktree-backed session worktree must stay inside repository root: {resolved}"
+            ) from exc
+        if not resolved.is_dir():
+            raise ValueError(f"Git-worktree-backed session worktree is missing: {resolved}")
+        return cls(agent_root=resolved, state_dir=store.state_dir)
+
+
 class RunController:
     def __init__(
         self,
@@ -244,10 +275,15 @@ class RunController:
                 step=step_number,
             )
             try:
+                execution_context = RunExecutionContext.from_active_session(
+                    root=self.root,
+                    store=self.store,
+                    session_id=session_id,
+                )
                 command_result = self._command_runner(
                     effective_config.adapter,
-                    self.root,
-                    self.store.state_dir,
+                    execution_context.agent_root,
+                    execution_context.state_dir,
                     prompt,
                 )
             except KeyboardInterrupt:
@@ -501,6 +537,12 @@ def _run_step_payload(
         "activity_artifact": result.activity_artifact,
         "output_tail": [entry.__dict__ for entry in result.output_tail],
     }
+    if result.stdout_artifact is not None:
+        payload["stdout_artifact"] = result.stdout_artifact
+    if result.stderr_artifact is not None:
+        payload["stderr_artifact"] = result.stderr_artifact
+    if result.activity_artifact is not None:
+        payload["activity_artifact"] = result.activity_artifact
     if result.failure is not None:
         payload["failure"] = result.failure
     return payload

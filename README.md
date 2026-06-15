@@ -214,7 +214,11 @@ and live findings are closed.
 `.review-gauntlet/worktrees/<session-id>/` and a `review-gauntlet/<session-id>` branch
 for the session. They can be combined as `init --worktree --git-worktree` to review the
 workspace diff while isolating session work. For Git-worktree-backed sessions,
-`finalize --merge` writes checkpoint artifacts, commits the session branch, fast-forward
+`run` executes the configured external agent inside the linked session worktree by
+default, so source reads and edits happen on the session branch. Review Gauntlet's
+durable state, including run logs, the ledger, active-session marker, and checkpoints,
+continues to live under the base repository `.review-gauntlet` directory. `finalize
+--merge` writes checkpoint artifacts, commits the session branch, fast-forward
 merges it into the recorded base branch, removes the linked worktree, and deletes the
 session branch. If merge succeeds but cleanup fails, the command reports
 `cleaned_up: false`, includes cleanup blockers, and leaves `next_required_action:

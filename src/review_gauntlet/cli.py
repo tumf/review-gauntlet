@@ -1519,7 +1519,7 @@ def _run_session_command_step(
     except FileNotFoundError as exc:
         return SessionCommandResult(
             argv=argv,
-            cwd=None if cwd_path is None else str(cwd_path),
+            cwd=str(cwd_path),
             returncode=None,
             stdout="",
             stderr="",
@@ -1534,7 +1534,7 @@ def _run_session_command_step(
             state_dir,
             SessionCommandResult(
                 argv=argv,
-                cwd=None if cwd_path is None else str(cwd_path),
+                cwd=str(cwd_path),
                 returncode=None,
                 stdout=_process_session_output_text(exc.stdout),
                 stderr=_process_session_output_text(exc.stderr),
@@ -1548,7 +1548,7 @@ def _run_session_command_step(
     except KeyboardInterrupt:
         return SessionCommandResult(
             argv=argv,
-            cwd=None if cwd_path is None else str(cwd_path),
+            cwd=str(cwd_path),
             returncode=None,
             stdout="",
             stderr="",
@@ -1566,13 +1566,16 @@ def _run_session_command_step(
         }
     result = SessionCommandResult(
         argv=argv,
-        cwd=None if cwd_path is None else str(cwd_path),
+        cwd=str(cwd_path),
         returncode=completed.returncode,
         stdout=completed.stdout,
         stderr=completed.stderr,
         failure=failure,
     )
     return _persist_session_command_artifacts(state_dir, result)
+
+
+run_session_command_step_for_testing = _run_session_command_step
 
 
 def _persist_session_command_artifacts(
@@ -1641,13 +1644,14 @@ def _expand_session_template(value: str, variables: dict[str, str]) -> str:
 
 def _resolve_session_cwd(
     config: CommandAdapterConfig, root: Path, variables: dict[str, str]
-) -> Path | None:
+) -> Path:
+    root = root.resolve()
     if config.cwd is None:
-        return None
+        return root
     cwd = Path(_expand_session_template(config.cwd, variables))
     resolved = (root / cwd).resolve() if not cwd.is_absolute() else cwd.resolve()
     try:
-        resolved.relative_to(root.resolve())
+        resolved.relative_to(root)
     except ValueError as exc:
         raise ValueError(f"adapter.cwd must stay inside repository root: {resolved}") from exc
     if not resolved.is_dir():
