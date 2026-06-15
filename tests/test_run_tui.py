@@ -19,6 +19,7 @@ from review_gauntlet.run_tui import (
     activity_text,
     agent_activity_text,
     calculate_progress_metrics,
+    PANEL_TITLES,
     compact_dashboard_text,
     coverage_text,
     create_run_app,
@@ -219,6 +220,23 @@ def test_tui_panel_body_helpers_omit_standalone_section_headings() -> None:
 
     for heading, body in bodies.items():
         assert body.splitlines()[0] != heading
+
+
+def test_compact_dashboard_text_uses_shared_panel_titles() -> None:
+    snapshot = RunSnapshot(
+        session_id="RGS-shared-titles",
+        coverage={"reviewed": 1},
+        findings={},
+        next_ready_prompt=None,
+        step=0,
+        agent_status="idle",
+        command_argv=(),
+        elapsed_seconds=0,
+    )
+    compact = compact_dashboard_text(snapshot)
+
+    for title in PANEL_TITLES.values():
+        assert title in compact
 
 
 @pytest.mark.parametrize(

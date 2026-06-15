@@ -10,7 +10,7 @@
 
 - [x] Add or update Textual CSS for border-title styling and semantic panel states. Completion condition: normal, active, blocked, failed, and finalized bordered panels keep semantic border colors and set compatible `border-title-*` styles. verification: unit - source-level or app-construction tests in `tests/test_run_tui.py` verify expected CSS tokens/classes remain present.
 
-- [x] Run project verification. Completion condition: the repository passes formatting, linting, type checking, and tests. verification: integration - `make check`.
+- [x] Run project verification. Completion condition: the repository passes formatting, linting, type checking, and tests. (verification: integration - `make check`)
 
 ## Future Work
 
@@ -20,3 +20,7 @@
 
 Archive validation itself is the authoritative final OpenSpec validation gate.
 Expected archive gate: `cflx openspec validate use-tui-border-titles --archive-gate`.
+
+## Acceptance Notes
+
+- Acceptance #1 archive-commitability blocker was resolved by rewriting the project verification task note into the parenthesized end-of-line verification form required by the archive gate.

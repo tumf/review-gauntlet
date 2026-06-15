@@ -10,6 +10,13 @@ from review_gauntlet.run_controller import AgentOutputEntry, RunController, RunE
 
 TUI_FALLBACK_WARNING = "TUI support is not installed; falling back to text mode."
 TUI_INSTALL_GUIDANCE = 'Install with: uv tool install "review-gauntlet[tui]"'
+PANEL_TITLES = {
+    "finalize_path": "Finalize path",
+    "coverage": "Session metrics",
+    "findings": "Findings",
+    "current_operation": "Current operation",
+    "activity": "Activity",
+}
 
 
 def textual_available() -> bool:
@@ -81,28 +88,28 @@ def create_run_app(controller: RunController) -> object:
             with Vertical(id="body"):
                 yield Static(header_text(view), id="session_header", classes=view.state_class)
                 yield titled_panel(
-                    "Finalize path",
+                    PANEL_TITLES["finalize_path"],
                     Static(finalize_path_text(view), id="finalize_path"),
                     id="finalize_path_panel",
                     classes=f"panel {view.state_class}",
                 )
                 with Horizontal(id="metrics"):
                     yield titled_panel(
-                        "Session metrics",
+                        PANEL_TITLES["coverage"],
                         Static(coverage_text(self.snapshot), id="coverage_panel"),
                     )
                     yield titled_panel(
-                        "Findings",
+                        PANEL_TITLES["findings"],
                         Static(findings_text(self.snapshot), id="findings_panel"),
                     )
                 yield titled_panel(
-                    "Current operation",
+                    PANEL_TITLES["current_operation"],
                     Static(current_operation_text(view), id="task_panel"),
                     id="task_panel_container",
                     classes=f"panel {view.state_class}",
                 )
                 yield titled_panel(
-                    "Activity",
+                    PANEL_TITLES["activity"],
                     Static(activity_text(view), id="activity_timeline"),
                     id="activity_panel",
                 )
@@ -519,11 +526,11 @@ def compact_dashboard_text(snapshot: RunSnapshot, events: tuple[RunEvent, ...] =
     return "\n".join(
         [
             progress_text(snapshot),
-            titled_section("Finalize path", finalize_path_text(view)),
-            titled_section("Session metrics", coverage_text(snapshot)),
-            titled_section("Findings", findings_text(snapshot)),
-            titled_section("Current operation", current_operation_text(view)),
-            titled_section("Activity", activity_text(view)),
+            titled_section(PANEL_TITLES["finalize_path"], finalize_path_text(view)),
+            titled_section(PANEL_TITLES["coverage"], coverage_text(snapshot)),
+            titled_section(PANEL_TITLES["findings"], findings_text(snapshot)),
+            titled_section(PANEL_TITLES["current_operation"], current_operation_text(view)),
+            titled_section(PANEL_TITLES["activity"], activity_text(view)),
             footer_text(),
         ]
     )
