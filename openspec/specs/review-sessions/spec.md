@@ -157,11 +157,11 @@ The TUI SHALL classify finalize blockers for display. Coverage blockers, includi
 
 The TUI SHALL replace standalone `Session metrics`, standalone `Findings`, and standalone `Current operation` panels with compact `Agent` and `Session` summary panels. The Agent panel SHALL show command label, alive/running/quiet/terminal status, output recency, timeout remaining when known, and artifact path when available. The Session panel SHALL show compact coverage percent and reviewed/total counts, open finding count, current checklist title, and agent step. Coverage denominator rules SHALL continue to exclude superseded cells, and this presentation calculation SHALL NOT mutate durable coverage state.
 
-The Activity panel SHALL mix normalized Review Gauntlet events and bounded agent stdout/stderr tail rows in one timeline. Activity row kinds SHALL be human labels such as `event`, `stdout`, and `stderr`. The TUI MAY synthesize display-only activity rows such as `gate started` and `agent alive` from the current view model. When an agent is quiet but still running, the TUI SHALL render a non-flooding heartbeat row such as `event agent alive no output for 2m00s`. Agent output displayed in Activity SHALL remain bounded, line-oriented, sanitized, truncated, and redacted, and full output artifacts SHALL remain the audit source of truth.
+The Activity panel SHALL mix normalized Review Gauntlet events and bounded agent stdout/stderr tail rows in one timeline. Activity row kinds SHALL be human labels such as `event`, `stdout`, and `stderr`. The TUI MAY synthesize display-only activity rows such as `gate started` from the current view model, but it SHALL NOT synthesize quiet-running agent heartbeat rows such as `agent alive no output for 2m00s` in Activity. When an agent is quiet but still running, the TUI SHALL keep liveness visible in the Header and Agent summary instead of adding or removing Activity rows. Agent output displayed in Activity SHALL remain bounded, line-oriented, sanitized, truncated, and redacted, and full output artifacts SHALL remain the audit source of truth.
 
 The TUI SHALL avoid user-facing internal action names such as `run_review` and `resolve_finalize_blockers`. It SHALL map those internal actions to human wording such as `waiting`, `ready to finalize`, `waits for coverage`, `checked after review/findings`, or the relevant checklist title.
 
-<!-- Expected canonical result after archive: the canonical review-sessions spec will define the run TUI as a Textual dashboard faithful to the Review Gauntlet / Next to finalize / Agent + Session / Activity mock, with human-facing checklist states, blocker classification, compact summaries, mixed agent activity, and unchanged run semantics. -->
+<!-- Expected canonical result after archive: the canonical review-sessions spec will define that quiet-running liveness is displayed in Header and Agent summary, while Activity remains stable by omitting synthetic quiet heartbeat rows. -->
 
 #### Scenario: Run TUI renders the mock-aligned dashboard structure
 
@@ -231,7 +231,7 @@ The TUI SHALL avoid user-facing internal action names such as `run_review` and `
 **And**: the Session panel shows open finding count, current checklist title, and agent step
 **And**: the old expanded coverage text is not the primary dashboard panel
 
-#### Scenario: Run TUI activity mixes events, output, and heartbeat rows
+#### Scenario: Run TUI activity mixes events and output without quiet heartbeat rows
 
 **Given**: the run controller has emitted Review Gauntlet events
 **And**: the active agent has emitted stdout and stderr output lines
@@ -240,7 +240,8 @@ The TUI SHALL avoid user-facing internal action names such as `run_review` and `
 **Then**: event rows use the `event` kind and human labels such as `run started`, `gate started`, or `agent started`
 **And**: agent stdout rows use the `stdout` kind
 **And**: agent stderr rows use the `stderr` kind
-**And**: a quiet running agent produces a non-flooding `event` heartbeat row such as `agent alive` with detail such as `no output for 2m00s`
+**And**: Activity does not contain synthetic quiet heartbeat rows such as `agent alive no output for 2m00s`
+**And**: the Header or Agent summary shows the quiet liveness state instead
 **And**: displayed output remains bounded, sanitized, truncated, and redacted
 
 #### Scenario: Run TUI renders dashboard panel names as border titles
