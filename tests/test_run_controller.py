@@ -12,6 +12,7 @@ from review_gauntlet.config import CommandAdapterConfig
 from review_gauntlet.review_cells import CellState, ReviewCell
 from review_gauntlet.run_controller import (
     RunController,
+    RunExecutionContext,
     SessionCommandResult,
     checkpoint_generated_files_from_stdout,
     command_display_label,
@@ -59,6 +60,88 @@ def _store(tmp_path: Path) -> SessionStore:
 
 def _status(_store: SessionStore, _root: Path) -> dict[str, object]:
     return {"coverage": {"pending": 1}, "findings": {"untriaged": 0}}
+
+
+def test_run_execution_context_uses_git_worktree_agent_root(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    worktree = tmp_path / ".review-gauntlet" / "worktrees" / "RGS-test"
+    worktree.mkdir(parents=True)
+    metadata = store.session_metadata("RGS-test")
+    with store.connect() as conn:
+        conn.execute(
+            "update sessions set metadata = ? where session_id = ?",
+            (
+                json.dumps(
+                    {
+                        **metadata,
+                        "git_worktree": {
+                            "enabled": True,
+                            "worktree_path": ".review-gauntlet/worktrees/RGS-test",
+                        },
+                    },
+                    sort_keys=True,
+                ),
+                "RGS-test",
+            ),
+        )
+
+    context = RunExecutionContext.from_active_session(
+        root=tmp_path,
+        store=store,
+        session_id="RGS-test",
+    )
+
+    assert context.agent_root == worktree.resolve()
+    assert context.state_dir == tmp_path / ".review-gauntlet"
+
+
+def test_run_controller_passes_git_worktree_agent_root_to_command(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    worktree = tmp_path / ".review-gauntlet" / "worktrees" / "RGS-test"
+    worktree.mkdir(parents=True)
+    metadata = store.session_metadata("RGS-test")
+    with store.connect() as conn:
+        conn.execute(
+            "update sessions set metadata = ? where session_id = ?",
+            (
+                json.dumps(
+                    {
+                        **metadata,
+                        "git_worktree": {
+                            "enabled": True,
+                            "worktree_path": ".review-gauntlet/worktrees/RGS-test",
+                        },
+                    },
+                    sort_keys=True,
+                ),
+                "RGS-test",
+            ),
+        )
+    observed: list[tuple[Path, Path]] = []
+
+    def command(
+        _config: CommandAdapterConfig, root: Path, state_dir: Path, _prompt: str
+    ) -> SessionCommandResult:
+        observed.append((root, state_dir))
+        store.active_path.unlink()
+        return SessionCommandResult(
+            argv=["fake-agent"], cwd=str(root), returncode=0, stdout="ok", stderr=""
+        )
+
+    controller = RunController(
+        root=tmp_path,
+        store=store,
+        config_path=None,
+        max_steps=1,
+        ready_prompt=lambda _store, _root: "ready prompt",
+        status_snapshot=_status,
+        command_runner=command,
+    )
+
+    result = controller.run()
+
+    assert result["completed"] is True
+    assert observed == [(worktree.resolve(), tmp_path / ".review-gauntlet")]
 
 
 def test_run_controller_completes_when_command_finalizes_session(tmp_path: Path) -> None:
