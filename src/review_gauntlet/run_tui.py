@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import importlib.util
+import math
 import re
 from dataclasses import dataclass
 from datetime import datetime
@@ -308,7 +309,7 @@ def calculate_progress_metrics(coverage: dict[str, object]) -> ProgressMetrics:
 
 
 def format_elapsed_time(seconds: float) -> str:
-    total_seconds = max(0, int(seconds))
+    total_seconds = 0 if not math.isfinite(seconds) else max(0, int(seconds))
     hours, remainder = divmod(total_seconds, 3600)
     minutes, seconds = divmod(remainder, 60)
     if hours:
@@ -375,7 +376,7 @@ def format_command_label(snapshot: RunSnapshot) -> str | None:
     if snapshot.command_label:
         return _summarize_text(snapshot.command_label, limit=80)
     if snapshot.command_argv:
-        return _summarize_text(" ".join(snapshot.command_argv), limit=80)
+        return sanitize_agent_output_line(" ".join(snapshot.command_argv), limit=80)
     if snapshot.agent_status == "running":
         return "command resolving..."
     return None
@@ -588,7 +589,7 @@ def agent_liveness_detail(snapshot: RunSnapshot) -> str:
 
 
 def format_duration(seconds: float) -> str:
-    safe_seconds = max(0, int(seconds))
+    safe_seconds = 0 if not math.isfinite(seconds) else max(0, int(seconds))
     if safe_seconds < 60:
         return f"{safe_seconds}s"
     minutes, remainder = divmod(safe_seconds, 60)
@@ -639,7 +640,7 @@ def compact_dashboard_text(snapshot: RunSnapshot, events: tuple[RunEvent, ...] =
     view = dashboard_state(snapshot, events)
     return "\n".join(
         [
-            progress_text(snapshot),
+            header_text(view),
             titled_section(PANEL_TITLES["finalize_path"], finalize_path_text(view)),
             titled_section(PANEL_TITLES["agent"], agent_summary_text(view)),
             titled_section(PANEL_TITLES["session"], session_summary_text(view)),
@@ -727,7 +728,13 @@ def sanitize_agent_output_line(value: object, *, limit: int = 120) -> str:
     text = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", str(value))
     text = text.replace("\r", "\n")
     text = " ".join(_plain_text(text).split())
-    text = re.sub(r"\b[A-Z0-9_]*(?:TOKEN|SECRET|KEY)=\S+", "<redacted>", text, flags=re.IGNORECASE)
+    secret_patterns = (
+        r"\b[A-Z0-9_]*(?:TOKEN|SECRET|KEY|PASSWORD)=\S+",
+        r"\b(?:authorization|x-api-key)\s*:\s*\S+(?:\s+\S+)?",
+        r"[\"']?\b(?:api[_-]?key|token|secret|password)\b[\"']?\s*[:=]\s*[\"']?\S+[\"']?",
+    )
+    for pattern in secret_patterns:
+        text = re.sub(pattern, "<redacted>", text, flags=re.IGNORECASE)
     return _summarize_text(text, limit=limit)
 
 

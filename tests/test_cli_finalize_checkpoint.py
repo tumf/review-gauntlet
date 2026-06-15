@@ -1,4 +1,5 @@
 import json
+import shutil
 import sqlite3
 import subprocess
 from pathlib import Path
@@ -6,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from review_gauntlet.checkpoint import write_latest_checkpoint
+from review_gauntlet.checkpoint import target_from_latest_checkpoint, write_latest_checkpoint
 from review_gauntlet.cli import main
 from review_gauntlet.session_store import SessionStore
 
@@ -148,19 +149,84 @@ def test_finalize_blocks_dirty_review_universe_without_writing_checkpoint(
     assert (tmp_path / ".review-gauntlet" / "active-session.json").exists()
 
 
+def test_latest_checkpoint_rejects_sidecar_without_schema_version(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_repo(tmp_path)
+    _complete_session(tmp_path, capsys)
+    main(["finalize", str(tmp_path), "--allow-non-review-dirty", "--format", "json"])
+    data = json.loads(capsys.readouterr().out)
+    findings_path = tmp_path / data["checkpoint_dir"] / "findings.json"
+    findings = json.loads(findings_path.read_text(encoding="utf-8"))
+    findings.pop("schema_version")
+    findings_path.write_text(json.dumps(findings), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="schema_version is not supported"):
+        target_from_latest_checkpoint(tmp_path)
+
+
+def test_latest_checkpoint_rejects_malformed_payload_entries(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_repo(tmp_path)
+    _complete_session(tmp_path, capsys)
+    main(["finalize", str(tmp_path), "--allow-non-review-dirty", "--format", "json"])
+    data = json.loads(capsys.readouterr().out)
+    findings_path = tmp_path / data["checkpoint_dir"] / "findings.json"
+    findings = json.loads(findings_path.read_text(encoding="utf-8"))
+    findings["findings"].append(
+        {
+            "checkpoint_id": data["checkpoint_id"],
+            "finding_id": "RGF-malformed",
+        }
+    )
+    findings_path.write_text(json.dumps(findings), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="latest checkpoint is internally inconsistent"):
+        target_from_latest_checkpoint(tmp_path)
+
+
+def test_latest_checkpoint_rejects_invalid_payload_field_types(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_repo(tmp_path)
+    _complete_session(tmp_path, capsys)
+    main(["finalize", str(tmp_path), "--allow-non-review-dirty", "--format", "json"])
+    data = json.loads(capsys.readouterr().out)
+    findings_path = tmp_path / data["checkpoint_dir"] / "findings.json"
+    findings = json.loads(findings_path.read_text(encoding="utf-8"))
+    findings["findings"].append(
+        {
+            "checkpoint_id": data["checkpoint_id"],
+            "finding_id": "RGF-malformed",
+            "session_id": "RGS-malformed",
+            "fingerprint": "fp",
+            "state": "not-a-state",
+            "path": 123,
+            "rule_id": "rule",
+            "content": "content",
+        }
+    )
+    findings_path.write_text(json.dumps(findings), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="latest checkpoint is internally inconsistent"):
+        target_from_latest_checkpoint(tmp_path)
+
+
 def test_finalize_rejects_path_unsafe_session_id(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _init_repo(tmp_path)
     _complete_session(tmp_path, capsys)
     store = SessionStore(tmp_path)
-    with pytest.raises(ValueError, match="session_id must be a single path-safe segment"):
-        write_latest_checkpoint(
-            store,
-            tmp_path,
-            "../evil",
-            {"session_id": "../evil", "coverage": {}, "finding_state_counts": {}},
-        )
+    for session_id in ("../evil", "RGS-evil\nmessage"):
+        with pytest.raises(ValueError, match="session_id must be a single path-safe segment"):
+            write_latest_checkpoint(
+                store,
+                tmp_path,
+                session_id,
+                {"session_id": session_id, "coverage": {}, "finding_state_counts": {}},
+            )
 
 
 def test_finalize_restores_previous_checkpoint_when_replacement_fails(
@@ -186,6 +252,31 @@ def test_finalize_restores_previous_checkpoint_when_replacement_fails(
     monkeypatch.setattr(Path, "replace", fail_tmp_install)
 
     with pytest.raises(OSError, match="simulated install failure"):
+        main(["finalize", str(tmp_path), "--allow-non-review-dirty", "--format", "json"])
+
+    assert (checkpoint_dir / "marker.txt").read_text(encoding="utf-8") == "previous\n"
+    assert (tmp_path / ".review-gauntlet" / "active-session.json").exists()
+
+
+def test_finalize_restores_previous_checkpoint_when_cleanup_after_pointer_replace_fails(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _init_repo(tmp_path)
+    _complete_session(tmp_path, capsys)
+    checkpoint_dir = tmp_path / ".review-gauntlet" / "checkpoints" / "latest"
+    checkpoint_dir.mkdir(parents=True, exist_ok=True)
+    (checkpoint_dir / "marker.txt").write_text("previous\n", encoding="utf-8")
+    original_rmtree = shutil.rmtree
+
+    def fail_backup_cleanup(path: Path | str) -> None:
+        target = Path(path)
+        if target.name.startswith(".latest.bak-"):
+            raise RuntimeError("simulated cleanup failure")
+        original_rmtree(path)
+
+    monkeypatch.setattr(shutil, "rmtree", fail_backup_cleanup)
+
+    with pytest.raises(RuntimeError, match="simulated cleanup failure"):
         main(["finalize", str(tmp_path), "--allow-non-review-dirty", "--format", "json"])
 
     assert (checkpoint_dir / "marker.txt").read_text(encoding="utf-8") == "previous\n"

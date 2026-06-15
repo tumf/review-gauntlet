@@ -142,6 +142,87 @@ def test_commit_latest_checkpoint_blocks_unrelated_dirty_paths(tmp_path: Path) -
     assert _git(tmp_path, "diff", "--cached", "--name-only") == ""
 
 
+def test_commit_latest_checkpoint_blocks_stale_checkpoint_artifacts_not_generated(
+    tmp_path: Path,
+) -> None:
+    _init_repo(tmp_path)
+    generated_files = _write_checkpoint(tmp_path)
+    stale_path = tmp_path / ".review-gauntlet" / "checkpoints" / "RGC-stale" / "status.json"
+    stale_path.parent.mkdir(parents=True)
+    stale_path.write_text("stale\n", encoding="utf-8")
+
+    result = commit_latest_checkpoint(
+        tmp_path, session_id="RGS-test", generated_files=generated_files
+    )
+
+    assert result.committed is False
+    assert result.reason == "blocked_by_non_checkpoint_changes"
+    assert result.blocked_paths == (stale_path.relative_to(tmp_path).as_posix(),)
+    assert _git(tmp_path, "diff", "--cached", "--name-only") == ""
+
+
+@pytest.mark.parametrize(
+    "checkpoint_id",
+    [".tmp", "checkpoint", "RGC-"],
+)
+def test_commit_latest_checkpoint_blocks_generated_files_with_invalid_checkpoint_id(
+    tmp_path: Path, checkpoint_id: str
+) -> None:
+    _init_repo(tmp_path)
+    generated_files = _write_checkpoint(tmp_path)
+    generated_file = f".review-gauntlet/checkpoints/{checkpoint_id}/status.json"
+    generated_path = tmp_path / generated_file
+    generated_path.parent.mkdir(parents=True)
+    generated_path.write_text("generated\n", encoding="utf-8")
+
+    result = commit_latest_checkpoint(
+        tmp_path,
+        session_id="RGS-test",
+        generated_files=(*generated_files, generated_file),
+    )
+
+    assert result.committed is False
+    assert result.reason == "blocked_by_non_checkpoint_changes"
+    assert result.blocked_paths == (generated_file,)
+    assert _git(tmp_path, "diff", "--cached", "--name-only") == ""
+
+
+def test_commit_latest_checkpoint_commits_preexisting_staged_checkpoint_paths(
+    tmp_path: Path,
+) -> None:
+    _init_repo(tmp_path)
+    generated_files = _write_checkpoint(tmp_path)
+    _git(tmp_path, "add", generated_files[0])
+
+    result = commit_latest_checkpoint(
+        tmp_path, session_id="RGS-test", generated_files=generated_files
+    )
+
+    assert result.committed is True
+    committed_paths = _git(tmp_path, "show", "--name-only", "--format=", "HEAD").splitlines()
+    assert generated_files[0] in committed_paths
+    assert _git(tmp_path, "status", "--porcelain") == ""
+
+
+def test_commit_latest_checkpoint_blocks_dual_state_checkpoint_paths(
+    tmp_path: Path,
+) -> None:
+    _init_repo(tmp_path)
+    generated_files = _write_checkpoint(tmp_path)
+    staged_path = tmp_path / generated_files[0]
+    _git(tmp_path, "add", generated_files[0])
+    staged_path.write_text("newer unstaged checkpoint\n", encoding="utf-8")
+
+    result = commit_latest_checkpoint(
+        tmp_path, session_id="RGS-test", generated_files=generated_files
+    )
+
+    assert result.committed is False
+    assert result.reason == "blocked_by_staged_and_unstaged_checkpoint_changes"
+    assert result.blocked_paths == (generated_files[0],)
+    assert _git(tmp_path, "diff", "--cached", "--name-only") == generated_files[0]
+
+
 def test_commit_latest_checkpoint_reports_git_failure_without_staging_source(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -166,3 +247,31 @@ def test_commit_latest_checkpoint_reports_git_failure_without_staging_source(
     assert result.committed is False
     assert result.reason == "git_failure"
     assert result.failed_error == "commit failed"
+    assert _git(tmp_path, "diff", "--cached", "--name-only") == ""
+
+
+def test_commit_latest_checkpoint_preserves_preexisting_staged_paths_on_git_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _init_repo(tmp_path)
+    generated_files = _write_checkpoint(tmp_path)
+    _git(tmp_path, "add", generated_files[0])
+
+    def fake_git(root: Path, *args: str) -> str:
+        if args and args[0] == "commit":
+            raise subprocess.CalledProcessError(
+                returncode=1,
+                cmd=["git", *args],
+                stderr="commit failed",
+            )
+        return _git(root, *args)
+
+    monkeypatch.setattr("review_gauntlet.checkpoint._git", fake_git)
+
+    result = commit_latest_checkpoint(
+        tmp_path, session_id="RGS-test", generated_files=generated_files
+    )
+
+    assert result.committed is False
+    assert result.reason == "git_failure"
+    assert _git(tmp_path, "diff", "--cached", "--name-only") == generated_files[0]

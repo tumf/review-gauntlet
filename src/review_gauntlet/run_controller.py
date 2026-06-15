@@ -263,6 +263,12 @@ class RunController:
             self._agent_timeout_seconds = None
             step_payload = _run_step_payload(step_number, prompt, command_result)
             steps.append(step_payload)
+            if self._interrupted:
+                self._agent_status = "interrupted"
+                self._emit("interrupted", step=step_number, session_id=session_id)
+                return self._interrupted_result(
+                    steps, error="run interrupted by controller request"
+                )
             self._agent_status = "idle" if command_result.failure is None else lifecycle_status
             self._emit(
                 "agent_finished",
@@ -448,9 +454,29 @@ def checkpoint_generated_files_from_stdout(stdout: str) -> tuple[str, ...]:
     typed_payload = cast(dict[str, object], payload)
     raw_files = typed_payload.get("generated_files")
     if not isinstance(raw_files, list):
+        verdict = typed_payload.get("verdict")
+        if isinstance(verdict, dict):
+            raw_files = cast(dict[str, object], verdict).get("generated_files")
+    if not isinstance(raw_files, list):
         return ()
     typed_files = cast(list[object], raw_files)
-    return tuple(item for item in typed_files if isinstance(item, str))
+    files: list[str] = []
+    seen: set[str] = set()
+    for item in typed_files:
+        if not isinstance(item, str):
+            continue
+        relative = Path(item)
+        if relative.is_absolute() or any(part in {"", ".", ".."} for part in relative.parts):
+            continue
+        normalized = relative.as_posix()
+        if not normalized.startswith(".review-gauntlet/checkpoints/"):
+            continue
+        if relative.suffix != ".json" or relative.name == "":
+            continue
+        if normalized not in seen:
+            files.append(normalized)
+            seen.add(normalized)
+    return tuple(files)
 
 
 def _run_step_payload(
@@ -464,6 +490,10 @@ def _run_step_payload(
         "returncode": result.returncode,
         "stdout": result.stdout,
         "stderr": result.stderr,
+        "stdout_artifact": result.stdout_artifact,
+        "stderr_artifact": result.stderr_artifact,
+        "activity_artifact": result.activity_artifact,
+        "output_tail": [entry.__dict__ for entry in result.output_tail],
     }
     if result.failure is not None:
         payload["failure"] = result.failure

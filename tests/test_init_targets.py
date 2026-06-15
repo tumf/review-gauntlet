@@ -194,7 +194,7 @@ def test_default_init_rejects_checkpoint_companion_schema_version(
     assert "schema_version" in capsys.readouterr().err
 
 
-def test_default_init_allows_legacy_checkpoint_companions_without_schema_version(
+def test_default_init_rejects_legacy_checkpoint_companions_without_schema_version(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _init_repo(tmp_path)
@@ -210,9 +210,11 @@ def test_default_init_allows_legacy_checkpoint_companions_without_schema_version
             json.dumps({"checkpoint_id": "RGC-test", payload_key: []}), encoding="utf-8"
         )
 
-    main(["init", str(tmp_path), "--format", "json"])
+    with pytest.raises(SystemExit) as excinfo:
+        main(["init", str(tmp_path), "--format", "json"])
 
-    assert json.loads(capsys.readouterr().out)["cell_count"] > 0
+    assert excinfo.value.code == 64
+    assert "schema_version" in capsys.readouterr().err
 
 
 def test_default_init_rejects_non_file_checkpoint_companion(
@@ -287,6 +289,39 @@ def test_default_init_rejects_checkpoint_payload_entries_without_matching_id(
     checkpoint_dir = tmp_path / ".review-gauntlet" / "checkpoints" / "RGC-test"
     (checkpoint_dir / "findings.json").write_text(
         json.dumps({"schema_version": 1, "checkpoint_id": "RGC-test", "findings": [None]}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(SystemExit) as excinfo:
+        main(["init", str(tmp_path), "--format", "json"])
+
+    assert excinfo.value.code == 64
+    assert "internally inconsistent" in capsys.readouterr().err
+
+
+def test_default_init_rejects_invalid_transition_states_in_events(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_repo(tmp_path)
+    _write_checkpoint(tmp_path, _git(tmp_path, "rev-parse", "HEAD"))
+    checkpoint_dir = tmp_path / ".review-gauntlet" / "checkpoints" / "RGC-test"
+    (checkpoint_dir / "events.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "checkpoint_id": "RGC-test",
+                "events": [
+                    {
+                        "event_id": 1,
+                        "finding_id": "FG-001",
+                        "from_state": "untriaged",
+                        "to_state": "falseness",
+                        "reason": "test",
+                        "metadata": None,
+                    }
+                ],
+            }
+        ),
         encoding="utf-8",
     )
 

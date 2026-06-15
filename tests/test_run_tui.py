@@ -90,6 +90,13 @@ def test_elapsed_time_formatting() -> None:
     assert format_elapsed_time(65.9) == "01:05"
     assert format_elapsed_time(3661) == "1:01:01"
     assert format_elapsed_time(-1) == "00:00"
+    assert format_elapsed_time(float("nan")) == "00:00"
+    assert format_elapsed_time(float("inf")) == "00:00"
+
+
+def test_duration_formatting_handles_non_finite_values() -> None:
+    assert run_tui.format_duration(float("nan")) == "0s"
+    assert run_tui.format_duration(float("inf")) == "0s"
 
 
 def test_dashboard_header_contains_human_run_state_and_short_session() -> None:
@@ -593,6 +600,10 @@ def test_agent_session_summary_and_activity_rows_are_human_facing_and_sanitized(
     assert "SECRET=value" not in activity
     assert run_tui.sanitize_agent_output_line("api_key=supersecret") == "<redacted>"
     assert run_tui.sanitize_agent_output_line("ClientSecret=supersecret") == "<redacted>"
+    assert run_tui.sanitize_agent_output_line("Authorization: Bearer supersecret") == "<redacted>"
+    assert run_tui.sanitize_agent_output_line("x-api-key: supersecret") == "<redacted>"
+    assert run_tui.sanitize_agent_output_line('{"api_key": "supersecret"}') == "{<redacted>"
+    assert run_tui.sanitize_agent_output_line("password=supersecret") == "<redacted>"
 
 
 def test_footer_lists_only_implemented_controls() -> None:

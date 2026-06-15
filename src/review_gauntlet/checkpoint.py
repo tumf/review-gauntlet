@@ -61,13 +61,14 @@ class CheckpointCommitResult:
 
 def latest_checkpoint_dir(root: Path) -> Path:
     pointer = root / ".review-gauntlet" / "checkpoints" / "latest"
-    if pointer.is_symlink():
-        return pointer.parent / "__invalid_latest_checkpoint_pointer__"
+    invalid = pointer.parent / "__invalid_latest_checkpoint_pointer__"
+    if pointer.is_symlink() or pointer.is_dir():
+        return invalid
     if pointer.is_file():
         try:
             checkpoint_id = pointer.read_text(encoding="utf-8").strip()
         except OSError:
-            return pointer.parent / "__invalid_latest_checkpoint_pointer__"
+            return invalid
         else:
             if checkpoint_id and (
                 not any(part in {"", ".", ".."} for part in Path(checkpoint_id).parts)
@@ -76,7 +77,8 @@ def latest_checkpoint_dir(root: Path) -> Path:
                 candidate = pointer.parent / checkpoint_id
                 if candidate.is_dir() and not candidate.is_symlink():
                     return candidate
-    return pointer
+        return invalid
+    return invalid
 
 
 def latest_checkpoint_pointer(root: Path) -> Path:
@@ -143,8 +145,7 @@ def _validate_latest_checkpoint(root: Path, checkpoint: dict[str, Any]) -> None:
         if not isinstance(data, dict):
             raise ValueError(f"latest checkpoint is internally inconsistent: {name}")
         checkpoint_file = cast(dict[str, Any], data)
-        checkpoint_schema = checkpoint_file.get("schema_version")
-        if checkpoint_schema is not None and checkpoint_schema != CHECKPOINT_SCHEMA_VERSION:
+        if checkpoint_file.get("schema_version") != CHECKPOINT_SCHEMA_VERSION:
             raise ValueError(f"latest checkpoint {name} schema_version is not supported")
         if checkpoint_file.get("checkpoint_id") != checkpoint_id:
             raise ValueError(f"latest checkpoint is internally inconsistent: {name}")
@@ -153,12 +154,35 @@ def _validate_latest_checkpoint(root: Path, checkpoint: dict[str, Any]) -> None:
         if not isinstance(raw_payload, list):
             raise ValueError(f"latest checkpoint is internally inconsistent: {name}")
         payload = cast(list[Any], raw_payload)
+        required_entry_fields = (
+            ("finding_id", "session_id", "fingerprint", "state", "path", "rule_id", "content")
+            if name == "findings.json"
+            else ("event_id", "finding_id", "from_state", "to_state", "reason")
+        )
         for item in payload:
             if not isinstance(item, dict):
                 raise ValueError(f"latest checkpoint is internally inconsistent: {name}")
             entry = cast(dict[str, Any], item)
             if entry.get("checkpoint_id") != checkpoint_id:
                 raise ValueError(f"latest checkpoint is internally inconsistent: {name}")
+            if any(field not in entry for field in required_entry_fields):
+                raise ValueError(f"latest checkpoint is internally inconsistent: {name}")
+            if name == "findings.json":
+                if not all(isinstance(entry[field], str) for field in required_entry_fields):
+                    raise ValueError(f"latest checkpoint is internally inconsistent: {name}")
+                if entry["state"] not in {state.value for state in FindingState}:
+                    raise ValueError(f"latest checkpoint is internally inconsistent: {name}")
+            else:
+                if not isinstance(entry["event_id"], int) or isinstance(entry["event_id"], bool):
+                    raise ValueError(f"latest checkpoint is internally inconsistent: {name}")
+                text_fields = ("finding_id", "from_state", "to_state", "reason")
+                if not all(isinstance(entry[field], str) for field in text_fields):
+                    raise ValueError(f"latest checkpoint is internally inconsistent: {name}")
+                valid_transition_states = {state.value for state in FindingState}
+                if entry["from_state"] not in valid_transition_states:
+                    raise ValueError(f"latest checkpoint is internally inconsistent: {name}")
+                if entry["to_state"] not in valid_transition_states:
+                    raise ValueError(f"latest checkpoint is internally inconsistent: {name}")
     summary = latest_checkpoint_dir(root) / "summary.md"
     if not summary.is_file() or summary.is_symlink():
         raise ValueError("latest checkpoint is internally inconsistent: missing summary.md")
@@ -236,7 +260,9 @@ def write_latest_checkpoint(
     assert_review_universe_clean(root)
     head = _head_commit(root)
     if (
-        any(part in {"", ".", ".."} for part in Path(session_id).parts)
+        not session_id.isascii()
+        or not session_id.replace("-", "").replace("_", "").isalnum()
+        or any(part in {"", ".", ".."} for part in Path(session_id).parts)
         or Path(session_id).name != session_id
     ):
         raise ValueError("session_id must be a single path-safe segment")
@@ -318,10 +344,12 @@ def write_latest_checkpoint(
             shutil.rmtree(checkpoint_dir)
         if backup_dir.exists():
             backup_dir.rename(checkpoint_dir)
-        if pointer_backup_dir.exists() and not pointer_path.exists():
+        if pointer_backup_dir.exists():
+            if pointer_path.is_dir():
+                shutil.rmtree(pointer_path)
+            else:
+                pointer_path.unlink(missing_ok=True)
             pointer_backup_dir.rename(pointer_path)
-        elif pointer_backup_dir.exists():
-            shutil.rmtree(pointer_backup_dir)
         with suppress(OSError):
             pointer_tmp.unlink(missing_ok=True)
         raise
@@ -464,6 +492,20 @@ def commit_latest_checkpoint(
         )
     dirty = _get_all_uncommitted_paths(root)
     allowed_paths = _allowed_checkpoint_commit_paths(root, generated_files)
+    staged_before = _split(_git(root, "diff", "--cached", "--name-only"))
+    unstaged_before = _split(_git(root, "diff", "--name-only"))
+    staged_and_unstaged_paths = tuple(
+        path for path in staged_before if path in unstaged_before and path in allowed_paths
+    )
+    if staged_and_unstaged_paths:
+        return CheckpointCommitResult(
+            attempted=True,
+            committed=False,
+            commit=None,
+            reason="blocked_by_staged_and_unstaged_checkpoint_changes",
+            blocked_paths=staged_and_unstaged_paths,
+        )
+    paths_to_stage = tuple(path for path in dirty if path not in staged_before)
     blocked_paths = tuple(path for path in dirty if path not in allowed_paths)
     if blocked_paths:
         return CheckpointCommitResult(
@@ -479,7 +521,8 @@ def commit_latest_checkpoint(
             attempted=True, committed=False, commit=None, reason="no_checkpoint_diff"
         )
     try:
-        _git(root, "add", "--", *checkpoint_dirty)
+        if paths_to_stage:
+            _git(root, "add", "--", *paths_to_stage)
         staged = _split(_git(root, "diff", "--cached", "--name-only", "--", *checkpoint_dirty))
         if not staged:
             return CheckpointCommitResult(
@@ -489,6 +532,9 @@ def commit_latest_checkpoint(
         _git(root, "commit", "-m", commit_message, "--", *staged)
         commit = _git(root, "rev-parse", "--verify", "HEAD^{commit}")
     except subprocess.CalledProcessError as exc:
+        if paths_to_stage:
+            with suppress(subprocess.CalledProcessError):
+                _git(root, "restore", "--staged", "--", *paths_to_stage)
         return CheckpointCommitResult(
             attempted=True,
             committed=False,
@@ -500,19 +546,12 @@ def commit_latest_checkpoint(
 
 
 def _allowed_checkpoint_commit_paths(
-    root: Path, generated_files: tuple[str, ...]
+    _root: Path, generated_files: tuple[str, ...]
 ) -> tuple[str, ...]:
     allowed = {".review-gauntlet/checkpoints/latest"}
-    checkpoints_prefix = ".review-gauntlet/checkpoints/"
     for path in generated_files:
         if _is_allowed_checkpoint_artifact_path(path):
             allowed.add(path)
-    latest_dir = latest_checkpoint_dir(root)
-    if latest_dir != latest_checkpoint_pointer(root) and latest_dir.is_relative_to(root):
-        latest_relative = latest_dir.relative_to(root).as_posix()
-        if latest_relative.startswith(checkpoints_prefix):
-            for name in ("status.json", "findings.json", "events.json", "summary.md"):
-                allowed.add(f"{latest_relative}/{name}")
     return tuple(sorted(allowed))
 
 
@@ -525,13 +564,24 @@ def _is_allowed_checkpoint_artifact_path(path: str) -> bool:
         return True
     if len(parts) == 4 and parts[:2] == (".review-gauntlet", "checkpoints"):
         checkpoint_id, filename = parts[2], parts[3]
-        return checkpoint_id != "latest" and filename in {
+        return _is_path_safe_checkpoint_id(checkpoint_id) and filename in {
             "status.json",
             "findings.json",
             "events.json",
             "summary.md",
         }
     return False
+
+
+def _is_path_safe_checkpoint_id(checkpoint_id: str) -> bool:
+    return (
+        checkpoint_id.startswith("RGC-")
+        and checkpoint_id != "RGC-"
+        and checkpoint_id.isascii()
+        and checkpoint_id.replace("-", "").replace("_", "").isalnum()
+        and not any(part in {"", ".", ".."} for part in Path(checkpoint_id).parts)
+        and Path(checkpoint_id).name == checkpoint_id
+    )
 
 
 def _git_error(exc: subprocess.CalledProcessError) -> str:

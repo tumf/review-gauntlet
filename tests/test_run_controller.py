@@ -170,6 +170,62 @@ def test_checkpoint_generated_files_from_stdout_ignores_non_json() -> None:
     assert checkpoint_generated_files_from_stdout("not json") == ()
 
 
+def test_checkpoint_generated_files_from_stdout_accepts_nested_verdict_files() -> None:
+    stdout = json.dumps(
+        {"verdict": {"generated_files": [".review-gauntlet/checkpoints/latest/status.json"]}}
+    )
+
+    assert checkpoint_generated_files_from_stdout(stdout) == (
+        ".review-gauntlet/checkpoints/latest/status.json",
+    )
+
+
+def test_checkpoint_generated_files_from_stdout_rejects_non_json_checkpoint_paths() -> None:
+    stdout = json.dumps(
+        {
+            "generated_files": [
+                ".review-gauntlet/checkpoints/latest",
+                ".review-gauntlet/checkpoints/latest/summary.md",
+                ".review-gauntlet/checkpoints/latest/status.json",
+            ]
+        }
+    )
+
+    assert checkpoint_generated_files_from_stdout(stdout) == (
+        ".review-gauntlet/checkpoints/latest/status.json",
+    )
+
+
+def test_run_controller_honors_interrupt_requested_during_command(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+
+    def command(
+        _config: CommandAdapterConfig, _root: Path, _state_dir: Path, _prompt: str
+    ) -> SessionCommandResult:
+        controller.interrupt()
+        return SessionCommandResult(
+            argv=["fake-agent", "ready prompt"], cwd=None, returncode=0, stdout="ok", stderr=""
+        )
+
+    controller = RunController(
+        root=tmp_path,
+        store=store,
+        config_path=None,
+        max_steps=1,
+        ready_prompt=lambda _store, _root: "ready prompt",
+        status_snapshot=_status,
+        command_runner=command,
+    )
+
+    result = controller.run()
+
+    assert result["completed"] is False
+    assert result["reason"] == "interrupted"
+    assert result["error"] == "run interrupted by controller request"
+    assert result["step_count"] == 1
+    assert "finalized" not in [event.type for event in controller.events]
+
+
 def test_run_controller_exposes_command_label_before_command_returns(tmp_path: Path) -> None:
     store = _store(tmp_path)
     labels_during_command: list[str | None] = []
