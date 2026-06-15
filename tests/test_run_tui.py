@@ -19,6 +19,7 @@ from review_gauntlet.run_tui import (
     activity_text,
     agent_activity_text,
     calculate_progress_metrics,
+    compact_dashboard_text,
     coverage_text,
     create_run_app,
     dashboard_state,
@@ -194,6 +195,32 @@ def test_coverage_and_findings_render_dashboard_metrics_without_old_markers() ->
     assert "closed 0" in findings
 
 
+def test_tui_panel_body_helpers_omit_standalone_section_headings() -> None:
+    snapshot = RunSnapshot(
+        session_id="RGS-body-headings",
+        coverage={"reviewed": 2, "pending": 1},
+        findings={"open": 1},
+        next_ready_prompt="review pending cells",
+        step=1,
+        agent_status="running",
+        command_argv=("agent",),
+        elapsed_seconds=1,
+        command_label="agent",
+    )
+    view = dashboard_state(snapshot, ())
+
+    bodies = {
+        "Activity": activity_text(view),
+        "Finalize path": run_tui.finalize_path_text(view),
+        "Session metrics": coverage_text(snapshot),
+        "Findings": findings_text(snapshot),
+        "Current operation": run_tui.current_operation_text(view),
+    }
+
+    for heading, body in bodies.items():
+        assert body.splitlines()[0] != heading
+
+
 @pytest.mark.parametrize(
     ("prompt", "title"),
     [
@@ -225,7 +252,7 @@ def test_task_text_sanitizes_unknown_prompt_and_omits_command_na() -> None:
     task_text = cast(Callable[[RunSnapshot], str], run_tui.__dict__["_task_text"])
     text = task_text(snapshot)
 
-    assert "Current operation" in text
+    assert "Current operation" not in text
     assert "Finalize checkpoint" in text
     assert "\\[bold]task" not in text
     assert "\x1b" not in text
@@ -368,19 +395,7 @@ def test_compact_dashboard_text_keeps_required_sections() -> None:
         elapsed_seconds=3,
         command_label="agent",
     )
-    view = dashboard_state(snapshot, ())
-    task_text = cast(Callable[[RunSnapshot], str], run_tui.__dict__["_task_text"])
-    compact = "\n".join(
-        [
-            progress_text(snapshot),
-            run_tui.finalize_path_text(view),
-            coverage_text(snapshot),
-            findings_text(snapshot),
-            task_text(snapshot),
-            activity_text(view),
-            footer_text(),
-        ]
-    )
+    compact = compact_dashboard_text(snapshot)
 
     assert "Review Gauntlet" in compact
     assert "Finalize path" in compact
@@ -402,11 +417,14 @@ def test_footer_lists_only_implemented_controls() -> None:
     assert "artifacts" not in footer
 
 
-def test_run_tui_source_does_not_import_default_header_footer() -> None:
+def test_run_tui_source_uses_border_titles_and_semantic_title_styles() -> None:
     source = Path("src/review_gauntlet/run_tui.py").read_text(encoding="utf-8")
 
     assert "Header" not in source
     assert "Footer" not in source
+    assert "border_title" in source
+    assert "border-title-color" in source
+    assert "border-title-style" in source
     assert "$warning" in source
     assert "$accent" not in source
 

@@ -32,17 +32,31 @@ def create_run_app(controller: RunController) -> object:
     except ImportError as exc:
         raise RuntimeError(TUI_FALLBACK_WARNING) from exc
 
+    def titled_panel(
+        title: str, body: Static, *, id: str | None = None, classes: str = "panel"
+    ) -> Vertical:
+        panel = Vertical(body, id=id, classes=classes)
+        panel.border_title = title
+        return panel
+
     class RunApp(App[dict[str, object]]):
         CSS = """
         Screen { layout: vertical; }
         #body { height: 1fr; padding: 1; }
         #session_header { border: round $primary; padding: 1; height: auto; }
         #metrics { height: auto; }
-        .panel { border: round $surface-lighten-2; padding: 1; height: auto; }
-        .panel-active { border: round $success; }
-        .panel-blocked { border: round $warning; }
-        .panel-failed { border: round $error; }
-        .panel-finalized { border: round $success; }
+        .panel {
+            border: round $surface-lighten-2;
+            border-title-color: $text-muted;
+            border-title-style: bold;
+            padding: 1;
+            height: auto;
+        }
+        .panel-active { border: round $success; border-title-color: $success; }
+        .panel-blocked { border: round $warning; border-title-color: $warning; }
+        .panel-failed { border: round $error; border-title-color: $error; }
+        .panel-finalized { border: round $success; border-title-color: $success; }
+        #activity_panel { height: 1fr; }
         #activity_timeline { height: 1fr; }
         #controls { color: $text-muted; height: auto; }
         """
@@ -66,20 +80,32 @@ def create_run_app(controller: RunController) -> object:
             )
             with Vertical(id="body"):
                 yield Static(header_text(view), id="session_header", classes=view.state_class)
-                yield Static(
-                    finalize_path_text(view),
-                    id="finalize_path",
+                yield titled_panel(
+                    "Finalize path",
+                    Static(finalize_path_text(view), id="finalize_path"),
+                    id="finalize_path_panel",
                     classes=f"panel {view.state_class}",
                 )
                 with Horizontal(id="metrics"):
-                    yield Static(coverage_text(self.snapshot), id="coverage_panel", classes="panel")
-                    yield Static(findings_text(self.snapshot), id="findings_panel", classes="panel")
-                yield Static(
-                    current_operation_text(view),
-                    id="task_panel",
+                    yield titled_panel(
+                        "Session metrics",
+                        Static(coverage_text(self.snapshot), id="coverage_panel"),
+                    )
+                    yield titled_panel(
+                        "Findings",
+                        Static(findings_text(self.snapshot), id="findings_panel"),
+                    )
+                yield titled_panel(
+                    "Current operation",
+                    Static(current_operation_text(view), id="task_panel"),
+                    id="task_panel_container",
                     classes=f"panel {view.state_class}",
                 )
-                yield Static(activity_text(view), id="activity_timeline", classes="panel")
+                yield titled_panel(
+                    "Activity",
+                    Static(activity_text(view), id="activity_timeline"),
+                    id="activity_panel",
+                )
                 yield Static(footer_text(), id="controls")
 
         def on_mount(self) -> None:
@@ -122,9 +148,11 @@ def create_run_app(controller: RunController) -> object:
             )
             try:
                 session_header = self.query_one("#session_header", Static)
+                finalize_path_panel = self.query_one("#finalize_path_panel", Vertical)
                 finalize_path = self.query_one("#finalize_path", Static)
                 coverage_panel = self.query_one("#coverage_panel", Static)
                 findings_panel = self.query_one("#findings_panel", Static)
+                task_panel_container = self.query_one("#task_panel_container", Vertical)
                 task_panel = self.query_one("#task_panel", Static)
                 activity_timeline = self.query_one("#activity_timeline", Static)
             except NoMatches:
@@ -137,7 +165,10 @@ def create_run_app(controller: RunController) -> object:
                 "panel-failed",
                 "panel-finalized",
             ):
+                enabled = state_class == "panel" or state_class == view.state_class
                 session_header.set_class(state_class == view.state_class, state_class)
+                finalize_path_panel.set_class(enabled, state_class)
+                task_panel_container.set_class(enabled, state_class)
             finalize_path.update(finalize_path_text(view))
             coverage_panel.update(coverage_text(self.snapshot))
             findings_panel.update(findings_text(self.snapshot))
@@ -479,8 +510,27 @@ def progress_text(snapshot: RunSnapshot, *, activity_frame: int = 0) -> str:
     return header_text(dashboard_state(snapshot, (), activity_frame=activity_frame))
 
 
+def titled_section(title: str, body: str) -> str:
+    return f"{title}\n{body}" if body else title
+
+
+def compact_dashboard_text(snapshot: RunSnapshot, events: tuple[RunEvent, ...] = ()) -> str:
+    view = dashboard_state(snapshot, events)
+    return "\n".join(
+        [
+            progress_text(snapshot),
+            titled_section("Finalize path", finalize_path_text(view)),
+            titled_section("Session metrics", coverage_text(snapshot)),
+            titled_section("Findings", findings_text(snapshot)),
+            titled_section("Current operation", current_operation_text(view)),
+            titled_section("Activity", activity_text(view)),
+            footer_text(),
+        ]
+    )
+
+
 def finalize_path_text(view: RunViewState) -> str:
-    lines = ["Finalize path"]
+    lines: list[str] = []
     for gate in view.gates:
         marker = {"done": "✓", "active": "▶", "blocked": "!", "failed": "×", "skipped": "-"}.get(
             gate.state, "·"
@@ -493,7 +543,6 @@ def coverage_text(snapshot: RunSnapshot) -> str:
     metrics = calculate_progress_metrics(snapshot.coverage)
     return "\n".join(
         [
-            "Session metrics",
             f"{metrics.percent:3d}% {_progress_bar(metrics.completed, metrics.total)}",
             f"reviewed / total cells: {metrics.completed} / {metrics.total}",
             (
@@ -509,12 +558,11 @@ def findings_text(snapshot: RunSnapshot) -> str:
     for state in FINDING_STATES:
         label = state.replace("fixed_pending_verification", "fixed-pending")
         parts.append(f"{label} {_count_value(snapshot.findings.get(state, 0))}")
-    return "Findings\n" + " | ".join(parts)
+    return " | ".join(parts)
 
 
 def current_operation_text(view: RunViewState) -> str:
     lines = [
-        "Current operation",
         f"{view.active_gate.title} ({view.active_gate.state})",
         view.active_gate.detail,
         f"liveness {view.activity}",
@@ -559,7 +607,7 @@ def format_activity_event(event: RunEvent) -> TimelineEvent:
 
 
 def activity_text(view: RunViewState) -> str:
-    lines = ["Activity"]
+    lines: list[str] = []
     if not view.timeline_events:
         lines.append("--:--:-- waiting for run activity")
     for event in view.timeline_events:
