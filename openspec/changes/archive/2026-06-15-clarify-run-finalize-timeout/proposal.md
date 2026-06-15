@@ -1,8 +1,6 @@
 ---
 change_type: implementation
 priority: high
-dependencies:
-  - remove-timeout-from-run-tui-header
 references:
   - openspec/CONSTITUTION.md
   - openspec/specs/review-sessions/spec.md
