@@ -4,11 +4,16 @@ import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import pytest
+
+import review_gauntlet.run_controller as run_controller_module
+from review_gauntlet.checkpoint import CheckpointCommitResult
 from review_gauntlet.config import CommandAdapterConfig
 from review_gauntlet.review_cells import CellState, ReviewCell
 from review_gauntlet.run_controller import (
     RunController,
     SessionCommandResult,
+    checkpoint_generated_files_from_stdout,
     command_display_label,
 )
 from review_gauntlet.session_store import SessionStore
@@ -96,8 +101,73 @@ def test_run_controller_completes_when_command_finalizes_session(tmp_path: Path)
         "step_started",
         "agent_started",
         "agent_finished",
+        "checkpoint_commit_started",
+        "checkpoint_commit_finished",
         "finalized",
     ]
+
+
+def test_run_controller_attempts_checkpoint_commit_after_finalization(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = _store(tmp_path)
+    calls: list[tuple[Path, str, tuple[str, ...]]] = []
+
+    def fake_commit_latest_checkpoint(
+        root: Path, *, session_id: str, generated_files: tuple[str, ...] = ()
+    ) -> CheckpointCommitResult:
+        calls.append((root, session_id, generated_files))
+        return CheckpointCommitResult(
+            attempted=True,
+            committed=True,
+            commit="abc123",
+            reason="committed",
+        )
+
+    monkeypatch.setattr(
+        run_controller_module, "commit_latest_checkpoint", fake_commit_latest_checkpoint
+    )
+
+    def command(
+        _config: CommandAdapterConfig, _root: Path, _state_dir: Path, _prompt: str
+    ) -> SessionCommandResult:
+        store.active_path.unlink()
+        return SessionCommandResult(
+            argv=["fake-agent"],
+            cwd=None,
+            returncode=0,
+            stdout=json.dumps(
+                {"generated_files": [".review-gauntlet/checkpoints/latest/status.json"]}
+            ),
+            stderr="",
+        )
+
+    controller = RunController(
+        root=tmp_path,
+        store=store,
+        config_path=None,
+        max_steps=1,
+        ready_prompt=lambda _store, _root: "ready prompt",
+        status_snapshot=_status,
+        command_runner=command,
+    )
+
+    result = controller.run()
+
+    assert calls == [(tmp_path, "RGS-test", (".review-gauntlet/checkpoints/latest/status.json",))]
+    assert result["checkpoint_commit_attempted"] is True
+    assert result["checkpoint_committed"] is True
+    assert result["checkpoint_commit"] == "abc123"
+    assert result["checkpoint_commit_reason"] == "committed"
+    assert [event.type for event in controller.events][-3:] == [
+        "checkpoint_commit_started",
+        "checkpoint_commit_finished",
+        "finalized",
+    ]
+
+
+def test_checkpoint_generated_files_from_stdout_ignores_non_json() -> None:
+    assert checkpoint_generated_files_from_stdout("not json") == ()
 
 
 def test_run_controller_exposes_command_label_before_command_returns(tmp_path: Path) -> None:

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast
 
+from review_gauntlet.checkpoint import CheckpointCommitResult, commit_latest_checkpoint
 from review_gauntlet.config import CommandAdapterConfig, load_config
 from review_gauntlet.session_store import SessionStore
 
@@ -278,6 +280,14 @@ class RunController:
                     session_id=session_id,
                 )
             if not self.store.active_path.exists():
+                checkpoint_commit = self._commit_finalized_checkpoint(session_id, command_result)
+                self._emit(
+                    "checkpoint_commit_finished",
+                    session_id=session_id,
+                    committed=checkpoint_commit.committed,
+                    reason=checkpoint_commit.reason,
+                    commit=checkpoint_commit.commit,
+                )
                 self._emit("finalized", session_id=session_id)
                 return _run_result(
                     completed=True,
@@ -285,6 +295,7 @@ class RunController:
                     reason="completed",
                     error=None,
                     session_id=session_id,
+                    checkpoint_commit=checkpoint_commit,
                 )
             if self._stop_after_current_step:
                 self._emit("blocked", reason="stop_after_current_step", session_id=session_id)
@@ -314,6 +325,17 @@ class RunController:
             error=f"active session remains after {self.max_steps} run step(s)",
             session_id=session_id,
             max_steps=self.max_steps,
+        )
+
+    def _commit_finalized_checkpoint(
+        self, session_id: str, command_result: SessionCommandResult
+    ) -> CheckpointCommitResult:
+        self._emit("checkpoint_commit_started", session_id=session_id)
+        generated_files = checkpoint_generated_files_from_stdout(command_result.stdout)
+        return commit_latest_checkpoint(
+            self.root,
+            session_id=session_id,
+            generated_files=generated_files,
         )
 
     def _emit(self, event_type: str, **payload: object) -> None:
@@ -398,6 +420,7 @@ def _run_result(
     error: str | None,
     session_id: str | None,
     max_steps: int | None = None,
+    checkpoint_commit: CheckpointCommitResult | None = None,
 ) -> dict[str, object]:
     result: dict[str, object] = {
         "completed": completed,
@@ -410,7 +433,24 @@ def _run_result(
         result["error"] = error
     if max_steps is not None:
         result["max_steps"] = max_steps
+    if checkpoint_commit is not None:
+        result.update(checkpoint_commit.model_dump())
     return result
+
+
+def checkpoint_generated_files_from_stdout(stdout: str) -> tuple[str, ...]:
+    try:
+        payload = json.loads(stdout)
+    except json.JSONDecodeError:
+        return ()
+    if not isinstance(payload, dict):
+        return ()
+    typed_payload = cast(dict[str, object], payload)
+    raw_files = typed_payload.get("generated_files")
+    if not isinstance(raw_files, list):
+        return ()
+    typed_files = cast(list[object], raw_files)
+    return tuple(item for item in typed_files if isinstance(item, str))
 
 
 def _run_step_payload(

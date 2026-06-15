@@ -147,6 +147,35 @@ print('agent finished')
     assert not (tmp_path / ".review-gauntlet" / "active-session.json").exists()
 
 
+def test_run_json_emits_checkpoint_commit_metadata(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _write_config(tmp_path, "fake-agent", [])
+
+    def fake_run(_self: object) -> dict[str, object]:
+        return {
+            "completed": True,
+            "reason": "completed",
+            "steps": [],
+            "step_count": 0,
+            "session_id": "RGS-test",
+            "checkpoint_commit_attempted": True,
+            "checkpoint_committed": False,
+            "checkpoint_commit": None,
+            "checkpoint_commit_reason": "no_checkpoint_diff",
+        }
+
+    monkeypatch.setattr("review_gauntlet.cli.RunController.run", fake_run)
+
+    main(["run", str(tmp_path), "--format", "json"])
+
+    result = json.loads(capsys.readouterr().out)
+    assert result["checkpoint_commit_attempted"] is True
+    assert result["checkpoint_committed"] is False
+    assert result["checkpoint_commit"] is None
+    assert result["checkpoint_commit_reason"] == "no_checkpoint_diff"
+
+
 def test_run_reports_no_ready_task_without_traceback(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

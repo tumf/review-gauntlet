@@ -43,7 +43,7 @@ When `review-gauntlet run` detects that an agent step successfully finalized the
 **When**: the run workflow reaches checkpoint commit handling
 **Then**: no git commit is created
 **And**: the run result reports that checkpoint commit was attempted but not created
-**And**: the run result includes a no-op reason such as `no_checkpoint_changes`
+**And**: the run result includes a no-op reason such as `no_checkpoint_diff`
 **And**: the finalized session remains finalized
 
 #### Scenario: Standalone finalize behavior remains unchanged

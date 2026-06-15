@@ -36,6 +36,29 @@ class DirtyWorkingTree:
         return bool(self.review_paths or self.non_review_paths)
 
 
+@dataclass(frozen=True)
+class CheckpointCommitResult:
+    attempted: bool
+    committed: bool
+    commit: str | None
+    reason: str
+    blocked_paths: tuple[str, ...] = ()
+    failed_error: str | None = None
+
+    def model_dump(self) -> dict[str, object]:
+        result: dict[str, object] = {
+            "checkpoint_commit_attempted": self.attempted,
+            "checkpoint_committed": self.committed,
+            "checkpoint_commit": self.commit,
+            "checkpoint_commit_reason": self.reason,
+        }
+        if self.blocked_paths:
+            result["checkpoint_commit_blocked_paths"] = list(self.blocked_paths)
+        if self.failed_error is not None:
+            result["checkpoint_commit_error"] = self.failed_error
+        return result
+
+
 def latest_checkpoint_dir(root: Path) -> Path:
     pointer = root / ".review-gauntlet" / "checkpoints" / "latest"
     if pointer.is_symlink():
@@ -430,6 +453,67 @@ def _render_summary(
 
 def _escape_md(value: str) -> str:
     return value.replace("|", "\\|").replace("\n", " ")
+
+
+def commit_latest_checkpoint(
+    root: Path, *, session_id: str, generated_files: tuple[str, ...] = ()
+) -> CheckpointCommitResult:
+    if not (root / ".git").exists():
+        return CheckpointCommitResult(
+            attempted=True, committed=False, commit=None, reason="not_git_repository"
+        )
+    dirty = _get_all_uncommitted_paths(root)
+    allowed_paths = _allowed_checkpoint_commit_paths(generated_files)
+    blocked_paths = tuple(path for path in dirty if path not in allowed_paths)
+    if blocked_paths:
+        return CheckpointCommitResult(
+            attempted=True,
+            committed=False,
+            commit=None,
+            reason="blocked_by_non_checkpoint_changes",
+            blocked_paths=blocked_paths,
+        )
+    checkpoint_dirty = tuple(path for path in dirty if path in allowed_paths)
+    if not checkpoint_dirty:
+        return CheckpointCommitResult(
+            attempted=True, committed=False, commit=None, reason="no_checkpoint_diff"
+        )
+    try:
+        _git(root, "add", "--", *checkpoint_dirty)
+        staged = _split(_git(root, "diff", "--cached", "--name-only", "--", *checkpoint_dirty))
+        if not staged:
+            return CheckpointCommitResult(
+                attempted=True, committed=False, commit=None, reason="no_checkpoint_diff"
+            )
+        commit_message = f"checkpoint: finalize review-gauntlet session {session_id}"
+        _git(root, "commit", "-m", commit_message, "--", *staged)
+        commit = _git(root, "rev-parse", "--verify", "HEAD^{commit}")
+    except subprocess.CalledProcessError as exc:
+        return CheckpointCommitResult(
+            attempted=True,
+            committed=False,
+            commit=None,
+            reason="git_failure",
+            failed_error=_git_error(exc),
+        )
+    return CheckpointCommitResult(attempted=True, committed=True, commit=commit, reason="committed")
+
+
+def _allowed_checkpoint_commit_paths(generated_files: tuple[str, ...]) -> tuple[str, ...]:
+    allowed = {".review-gauntlet/checkpoints/latest"}
+    for path in generated_files:
+        if path == ".review-gauntlet/checkpoints/latest" or path.startswith(
+            ".review-gauntlet/checkpoints/latest/"
+        ):
+            allowed.add(path)
+    return tuple(sorted(allowed))
+
+
+def _git_error(exc: subprocess.CalledProcessError) -> str:
+    stderr = exc.stderr.strip() if isinstance(exc.stderr, str) else ""
+    stdout = exc.stdout.strip() if isinstance(exc.stdout, str) else ""
+    detail = stderr or stdout or str(exc)
+    return detail
 
 
 def _split(output: str) -> tuple[str, ...]:
