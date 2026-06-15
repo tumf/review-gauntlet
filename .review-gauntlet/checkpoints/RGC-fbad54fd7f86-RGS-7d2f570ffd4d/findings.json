@@ -1,0 +1,531 @@
+{
+  "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+  "findings": [
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "content": "The checkpoint file list is accepted directly from the agent's stdout before it is passed to commit_latest_checkpoint. Although commit_latest_checkpoint filters paths, this parser does not validate that the values are relative checkpoint artifact paths or remove duplicates before forwarding them. That makes the trust boundary harder to reason about and can let malformed agent output influence the commit allowlist path calculation. Validate the schema at the boundary and only return normalized, allowed checkpoint artifact paths.",
+      "finding_id": "RGF-0132",
+      "fingerprint": "d5995360e4450eb2e96870b3cbb2130b1708ac19175869ed466ef742c2a01339",
+      "latest_occurrence": {
+        "cell_id": "RGC-eaadb43273cd57a0",
+        "end_line": 453,
+        "finding_id": "RGF-0132",
+        "imprecise": 0,
+        "occurrence_id": 132,
+        "path": "src/review_gauntlet/run_controller.py",
+        "run_id": 130,
+        "start_line": 441
+      },
+      "metadata": "{\"fingerprint\":\"d5995360e4450eb2e96870b3cbb2130b1708ac19175869ed466ef742c2a01339\",\"path\":\"src/review_gauntlet/run_controller.py\",\"rule_id\":\"data-validation\",\"content\":\"The checkpoint file list is accepted directly from the agent's stdout before it is passed to commit_latest_checkpoint. Although commit_latest_checkpoint filters paths, this parser does not validate that the values are relative checkpoint artifact paths or remove duplicates before forwarding them. That makes the trust boundary harder to reason about and can let malformed agent output influence the commit allowlist path calculation. Validate the schema at the boundary and only return normalized, allowed checkpoint artifact paths.\",\"suggestion_code\":\"def checkpoint_generated_files_from_stdout(stdout: str) -> tuple[str, ...]:\\n    try:\\n        payload = json.loads(stdout)\\n    except json.JSONDecodeError:\\n        return ()\\n    if not isinstance(payload, dict):\\n        return ()\\n    typed_payload = cast(dict[str, object], payload)\\n    raw_files = typed_payload.get(\\\"generated_files\\\")\\n    if not isinstance(raw_files, list):\\n        return ()\\n    typed_files = cast(list[object], raw_files)\\n    files: list[str] = []\\n    seen: set[str] = set()\\n    for item in typed_files:\\n        if not isinstance(item, str):\\n            continue\\n        relative = Path(item)\\n        if relative.is_absolute() or any(part in {\\\"\\\", \\\".\\\", \\\"..\\\"} for part in relative.parts):\\n            continue\\n        normalized = relative.as_posix()\\n        if not normalized.startswith(\\\".review-gauntlet/checkpoints/\\\"):\\n            continue\\n        if normalized not in seen:\\n            files.append(normalized)\\n            seen.add(normalized)\\n    return tuple(files)\",\"existing_code\":\"def checkpoint_generated_files_from_stdout(stdout: str) -> tuple[str, ...]:\\n    try:\\n        payload = json.loads(stdout)\\n    except json.JSONDecodeError:\\n        return ()\\n    if not isinstance(payload, dict):\\n        return ()\\n    typed_payload = cast(dict[str, object], payload)\\n    raw_files = typed_payload.get(\\\"generated_files\\\")\\n    if not isinstance(raw_files, list):\\n        return ()\\n    typed_files = cast(list[object], raw_files)\\n    return tuple(item for item in typed_files if isinstance(item, str))\",\"start_line\":441,\"end_line\":453,\"thinking\":\"This is the boundary where untrusted adapter output is converted into data that influences checkpoint commit allowlisting. Tight validation here keeps the downstream commit policy simpler and avoids propagating malformed paths.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_controller.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-7d2f570ffd4d",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "content": "The fallback text renderer ignores the events passed to compact_dashboard_text when rendering the header/progress line. dashboard_state(snapshot, events) is computed with events, but progress_text(snapshot) immediately recomputes dashboard_state with an empty event tuple, so the header can diverge from the rest of the compact dashboard if event-derived state is added or expected. Use the already computed view for the header instead of discarding the caller-provided events.",
+      "finding_id": "RGF-0133",
+      "fingerprint": "487393945a4580b1bcad15694e78d75a494d9b28bfe560382dba977dd375f363",
+      "latest_occurrence": {
+        "cell_id": "RGC-8610c7a6f661b70a",
+        "end_line": 642,
+        "finding_id": "RGF-0133",
+        "imprecise": 0,
+        "occurrence_id": 133,
+        "path": "src/review_gauntlet/run_tui.py",
+        "run_id": 130,
+        "start_line": 638
+      },
+      "metadata": "{\"fingerprint\":\"487393945a4580b1bcad15694e78d75a494d9b28bfe560382dba977dd375f363\",\"path\":\"src/review_gauntlet/run_tui.py\",\"rule_id\":\"data-validation\",\"content\":\"The fallback text renderer ignores the events passed to compact_dashboard_text when rendering the header/progress line. dashboard_state(snapshot, events) is computed with events, but progress_text(snapshot) immediately recomputes dashboard_state with an empty event tuple, so the header can diverge from the rest of the compact dashboard if event-derived state is added or expected. Use the already computed view for the header instead of discarding the caller-provided events.\",\"suggestion_code\":\"def compact_dashboard_text(snapshot: RunSnapshot, events: tuple[RunEvent, ...] = ()) -> str:\\n    view = dashboard_state(snapshot, events)\\n    return \\\"\\\\n\\\".join(\\n        [\\n            header_text(view),\",\"existing_code\":\"def compact_dashboard_text(snapshot: RunSnapshot, events: tuple[RunEvent, ...] = ()) -> str:\\n    view = dashboard_state(snapshot, events)\\n    return \\\"\\\\n\\\".join(\\n        [\\n            progress_text(snapshot),\",\"start_line\":638,\"end_line\":642,\"thinking\":\"This is a data-flow validation issue: the function accepts events and builds a validated view from them, but then partially renders from a fresh view that omits those inputs.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_tui.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-7d2f570ffd4d",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "content": "The latest pointer validation rejects symlinks, but it still trusts any existing directory named latest as a checkpoint because latest_checkpoint_dir() falls back to returning the directory path. A stale or user-created .review-gauntlet/checkpoints/latest directory with forged status/findings/events can therefore be accepted as the review base, bypassing the intended single-segment checkpoint-id pointer validation.",
+      "finding_id": "RGF-0134",
+      "fingerprint": "1755a72c7484cedd4fc9f364afefd0d6ccf284493c5c51b527480d77e14d7a79",
+      "latest_occurrence": {
+        "cell_id": "RGC-8769b06915f1af11",
+        "end_line": 79,
+        "finding_id": "RGF-0134",
+        "imprecise": 0,
+        "occurrence_id": 134,
+        "path": "src/review_gauntlet/checkpoint.py",
+        "run_id": 130,
+        "start_line": 62
+      },
+      "metadata": "{\"fingerprint\":\"1755a72c7484cedd4fc9f364afefd0d6ccf284493c5c51b527480d77e14d7a79\",\"path\":\"src/review_gauntlet/checkpoint.py\",\"rule_id\":\"data-validation\",\"content\":\"The latest pointer validation rejects symlinks, but it still trusts any existing directory named latest as a checkpoint because latest_checkpoint_dir() falls back to returning the directory path. A stale or user-created .review-gauntlet/checkpoints/latest directory with forged status/findings/events can therefore be accepted as the review base, bypassing the intended single-segment checkpoint-id pointer validation.\",\"suggestion_code\":\"def latest_checkpoint_dir(root: Path) -> Path:\\n    pointer = root / \\\".review-gauntlet\\\" / \\\"checkpoints\\\" / \\\"latest\\\"\\n    invalid = pointer.parent / \\\"__invalid_latest_checkpoint_pointer__\\\"\\n    if pointer.is_symlink() or pointer.is_dir():\\n        return invalid\\n    if pointer.is_file():\\n        try:\\n            checkpoint_id = pointer.read_text(encoding=\\\"utf-8\\\").strip()\\n        except OSError:\\n            return invalid\\n        if checkpoint_id and (\\n            not any(part in {\\\"\\\", \\\".\\\", \\\"..\\\"} for part in Path(checkpoint_id).parts)\\n            and Path(checkpoint_id).name == checkpoint_id\\n        ):\\n            candidate = pointer.parent / checkpoint_id\\n            if candidate.is_dir() and not candidate.is_symlink():\\n                return candidate\\n        return invalid\\n    return pointer\",\"existing_code\":\"    return pointer\",\"start_line\":62,\"end_line\":79,\"thinking\":\"write_latest_checkpoint previously handled a directory at latest as legacy state, but load/target validation should not accept a directory as a valid latest pointer because it skips pointer-file contents validation and allows checkpoint_id == latest.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/checkpoint.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-7d2f570ffd4d",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "content": "SessionCommandResult carries artifact paths and output_tail, but the persisted run step payload drops them. That means long/truncated command output or live activity evidence captured by the adapter is not present in run results, making failures harder to audit and contradicting the test-evidence goal for agent runs.",
+      "finding_id": "RGF-0135",
+      "fingerprint": "600c3bac46c03174938626cbb8232164ad2763ec0fa3ef9c632a4f944e0e8dab",
+      "latest_occurrence": {
+        "cell_id": "RGC-818ca3c0010eb49e",
+        "end_line": 481,
+        "finding_id": "RGF-0135",
+        "imprecise": 0,
+        "occurrence_id": 135,
+        "path": "src/review_gauntlet/run_controller.py",
+        "run_id": 131,
+        "start_line": 473
+      },
+      "metadata": "{\"fingerprint\":\"600c3bac46c03174938626cbb8232164ad2763ec0fa3ef9c632a4f944e0e8dab\",\"path\":\"src/review_gauntlet/run_controller.py\",\"rule_id\":\"test-evidence\",\"content\":\"SessionCommandResult carries artifact paths and output_tail, but the persisted run step payload drops them. That means long/truncated command output or live activity evidence captured by the adapter is not present in run results, making failures harder to audit and contradicting the test-evidence goal for agent runs.\",\"suggestion_code\":\"    payload: dict[str, object] = {\\n        \\\"step\\\": step_number,\\n        \\\"prompt\\\": prompt,\\n        \\\"argv\\\": result.argv,\\n        \\\"cwd\\\": result.cwd,\\n        \\\"returncode\\\": result.returncode,\\n        \\\"stdout\\\": result.stdout,\\n        \\\"stderr\\\": result.stderr,\\n        \\\"stdout_artifact\\\": result.stdout_artifact,\\n        \\\"stderr_artifact\\\": result.stderr_artifact,\\n        \\\"activity_artifact\\\": result.activity_artifact,\\n        \\\"output_tail\\\": [entry.__dict__ for entry in result.output_tail],\\n    }\",\"existing_code\":\"    payload: dict[str, object] = {\\n        \\\"step\\\": step_number,\\n        \\\"prompt\\\": prompt,\\n        \\\"argv\\\": result.argv,\\n        \\\"cwd\\\": result.cwd,\\n        \\\"returncode\\\": result.returncode,\\n        \\\"stdout\\\": result.stdout,\\n        \\\"stderr\\\": result.stderr,\\n    }\",\"start_line\":473,\"end_line\":481,\"thinking\":\"The dataclass includes stdout_artifact, stderr_artifact, activity_artifact, and output_tail, and lifecycle snapshots expose them, but _run_step_payload only persists raw stdout/stderr and failure. Adding these fields preserves review evidence in the returned run result.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_controller.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-7d2f570ffd4d",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "content": "When committing a checkpoint fails after `git add`, the staged checkpoint files are left in the index. The error result reports `git_failure`, but subsequent commands see a dirty/staged working tree, which can block retry or accidentally include checkpoint artifacts in a later user commit. Capture the pre-existing staged state or unstage the checkpoint paths in the exception path before returning.",
+      "finding_id": "RGF-0136",
+      "fingerprint": "5f336a7882a8c879bb41fcb06d784957683cc9d8f766ae53b85826dfc607d43d",
+      "latest_occurrence": {
+        "cell_id": "RGC-8769b06915f1af11",
+        "end_line": 500,
+        "finding_id": "RGF-0136",
+        "imprecise": 0,
+        "occurrence_id": 136,
+        "path": "src/review_gauntlet/checkpoint.py",
+        "run_id": 131,
+        "start_line": 493
+      },
+      "metadata": "{\"fingerprint\":\"5f336a7882a8c879bb41fcb06d784957683cc9d8f766ae53b85826dfc607d43d\",\"path\":\"src/review_gauntlet/checkpoint.py\",\"rule_id\":\"data-validation\",\"content\":\"When committing a checkpoint fails after `git add`, the staged checkpoint files are left in the index. The error result reports `git_failure`, but subsequent commands see a dirty/staged working tree, which can block retry or accidentally include checkpoint artifacts in a later user commit. Capture the pre-existing staged state or unstage the checkpoint paths in the exception path before returning.\",\"suggestion_code\":\"    except subprocess.CalledProcessError as exc:\\n        with suppress(subprocess.CalledProcessError):\\n            _git(root, \\\"restore\\\", \\\"--staged\\\", \\\"--\\\", *checkpoint_dirty)\\n        return CheckpointCommitResult(\\n            attempted=True,\\n            committed=False,\\n            commit=None,\\n            reason=\\\"git_failure\\\",\\n            failed_error=_git_error(exc),\\n        )\",\"existing_code\":\"    except subprocess.CalledProcessError as exc:\\n        return CheckpointCommitResult(\\n            attempted=True,\\n            committed=False,\\n            commit=None,\\n            reason=\\\"git_failure\\\",\\n            failed_error=_git_error(exc),\\n        )\",\"start_line\":493,\"end_line\":500,\"thinking\":\"The function stages allowed checkpoint files before running both diff and commit. If commit fails, the staged changes remain because there is no cleanup in the exception handler. Since dirty paths were restricted to checkpoint files immediately before staging, unstaging checkpoint_dirty is a safe rollback of this function's side effect.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/checkpoint.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-7d2f570ffd4d",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "content": "`snapshot.elapsed_seconds` originates from status/controller data and is typed as a float, but this formatter accepts arbitrary floats without rejecting non-finite values. If a malformed or mocked snapshot supplies `NaN` or `Infinity`, `int(seconds)` raises and can crash the TUI/text fallback instead of degrading safely.",
+      "finding_id": "RGF-0137",
+      "fingerprint": "c612c2123d92dc62121c3e4b396198cec9114f71cd59f6746f1f48c6635c4861",
+      "latest_occurrence": {
+        "cell_id": "RGC-8610c7a6f661b70a",
+        "end_line": 316,
+        "finding_id": "RGF-0137",
+        "imprecise": 0,
+        "occurrence_id": 137,
+        "path": "src/review_gauntlet/run_tui.py",
+        "run_id": 133,
+        "start_line": 310
+      },
+      "metadata": "{\"fingerprint\":\"c612c2123d92dc62121c3e4b396198cec9114f71cd59f6746f1f48c6635c4861\",\"path\":\"src/review_gauntlet/run_tui.py\",\"rule_id\":\"data-validation\",\"content\":\"`snapshot.elapsed_seconds` originates from status/controller data and is typed as a float, but this formatter accepts arbitrary floats without rejecting non-finite values. If a malformed or mocked snapshot supplies `NaN` or `Infinity`, `int(seconds)` raises and can crash the TUI/text fallback instead of degrading safely.\",\"suggestion_code\":\"def format_elapsed_time(seconds: float) -> str:\\n    if not math.isfinite(seconds):\\n        total_seconds = 0\\n    else:\\n        total_seconds = max(0, int(seconds))\\n    hours, remainder = divmod(total_seconds, 3600)\\n    minutes, seconds = divmod(remainder, 60)\\n    if hours:\\n        return f\\\"{hours:d}:{minutes:02d}:{seconds:02d}\\\"\\n    return f\\\"{minutes:02d}:{seconds:02d}\\\"\",\"existing_code\":\"def format_elapsed_time(seconds: float) -> str:\\n    total_seconds = max(0, int(seconds))\\n    hours, remainder = divmod(total_seconds, 3600)\\n    minutes, seconds = divmod(remainder, 60)\\n    if hours:\\n        return f\\\"{hours:d}:{minutes:02d}:{seconds:02d}\\\"\\n    return f\\\"{minutes:02d}:{seconds:02d}\\\"\",\"start_line\":310,\"end_line\":316,\"thinking\":\"Data-validation issue: non-finite numeric input is accepted by type but not by int(); caller-facing rendering should be robust to malformed runtime/status data. Requires importing math.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_tui.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-7d2f570ffd4d",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "content": "This helper also assumes finite numeric input. A non-finite timeout or output-age value from lifecycle/status data will raise during rendering, taking down the dashboard instead of showing a safe fallback.",
+      "finding_id": "RGF-0138",
+      "fingerprint": "1eaddb15efeec2827f79807942e7964179c80705dce661b37056f5292aafddea",
+      "latest_occurrence": {
+        "cell_id": "RGC-8610c7a6f661b70a",
+        "end_line": 598,
+        "finding_id": "RGF-0138",
+        "imprecise": 0,
+        "occurrence_id": 138,
+        "path": "src/review_gauntlet/run_tui.py",
+        "run_id": 133,
+        "start_line": 590
+      },
+      "metadata": "{\"fingerprint\":\"1eaddb15efeec2827f79807942e7964179c80705dce661b37056f5292aafddea\",\"path\":\"src/review_gauntlet/run_tui.py\",\"rule_id\":\"data-validation\",\"content\":\"This helper also assumes finite numeric input. A non-finite timeout or output-age value from lifecycle/status data will raise during rendering, taking down the dashboard instead of showing a safe fallback.\",\"suggestion_code\":\"def format_duration(seconds: float) -> str:\\n    if not math.isfinite(seconds):\\n        safe_seconds = 0\\n    else:\\n        safe_seconds = max(0, int(seconds))\\n    if safe_seconds < 60:\\n        return f\\\"{safe_seconds}s\\\"\\n    minutes, remainder = divmod(safe_seconds, 60)\\n    if minutes < 60:\\n        return f\\\"{minutes}m{remainder:02d}s\\\"\\n    hours, minutes = divmod(minutes, 60)\\n    return f\\\"{hours}h{minutes:02d}m\\\"\",\"existing_code\":\"def format_duration(seconds: float) -> str:\\n    safe_seconds = max(0, int(seconds))\\n    if safe_seconds < 60:\\n        return f\\\"{safe_seconds}s\\\"\\n    minutes, remainder = divmod(safe_seconds, 60)\\n    if minutes < 60:\\n        return f\\\"{minutes}m{remainder:02d}s\\\"\\n    hours, minutes = divmod(minutes, 60)\\n    return f\\\"{hours}h{minutes:02d}m\\\"\",\"start_line\":590,\"end_line\":598,\"thinking\":\"Same validation gap for duration rendering; add finite checks before int conversion.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_tui.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-7d2f570ffd4d",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "content": "`checkpoint_generated_files_from_stdout` only accepts a top-level `generated_files` field, but stdout-json adapters commonly wrap agent verdict data under `verdict`. In that case checkpoint files reported as `verdict.generated_files` are silently ignored, so finalized runs can skip committing generated checkpoint artifacts despite the adapter returning valid JSON. Consider checking the nested verdict object as a fallback before rejecting the payload.",
+      "finding_id": "RGF-0139",
+      "fingerprint": "d191d990c37e58ac4cea9ca5f3e65c270b9252e306d96e71588792c04732d355",
+      "latest_occurrence": {
+        "cell_id": "RGC-818ca3c0010eb49e",
+        "end_line": 450,
+        "finding_id": "RGF-0139",
+        "imprecise": 0,
+        "occurrence_id": 139,
+        "path": "src/review_gauntlet/run_controller.py",
+        "run_id": 134,
+        "start_line": 449
+      },
+      "metadata": "{\"fingerprint\":\"d191d990c37e58ac4cea9ca5f3e65c270b9252e306d96e71588792c04732d355\",\"path\":\"src/review_gauntlet/run_controller.py\",\"rule_id\":\"test-evidence\",\"content\":\"`checkpoint_generated_files_from_stdout` only accepts a top-level `generated_files` field, but stdout-json adapters commonly wrap agent verdict data under `verdict`. In that case checkpoint files reported as `verdict.generated_files` are silently ignored, so finalized runs can skip committing generated checkpoint artifacts despite the adapter returning valid JSON. Consider checking the nested verdict object as a fallback before rejecting the payload.\",\"suggestion_code\":\"    raw_files = typed_payload.get(\\\"generated_files\\\")\\n    if not isinstance(raw_files, list):\\n        verdict = typed_payload.get(\\\"verdict\\\")\\n        if isinstance(verdict, dict):\\n            raw_files = cast(dict[str, object], verdict).get(\\\"generated_files\\\")\\n    if not isinstance(raw_files, list):\\n        return ()\",\"existing_code\":\"    raw_files = typed_payload.get(\\\"generated_files\\\")\\n    if not isinstance(raw_files, list):\\n        return ()\",\"start_line\":449,\"end_line\":450,\"thinking\":\"The controller parses stdout to pass generated checkpoint files into commit_latest_checkpoint. Existing tests cover only top-level generated_files and non-JSON stdout, leaving nested stdout-json verdict payloads untested.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_controller.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-7d2f570ffd4d",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "content": "The output redaction only matches KEY/TOKEN/SECRET environment assignments. It leaves common credential forms such as `Authorization: Bearer ...`, `x-api-key: ...`, JSON fields like `\"api_key\": \"...\"`, and `password=...` visible in the TUI activity feed, even though agent stdout/stderr may include provider credentials. This can expose secrets in terminal logs or recordings. Redact common header, JSON, and key/value credential patterns before displaying output.",
+      "finding_id": "RGF-0140",
+      "fingerprint": "d4951c6acef2e24f6981f060934f38475843a0342df8b666e938cd6f9b14a9df",
+      "latest_occurrence": {
+        "cell_id": "RGC-8610c7a6f661b70a",
+        "end_line": 731,
+        "finding_id": "RGF-0140",
+        "imprecise": 0,
+        "occurrence_id": 140,
+        "path": "src/review_gauntlet/run_tui.py",
+        "run_id": 134,
+        "start_line": 730
+      },
+      "metadata": "{\"fingerprint\":\"d4951c6acef2e24f6981f060934f38475843a0342df8b666e938cd6f9b14a9df\",\"path\":\"src/review_gauntlet/run_tui.py\",\"rule_id\":\"data-validation\",\"content\":\"The output redaction only matches KEY/TOKEN/SECRET environment assignments. It leaves common credential forms such as `Authorization: Bearer ...`, `x-api-key: ...`, JSON fields like `\\\"api_key\\\": \\\"...\\\"`, and `password=...` visible in the TUI activity feed, even though agent stdout/stderr may include provider credentials. This can expose secrets in terminal logs or recordings. Redact common header, JSON, and key/value credential patterns before displaying output.\",\"suggestion_code\":\"    secret_patterns = (\\n        r\\\"\\\\b[A-Z0-9_]*(?:TOKEN|SECRET|KEY|PASSWORD)=\\\\S+\\\",\\n        r\\\"\\\\b(?:authorization|x-api-key)\\\\s*:\\\\s*\\\\S+(?:\\\\s+\\\\S+)?\\\",\\n        r\\\"\\\\b(?:api[_-]?key|token|secret|password)[\\\\\\\"']?\\\\s*[:=]\\\\s*[\\\\\\\"']?\\\\S+[\\\\\\\"']?\\\",\\n    )\\n    for pattern in secret_patterns:\\n        text = re.sub(pattern, \\\"<redacted>\\\", text, flags=re.IGNORECASE)\\n    return _summarize_text(text, limit=limit)\",\"existing_code\":\"    text = re.sub(r\\\"\\\\b[A-Z0-9_]*(?:TOKEN|SECRET|KEY)=\\\\S+\\\", \\\"<redacted>\\\", text, flags=re.IGNORECASE)\\n    return _summarize_text(text, limit=limit)\",\"start_line\":730,\"end_line\":731,\"thinking\":\"sanitize_agent_output_line is the explicit data-validation boundary for untrusted agent output before display. The current validation/redaction is too narrow for common credential formats.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_tui.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-7d2f570ffd4d",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "content": "The fallback command label renders the raw argv into the TUI. If an adapter command includes inline credentials or secret flags, they will be displayed in the header and agent panel, even though agent output is redacted elsewhere in this file.",
+      "finding_id": "RGF-0141",
+      "fingerprint": "d62f3e066761791706b27f344fd74d797c6d095b6c71ed017a036c12603465c3",
+      "latest_occurrence": {
+        "cell_id": "RGC-8610c7a6f661b70a",
+        "end_line": 382,
+        "finding_id": "RGF-0141",
+        "imprecise": 0,
+        "occurrence_id": 141,
+        "path": "src/review_gauntlet/run_tui.py",
+        "run_id": 135,
+        "start_line": 381
+      },
+      "metadata": "{\"fingerprint\":\"d62f3e066761791706b27f344fd74d797c6d095b6c71ed017a036c12603465c3\",\"path\":\"src/review_gauntlet/run_tui.py\",\"rule_id\":\"data-validation\",\"content\":\"The fallback command label renders the raw argv into the TUI. If an adapter command includes inline credentials or secret flags, they will be displayed in the header and agent panel, even though agent output is redacted elsewhere in this file.\",\"suggestion_code\":\"    if snapshot.command_argv:\\n        return sanitize_agent_output_line(\\\" \\\".join(snapshot.command_argv), limit=80)\",\"existing_code\":\"    if snapshot.command_argv:\\n        return _summarize_text(\\\" \\\".join(snapshot.command_argv), limit=80)\",\"start_line\":381,\"end_line\":382,\"thinking\":\"sanitize_agent_output_line already centralizes redaction for token/secret/key/password-like values; using it here avoids leaking sensitive command arguments in the UI.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_tui.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-7d2f570ffd4d",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "content": "If a stop/interrupt request arrives while the adapter command is running, the flag is never checked again after `_command_runner` returns. A command that ignores cancellation can therefore finalize the session or continue to the next step even though `interrupt()` was requested. Add a post-command interruption check before processing success/finalization, and cover it with a controller test that triggers `interrupt()` from inside the fake runner.",
+      "finding_id": "RGF-0142",
+      "fingerprint": "a13461511864f6690e4aafa462839de8157da99592cd776536f024cc0c7d9e61",
+      "latest_occurrence": {
+        "cell_id": "RGC-818ca3c0010eb49e",
+        "end_line": 266,
+        "finding_id": "RGF-0142",
+        "imprecise": 0,
+        "occurrence_id": 142,
+        "path": "src/review_gauntlet/run_controller.py",
+        "run_id": 138,
+        "start_line": 252
+      },
+      "metadata": "{\"fingerprint\":\"a13461511864f6690e4aafa462839de8157da99592cd776536f024cc0c7d9e61\",\"path\":\"src/review_gauntlet/run_controller.py\",\"rule_id\":\"test-evidence\",\"content\":\"If a stop/interrupt request arrives while the adapter command is running, the flag is never checked again after `_command_runner` returns. A command that ignores cancellation can therefore finalize the session or continue to the next step even though `interrupt()` was requested. Add a post-command interruption check before processing success/finalization, and cover it with a controller test that triggers `interrupt()` from inside the fake runner.\",\"suggestion_code\":\"            self._command_argv = tuple(command_result.argv)\\n            lifecycle_status = _lifecycle_status_from_result(command_result)\\n            self._agent_lifecycle = AgentLifecycle(\\n                status=lifecycle_status,\\n                last_output_age_seconds=0.0 if command_result.output_tail else None,\\n                artifact_path=command_result.activity_artifact\\n                or command_result.stdout_artifact\\n                or command_result.stderr_artifact,\\n                output_tail=command_result.output_tail,\\n            )\\n            self._agent_step_started_at = None\\n            self._agent_timeout_seconds = None\\n            step_payload = _run_step_payload(step_number, prompt, command_result)\\n            steps.append(step_payload)\\n            if self._interrupted:\\n                self._agent_status = \\\"interrupted\\\"\\n                self._emit(\\\"interrupted\\\", step=step_number, session_id=session_id)\\n                return self._interrupted_result(steps)\\n            self._agent_status = \\\"idle\\\" if command_result.failure is None else lifecycle_status\",\"existing_code\":\"            self._command_argv = tuple(command_result.argv)\\n            lifecycle_status = _lifecycle_status_from_result(command_result)\\n            self._agent_lifecycle = AgentLifecycle(\\n                status=lifecycle_status,\\n                last_output_age_seconds=0.0 if command_result.output_tail else None,\\n                artifact_path=command_result.activity_artifact\\n                or command_result.stdout_artifact\\n                or command_result.stderr_artifact,\\n                output_tail=command_result.output_tail,\\n            )\\n            self._agent_step_started_at = None\\n            self._agent_timeout_seconds = None\\n            step_payload = _run_step_payload(step_number, prompt, command_result)\\n            steps.append(step_payload)\\n            self._agent_status = \\\"idle\\\" if command_result.failure is None else lifecycle_status\",\"start_line\":252,\"end_line\":266,\"thinking\":\"The only in-loop interrupt check happens before launching the command and KeyboardInterrupt is handled, but programmatic interrupt requests can race with the synchronous runner and are ignored once the runner returns.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_controller.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-7d2f570ffd4d",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "content": "`generated_files` \u306e\u5404\u8981\u7d20\u304c\u30c7\u30a3\u30ec\u30af\u30c8\u30ea\u3084\u4e0d\u6b63\u306a\u62e1\u5f35\u5b50\u3067\u3082 `.review-gauntlet/checkpoints/` \u914d\u4e0b\u3068\u3044\u3046\u3060\u3051\u3067\u53d7\u7406\u3055\u308c\u3001\u6700\u7d42 checkpoint commit \u306e\u5bfe\u8c61\u3068\u3057\u3066\u6e21\u3055\u308c\u307e\u3059\u3002\u30a8\u30fc\u30b8\u30a7\u30f3\u30c8\u51fa\u529b\u306f\u5916\u90e8\u5165\u529b\u306a\u306e\u3067\u3001\u671f\u5f85\u3059\u308b verdict JSON \u30d5\u30a1\u30a4\u30eb\u306a\u3069\u901a\u5e38\u30d5\u30a1\u30a4\u30eb\u3060\u3051\u306b\u7d5e\u3089\u306a\u3044\u3068\u3001\u5f8c\u7d9a\u51e6\u7406\u304c\u30c7\u30a3\u30ec\u30af\u30c8\u30ea\u3084\u4efb\u610f\u7a2e\u985e\u306e\u30d5\u30a1\u30a4\u30eb\u3092 checkpoint \u751f\u6210\u7269\u3068\u3057\u3066\u6271\u3046\u53ef\u80fd\u6027\u304c\u3042\u308a\u307e\u3059\u3002",
+      "finding_id": "RGF-0143",
+      "fingerprint": "ac482f8e9915a5e7ce558dd6489c3fc40d0e1ffa5fff0f1f68878ba11d5deb3c",
+      "latest_occurrence": {
+        "cell_id": "RGC-eaadb43273cd57a0",
+        "end_line": 467,
+        "finding_id": "RGF-0143",
+        "imprecise": 0,
+        "occurrence_id": 143,
+        "path": "src/review_gauntlet/run_controller.py",
+        "run_id": 138,
+        "start_line": 462
+      },
+      "metadata": "{\"fingerprint\":\"ac482f8e9915a5e7ce558dd6489c3fc40d0e1ffa5fff0f1f68878ba11d5deb3c\",\"path\":\"src/review_gauntlet/run_controller.py\",\"rule_id\":\"data-validation\",\"content\":\"`generated_files` \u306e\u5404\u8981\u7d20\u304c\u30c7\u30a3\u30ec\u30af\u30c8\u30ea\u3084\u4e0d\u6b63\u306a\u62e1\u5f35\u5b50\u3067\u3082 `.review-gauntlet/checkpoints/` \u914d\u4e0b\u3068\u3044\u3046\u3060\u3051\u3067\u53d7\u7406\u3055\u308c\u3001\u6700\u7d42 checkpoint commit \u306e\u5bfe\u8c61\u3068\u3057\u3066\u6e21\u3055\u308c\u307e\u3059\u3002\u30a8\u30fc\u30b8\u30a7\u30f3\u30c8\u51fa\u529b\u306f\u5916\u90e8\u5165\u529b\u306a\u306e\u3067\u3001\u671f\u5f85\u3059\u308b verdict JSON \u30d5\u30a1\u30a4\u30eb\u306a\u3069\u901a\u5e38\u30d5\u30a1\u30a4\u30eb\u3060\u3051\u306b\u7d5e\u3089\u306a\u3044\u3068\u3001\u5f8c\u7d9a\u51e6\u7406\u304c\u30c7\u30a3\u30ec\u30af\u30c8\u30ea\u3084\u4efb\u610f\u7a2e\u985e\u306e\u30d5\u30a1\u30a4\u30eb\u3092 checkpoint \u751f\u6210\u7269\u3068\u3057\u3066\u6271\u3046\u53ef\u80fd\u6027\u304c\u3042\u308a\u307e\u3059\u3002\",\"suggestion_code\":\"        relative = Path(item)\\n        if relative.is_absolute() or any(part in {\\\"\\\", \\\".\\\", \\\"..\\\"} for part in relative.parts):\\n            continue\\n        normalized = relative.as_posix()\\n        if not normalized.startswith(\\\".review-gauntlet/checkpoints/\\\"):\\n            continue\\n        if relative.suffix != \\\".json\\\" or relative.name == \\\"\\\":\\n            continue\",\"existing_code\":\"        relative = Path(item)\\n        if relative.is_absolute() or any(part in {\\\"\\\", \\\".\\\", \\\"..\\\"} for part in relative.parts):\\n            continue\\n        normalized = relative.as_posix()\\n        if not normalized.startswith(\\\".review-gauntlet/checkpoints/\\\"):\\n            continue\",\"start_line\":462,\"end_line\":467,\"thinking\":\"Data validation should constrain untrusted generated_files entries to the expected artifact shape before they are used by checkpoint commit code.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_controller.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-7d2f570ffd4d",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "content": "The git failure recovery only unstages checkpoint_dirty. If other paths were already staged before calling commit_latest_checkpoint, they remain staged after this function returns a git_failure result, leaving the caller's index mutated relative to its pre-call state. Capture and restore the full staged path set, or block/restore pre-existing staged changes before attempting the checkpoint commit.",
+      "finding_id": "RGF-0144",
+      "fingerprint": "29540b6d40a42f781a1e517a06b2207004b1d06aa4202cb7b923162431e76d94",
+      "latest_occurrence": {
+        "cell_id": "RGC-f760d63617535770",
+        "end_line": 495,
+        "finding_id": "RGF-0144",
+        "imprecise": 0,
+        "occurrence_id": 144,
+        "path": "src/review_gauntlet/checkpoint.py",
+        "run_id": 138,
+        "start_line": 493
+      },
+      "metadata": "{\"fingerprint\":\"29540b6d40a42f781a1e517a06b2207004b1d06aa4202cb7b923162431e76d94\",\"path\":\"src/review_gauntlet/checkpoint.py\",\"rule_id\":\"test-evidence\",\"content\":\"The git failure recovery only unstages checkpoint_dirty. If other paths were already staged before calling commit_latest_checkpoint, they remain staged after this function returns a git_failure result, leaving the caller's index mutated relative to its pre-call state. Capture and restore the full staged path set, or block/restore pre-existing staged changes before attempting the checkpoint commit.\",\"suggestion_code\":\"    except subprocess.CalledProcessError as exc:\\n        with suppress(subprocess.CalledProcessError):\\n            _git(root, \\\"restore\\\", \\\"--staged\\\", \\\"--\\\", *staged)\\n        return CheckpointCommitResult(\",\"existing_code\":\"    except subprocess.CalledProcessError as exc:\\n        with suppress(subprocess.CalledProcessError):\\n            _git(root, \\\"restore\\\", \\\"--staged\\\", \\\"--\\\", *checkpoint_dirty)\\n        return CheckpointCommitResult(\",\"start_line\":493,\"end_line\":495,\"thinking\":\"The current recovery path assumes only checkpoint paths were staged by this function, but dirty includes both staged and unstaged checkpoint paths. Restoring checkpoint_dirty can unstage legitimate caller-staged checkpoint files and does not address preserving index state precisely. A test should cover pre-staged checkpoint artifacts plus a simulated commit failure.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/checkpoint.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-7d2f570ffd4d",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "content": "This blocks checkpoint commits whenever an unrelated generated checkpoint file is staged, but the rest of the function intentionally refuses to proceed with any unrelated dirty paths. If an operator has staged the latest pointer or another generated checkpoint artifact before finalization, this early return leaves the just-generated checkpoint uncommitted even though committing only checkpoint artifacts would be safe. Treat any preexisting staged allowed checkpoint paths as part of the checkpoint commit instead of blocking solely because they were already staged.",
+      "finding_id": "RGF-0145",
+      "fingerprint": "7681996897f46e49c4732471971d1983a71d1c0fec8493eb9d2dad7bc214db4b",
+      "latest_occurrence": {
+        "cell_id": "RGC-f760d63617535770",
+        "end_line": 478,
+        "finding_id": "RGF-0145",
+        "imprecise": 0,
+        "occurrence_id": 145,
+        "path": "src/review_gauntlet/checkpoint.py",
+        "run_id": 141,
+        "start_line": 470
+      },
+      "metadata": "{\"fingerprint\":\"7681996897f46e49c4732471971d1983a71d1c0fec8493eb9d2dad7bc214db4b\",\"path\":\"src/review_gauntlet/checkpoint.py\",\"rule_id\":\"test-evidence\",\"content\":\"This blocks checkpoint commits whenever an unrelated generated checkpoint file is staged, but the rest of the function intentionally refuses to proceed with any unrelated dirty paths. If an operator has staged the latest pointer or another generated checkpoint artifact before finalization, this early return leaves the just-generated checkpoint uncommitted even though committing only checkpoint artifacts would be safe. Treat any preexisting staged allowed checkpoint paths as part of the checkpoint commit instead of blocking solely because they were already staged.\",\"suggestion_code\":\"    preexisting_staged_paths = tuple(path for path in staged_before if path in allowed_paths)\",\"existing_code\":\"    preexisting_staged_paths = tuple(path for path in staged_before if path in allowed_paths)\\n    if preexisting_staged_paths:\\n        return CheckpointCommitResult(\\n            attempted=True,\\n            committed=False,\\n            commit=None,\\n            reason=\\\"blocked_by_preexisting_staged_checkpoint_changes\\\",\\n            blocked_paths=preexisting_staged_paths,\\n        )\",\"start_line\":470,\"end_line\":478,\"thinking\":\"The function already computes blocked_paths for anything outside allowed_paths, and later commits only the staged checkpoint paths using pathspecs. Pre-staged allowed checkpoint artifacts are not a safety violation, but this branch can cause false finalize failures.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/checkpoint.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-7d2f570ffd4d",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "content": "A checkpoint path that already has staged changes can also have newer unstaged changes. Because paths already present in staged_before are excluded from paths_to_stage, those unstaged changes are never added; the subsequent commit can succeed with the stale staged version and leave the latest checkpoint files dirty while returning committed=True.",
+      "finding_id": "RGF-0146",
+      "fingerprint": "093f3ef05fb9ed2af4a26f4fc3b99e7acc7a59eb58491fc7c2a7093e52150f30",
+      "latest_occurrence": {
+        "cell_id": "RGC-f760d63617535770",
+        "end_line": 470,
+        "finding_id": "RGF-0146",
+        "imprecise": 0,
+        "occurrence_id": 146,
+        "path": "src/review_gauntlet/checkpoint.py",
+        "run_id": 143,
+        "start_line": 470
+      },
+      "metadata": "{\"fingerprint\":\"093f3ef05fb9ed2af4a26f4fc3b99e7acc7a59eb58491fc7c2a7093e52150f30\",\"path\":\"src/review_gauntlet/checkpoint.py\",\"rule_id\":\"test-evidence\",\"content\":\"A checkpoint path that already has staged changes can also have newer unstaged changes. Because paths already present in staged_before are excluded from paths_to_stage, those unstaged changes are never added; the subsequent commit can succeed with the stale staged version and leave the latest checkpoint files dirty while returning committed=True.\",\"suggestion_code\":\"    paths_to_stage = dirty\",\"existing_code\":\"    paths_to_stage = tuple(path for path in dirty if path not in staged_before)\",\"start_line\":470,\"end_line\":470,\"thinking\":\"git diff --name-only and git diff --cached --name-only can both include the same path when it has staged and unstaged changes. For generated checkpoint artifacts, the code should stage the current worktree content before committing so the committed checkpoint matches what was just written and the worktree is clean afterward.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/checkpoint.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-7d2f570ffd4d",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "content": "When `git commit` fails, the rollback only unstages paths this function staged (`paths_to_stage`). If the caller already had checkpoint files staged, they remain staged after a failed commit, which leaves the working tree in a mutated state even though the checkpoint commit did not happen. The existing tests explicitly assert this behavior, so the failure path lacks test evidence for preserving the user's preexisting index state. Capture and restore the full pre-call staged set (or otherwise document/verify the intended mutation) so failed checkpoint commits do not leave staged artifacts behind.",
+      "finding_id": "RGF-0147",
+      "fingerprint": "9df80032f341ca386d73dcfba70e024681949c78296b18d11ed683682d6b9cfb",
+      "latest_occurrence": {
+        "cell_id": "RGC-f760d63617535770",
+        "end_line": 511,
+        "finding_id": "RGF-0147",
+        "imprecise": 0,
+        "occurrence_id": 147,
+        "path": "src/review_gauntlet/checkpoint.py",
+        "run_id": 144,
+        "start_line": 509
+      },
+      "metadata": "{\"fingerprint\":\"9df80032f341ca386d73dcfba70e024681949c78296b18d11ed683682d6b9cfb\",\"path\":\"src/review_gauntlet/checkpoint.py\",\"rule_id\":\"test-evidence\",\"content\":\"When `git commit` fails, the rollback only unstages paths this function staged (`paths_to_stage`). If the caller already had checkpoint files staged, they remain staged after a failed commit, which leaves the working tree in a mutated state even though the checkpoint commit did not happen. The existing tests explicitly assert this behavior, so the failure path lacks test evidence for preserving the user's preexisting index state. Capture and restore the full pre-call staged set (or otherwise document/verify the intended mutation) so failed checkpoint commits do not leave staged artifacts behind.\",\"suggestion_code\":\"        with suppress(subprocess.CalledProcessError):\\n            _git(root, \\\"restore\\\", \\\"--staged\\\", \\\"--\\\", *staged)\\n        if staged_before:\\n            with suppress(subprocess.CalledProcessError):\\n                _git(root, \\\"add\\\", \\\"--\\\", *staged_before)\",\"existing_code\":\"        if paths_to_stage:\\n            with suppress(subprocess.CalledProcessError):\\n                _git(root, \\\"restore\\\", \\\"--staged\\\", \\\"--\\\", *paths_to_stage)\",\"start_line\":509,\"end_line\":511,\"thinking\":\"commit_latest_checkpoint is explicitly attempting to be safe around checkpoint-only staging. On git failure it currently restores only newly staged paths, while preexisting staged checkpoint paths remain staged. That mutation may be intentional for one existing test, but it conflicts with safe failure cleanup and has no test coverage for restoring the exact original index.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/checkpoint.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-7d2f570ffd4d",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "content": "commit_latest_checkpoint stages any dirty allowed checkpoint path, not just files passed in generated_files. If a stale or manually edited checkpoint artifact already exists under .review-gauntlet/checkpoints, it can be committed together with the current checkpoint, because allowed_paths is expanded from latest_checkpoint_dir(root) and paths_to_stage includes every dirty allowed path. This weakens the test-evidence boundary: finalize may persist unrelated checkpoint evidence from a previous run.",
+      "finding_id": "RGF-0148",
+      "fingerprint": "ecb9d1e0fad18bb3254630dda033d5dbcf74b0ea61f59395d0a4e200456af05b",
+      "latest_occurrence": {
+        "cell_id": "RGC-f760d63617535770",
+        "end_line": 535,
+        "finding_id": "RGF-0148",
+        "imprecise": 0,
+        "occurrence_id": 148,
+        "path": "src/review_gauntlet/checkpoint.py",
+        "run_id": 145,
+        "start_line": 530
+      },
+      "metadata": "{\"fingerprint\":\"ecb9d1e0fad18bb3254630dda033d5dbcf74b0ea61f59395d0a4e200456af05b\",\"path\":\"src/review_gauntlet/checkpoint.py\",\"rule_id\":\"test-evidence\",\"content\":\"commit_latest_checkpoint stages any dirty allowed checkpoint path, not just files passed in generated_files. If a stale or manually edited checkpoint artifact already exists under .review-gauntlet/checkpoints, it can be committed together with the current checkpoint, because allowed_paths is expanded from latest_checkpoint_dir(root) and paths_to_stage includes every dirty allowed path. This weakens the test-evidence boundary: finalize may persist unrelated checkpoint evidence from a previous run.\",\"suggestion_code\":\"    for path in generated_files:\\n        if _is_allowed_checkpoint_artifact_path(path):\\n            allowed.add(path)\",\"existing_code\":\"    latest_dir = latest_checkpoint_dir(root)\\n    if latest_dir != latest_checkpoint_pointer(root) and latest_dir.is_relative_to(root):\\n        latest_relative = latest_dir.relative_to(root).as_posix()\\n        if latest_relative.startswith(checkpoints_prefix):\\n            for name in (\\\"status.json\\\", \\\"findings.json\\\", \\\"events.json\\\", \\\"summary.md\\\"):\\n                allowed.add(f\\\"{latest_relative}/{name}\\\")\",\"start_line\":530,\"end_line\":535,\"thinking\":\"The commit allowlist should be derived from the current write result, not from whatever checkpoint latest currently points at.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/checkpoint.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-7d2f570ffd4d",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "content": "session_id is only checked for path separators and dot segments before being embedded into checkpoint_id and later committed in a git message. Characters such as newlines or control bytes can corrupt checkpoint artifact names/commit messages and make the checkpoint metadata ambiguous. Validate session_id against the actual run/session id format before using it in checkpoint_id.",
+      "finding_id": "RGF-0149",
+      "fingerprint": "ea39fe2c4ba51014e2dae77dc267b7802813eccb74c044a7696f60590d9e70d7",
+      "latest_occurrence": {
+        "cell_id": "RGC-8769b06915f1af11",
+        "end_line": 245,
+        "finding_id": "RGF-0149",
+        "imprecise": 0,
+        "occurrence_id": 149,
+        "path": "src/review_gauntlet/checkpoint.py",
+        "run_id": 147,
+        "start_line": 240
+      },
+      "metadata": "{\"fingerprint\":\"ea39fe2c4ba51014e2dae77dc267b7802813eccb74c044a7696f60590d9e70d7\",\"path\":\"src/review_gauntlet/checkpoint.py\",\"rule_id\":\"data-validation\",\"content\":\"session_id is only checked for path separators and dot segments before being embedded into checkpoint_id and later committed in a git message. Characters such as newlines or control bytes can corrupt checkpoint artifact names/commit messages and make the checkpoint metadata ambiguous. Validate session_id against the actual run/session id format before using it in checkpoint_id.\",\"suggestion_code\":\"    if (\\n        not session_id.isascii()\\n        or not session_id.replace(\\\"-\\\", \\\"\\\").replace(\\\"_\\\", \\\"\\\").isalnum()\\n        or any(part in {\\\"\\\", \\\".\\\", \\\"..\\\"} for part in Path(session_id).parts)\\n        or Path(session_id).name != session_id\\n    ):\\n        raise ValueError(\\\"session_id must be a single path-safe segment\\\")\\n    checkpoint_id = f\\\"RGC-{head[:12]}-{session_id}\\\"\",\"existing_code\":\"    if (\\n        any(part in {\\\"\\\", \\\".\\\", \\\"..\\\"} for part in Path(session_id).parts)\\n        or Path(session_id).name != session_id\\n    ):\\n        raise ValueError(\\\"session_id must be a single path-safe segment\\\")\\n    checkpoint_id = f\\\"RGC-{head[:12]}-{session_id}\\\"\",\"start_line\":240,\"end_line\":245,\"thinking\":\"The current path-safety check rejects separators and dot segments but accepts embedded newlines/control characters. Since this value is persisted in checkpoint paths and git commit messages, stricter data validation avoids malformed metadata.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/checkpoint.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-7d2f570ffd4d",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "content": "_validate_latest_checkpoint accepts findings.json and events.json payload entries as long as their checkpoint_id matches, but it does not verify that each entry belongs to this repository checkpoint or has the expected shape. A manually modified or partially corrupted checkpoint can therefore become the review base while carrying findings/events for unrelated paths or malformed records, which undermines the checkpoint integrity checks this function is meant to enforce.",
+      "finding_id": "RGF-0150",
+      "fingerprint": "7cd758976cd9fcb2db26a635f5fc992652553b4a93847d9bad1dc167117608df",
+      "latest_occurrence": {
+        "cell_id": "RGC-8769b06915f1af11",
+        "end_line": 163,
+        "finding_id": "RGF-0150",
+        "imprecise": 0,
+        "occurrence_id": 150,
+        "path": "src/review_gauntlet/checkpoint.py",
+        "run_id": 148,
+        "start_line": 157
+      },
+      "metadata": "{\"fingerprint\":\"7cd758976cd9fcb2db26a635f5fc992652553b4a93847d9bad1dc167117608df\",\"path\":\"src/review_gauntlet/checkpoint.py\",\"rule_id\":\"data-validation\",\"content\":\"_validate_latest_checkpoint accepts findings.json and events.json payload entries as long as their checkpoint_id matches, but it does not verify that each entry belongs to this repository checkpoint or has the expected shape. A manually modified or partially corrupted checkpoint can therefore become the review base while carrying findings/events for unrelated paths or malformed records, which undermines the checkpoint integrity checks this function is meant to enforce.\",\"suggestion_code\":\"        payload = cast(list[Any], raw_payload)\\n        required_entry_fields = (\\n            (\\\"finding_id\\\", \\\"session_id\\\", \\\"fingerprint\\\", \\\"state\\\", \\\"path\\\", \\\"rule_id\\\", \\\"content\\\")\\n            if name == \\\"findings.json\\\"\\n            else (\\\"event_id\\\", \\\"finding_id\\\", \\\"from_state\\\", \\\"to_state\\\", \\\"reason\\\")\\n        )\\n        for item in payload:\\n            if not isinstance(item, dict):\\n                raise ValueError(f\\\"latest checkpoint is internally inconsistent: {name}\\\")\\n            entry = cast(dict[str, Any], item)\\n            if entry.get(\\\"checkpoint_id\\\") != checkpoint_id:\\n                raise ValueError(f\\\"latest checkpoint is internally inconsistent: {name}\\\")\\n            if any(field not in entry for field in required_entry_fields):\\n                raise ValueError(f\\\"latest checkpoint is internally inconsistent: {name}\\\")\",\"existing_code\":\"        payload = cast(list[Any], raw_payload)\\n        for item in payload:\\n            if not isinstance(item, dict):\\n                raise ValueError(f\\\"latest checkpoint is internally inconsistent: {name}\\\")\\n            entry = cast(dict[str, Any], item)\\n            if entry.get(\\\"checkpoint_id\\\") != checkpoint_id:\\n                raise ValueError(f\\\"latest checkpoint is internally inconsistent: {name}\\\")\",\"start_line\":157,\"end_line\":163,\"thinking\":\"The status file validation is stricter than the payload validation; checkpoint payloads are trusted later as durable review evidence, so malformed or unrelated records should be rejected before using the checkpoint as a review base.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/checkpoint.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-7d2f570ffd4d",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "content": "Checkpoint validation only checks that required finding/event fields are present, but it does not validate their types or allowed values. A malformed checkpoint can pass with non-string paths/rule IDs/content or an invalid finding state, then be accepted as a review base and later consumers may misclassify or fail on corrupted checkpoint data.",
+      "finding_id": "RGF-0151",
+      "fingerprint": "9007c92f13f051cb2d858c7710da1d84a05acd0af8f7a51360aad821bc0d1528",
+      "latest_occurrence": {
+        "cell_id": "RGC-8769b06915f1af11",
+        "end_line": 170,
+        "finding_id": "RGF-0151",
+        "imprecise": 0,
+        "occurrence_id": 151,
+        "path": "src/review_gauntlet/checkpoint.py",
+        "run_id": 150,
+        "start_line": 169
+      },
+      "metadata": "{\"fingerprint\":\"9007c92f13f051cb2d858c7710da1d84a05acd0af8f7a51360aad821bc0d1528\",\"path\":\"src/review_gauntlet/checkpoint.py\",\"rule_id\":\"data-validation\",\"content\":\"Checkpoint validation only checks that required finding/event fields are present, but it does not validate their types or allowed values. A malformed checkpoint can pass with non-string paths/rule IDs/content or an invalid finding state, then be accepted as a review base and later consumers may misclassify or fail on corrupted checkpoint data.\",\"suggestion_code\":\"            if any(field not in entry for field in required_entry_fields):\\n                raise ValueError(f\\\"latest checkpoint is internally inconsistent: {name}\\\")\\n            if name == \\\"findings.json\\\":\\n                if not all(isinstance(entry[field], str) for field in required_entry_fields):\\n                    raise ValueError(f\\\"latest checkpoint is internally inconsistent: {name}\\\")\\n                if entry[\\\"state\\\"] not in {state.value for state in FindingState}:\\n                    raise ValueError(f\\\"latest checkpoint is internally inconsistent: {name}\\\")\\n            elif not all(isinstance(entry[field], str) for field in required_entry_fields):\\n                raise ValueError(f\\\"latest checkpoint is internally inconsistent: {name}\\\")\",\"existing_code\":\"            if any(field not in entry for field in required_entry_fields):\\n                raise ValueError(f\\\"latest checkpoint is internally inconsistent: {name}\\\")\",\"start_line\":169,\"end_line\":170,\"thinking\":\"The validator establishes whether checkpoint files are trusted as a review base. Presence-only checks allow corrupted or unexpected JSON shapes to be accepted.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/checkpoint.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-7d2f570ffd4d",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "content": "When rolling back after a checkpoint write failure, this only restores the previous latest pointer if `pointer_path` does not exist. If `pointer_tmp.replace(pointer_path)` succeeds and a later operation in the try block raises, `pointer_path` already points at the new checkpoint, so the backup is deleted and `latest` remains advanced even though the operation failed. Restore the backup whenever it exists, replacing the current pointer if necessary.",
+      "finding_id": "RGF-0152",
+      "fingerprint": "631b36b88efb055decc03b90aff27d52ad49917335dce3ec9c7ff239c8b45392",
+      "latest_occurrence": {
+        "cell_id": "RGC-8769b06915f1af11",
+        "end_line": 346,
+        "finding_id": "RGF-0152",
+        "imprecise": 0,
+        "occurrence_id": 152,
+        "path": "src/review_gauntlet/checkpoint.py",
+        "run_id": 151,
+        "start_line": 343
+      },
+      "metadata": "{\"fingerprint\":\"631b36b88efb055decc03b90aff27d52ad49917335dce3ec9c7ff239c8b45392\",\"path\":\"src/review_gauntlet/checkpoint.py\",\"rule_id\":\"data-validation\",\"content\":\"When rolling back after a checkpoint write failure, this only restores the previous latest pointer if `pointer_path` does not exist. If `pointer_tmp.replace(pointer_path)` succeeds and a later operation in the try block raises, `pointer_path` already points at the new checkpoint, so the backup is deleted and `latest` remains advanced even though the operation failed. Restore the backup whenever it exists, replacing the current pointer if necessary.\",\"suggestion_code\":\"        if pointer_backup_dir.exists():\\n            if pointer_path.exists():\\n                shutil.rmtree(pointer_path)\\n            pointer_backup_dir.rename(pointer_path)\",\"existing_code\":\"        if pointer_backup_dir.exists() and not pointer_path.exists():\\n            pointer_backup_dir.rename(pointer_path)\\n        elif pointer_backup_dir.exists():\\n            shutil.rmtree(pointer_backup_dir)\",\"start_line\":343,\"end_line\":346,\"thinking\":\"The rollback path should leave latest pointing to the previous checkpoint whenever a backup was taken; otherwise a failed write can publish an incomplete/failed checkpoint pointer.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/checkpoint.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-7d2f570ffd4d",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "content": "A checkpoint file with an empty schema_version is currently accepted because None is treated the same as an absent optional schema field. That means findings.json or events.json can omit the schema_version entirely and still become a trusted latest checkpoint, weakening the checkpoint format validation and allowing mixed/legacy data shapes to pass. Require schema_version to be present and equal to CHECKPOINT_SCHEMA_VERSION for every checkpoint sidecar file.",
+      "finding_id": "RGF-0153",
+      "fingerprint": "37da64013133750a3ff48012a6d3f4ccd21631fbf168754024343342affc451f",
+      "latest_occurrence": {
+        "cell_id": "RGC-8769b06915f1af11",
+        "end_line": 150,
+        "finding_id": "RGF-0153",
+        "imprecise": 0,
+        "occurrence_id": 153,
+        "path": "src/review_gauntlet/checkpoint.py",
+        "run_id": 152,
+        "start_line": 148
+      },
+      "metadata": "{\"fingerprint\":\"37da64013133750a3ff48012a6d3f4ccd21631fbf168754024343342affc451f\",\"path\":\"src/review_gauntlet/checkpoint.py\",\"rule_id\":\"data-validation\",\"content\":\"A checkpoint file with an empty schema_version is currently accepted because None is treated the same as an absent optional schema field. That means findings.json or events.json can omit the schema_version entirely and still become a trusted latest checkpoint, weakening the checkpoint format validation and allowing mixed/legacy data shapes to pass. Require schema_version to be present and equal to CHECKPOINT_SCHEMA_VERSION for every checkpoint sidecar file.\",\"suggestion_code\":\"        if checkpoint_file.get(\\\"schema_version\\\") != CHECKPOINT_SCHEMA_VERSION:\\n            raise ValueError(f\\\"latest checkpoint {name} schema_version is not supported\\\")\",\"existing_code\":\"        checkpoint_schema = checkpoint_file.get(\\\"schema_version\\\")\\n        if checkpoint_schema is not None and checkpoint_schema != CHECKPOINT_SCHEMA_VERSION:\\n            raise ValueError(f\\\"latest checkpoint {name} schema_version is not supported\\\")\",\"start_line\":148,\"end_line\":150,\"thinking\":\"status.json already requires schema_version, and write_latest_checkpoint always emits schema_version for sidecar files. Loading should reject missing sidecar schema_version instead of accepting it silently.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/checkpoint.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-7d2f570ffd4d",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "content": "`commit_latest_checkpoint` stages every dirty path that is not already staged before checking whether it is an allowed checkpoint artifact. When untracked or unstaged non-checkpoint files exist, `blocked_paths` correctly blocks the commit, but the function may already have staged those unrelated files and then returns without restoring them. This mutates the caller's index even though the commit was rejected.",
+      "finding_id": "RGF-0154",
+      "fingerprint": "c81724c0a853b0894f3965c441bb6090030a400659cd644fb86231f5cc2a06ea",
+      "latest_occurrence": {
+        "cell_id": "RGC-8769b06915f1af11",
+        "end_line": 505,
+        "finding_id": "RGF-0154",
+        "imprecise": 0,
+        "occurrence_id": 154,
+        "path": "src/review_gauntlet/checkpoint.py",
+        "run_id": 153,
+        "start_line": 503
+      },
+      "metadata": "{\"fingerprint\":\"c81724c0a853b0894f3965c441bb6090030a400659cd644fb86231f5cc2a06ea\",\"path\":\"src/review_gauntlet/checkpoint.py\",\"rule_id\":\"data-validation\",\"content\":\"`commit_latest_checkpoint` stages every dirty path that is not already staged before checking whether it is an allowed checkpoint artifact. When untracked or unstaged non-checkpoint files exist, `blocked_paths` correctly blocks the commit, but the function may already have staged those unrelated files and then returns without restoring them. This mutates the caller's index even though the commit was rejected.\",\"suggestion_code\":\"    blocked_paths = tuple(path for path in dirty if path not in allowed_paths)\\n    if blocked_paths:\\n        return CheckpointCommitResult(\\n            attempted=True,\\n            committed=False,\\n            commit=None,\\n            reason=\\\"blocked_by_non_checkpoint_changes\\\",\\n            blocked_paths=blocked_paths,\\n        )\\n    paths_to_stage = tuple(path for path in dirty if path not in staged_before)\",\"existing_code\":\"    paths_to_stage = tuple(path for path in dirty if path not in staged_before)\\n    blocked_paths = tuple(path for path in dirty if path not in allowed_paths)\\n    if blocked_paths:\",\"start_line\":503,\"end_line\":505,\"thinking\":\"Data-validation/safety issue: validation of allowed paths must happen before mutating git index state.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/checkpoint.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-7d2f570ffd4d",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "content": "Checkpoint artifact paths allow any single path segment as the checkpoint directory name. If a caller passes a generated file under `.review-gauntlet/checkpoints/latest/...`, or a hidden/temp directory such as `.review-gauntlet/checkpoints/.tmp/status.json`, it is treated as safe for checkpoint commits. Tighten the checkpoint id validation here to match the path-safe, non-latest RGC checkpoint ids that `write_latest_checkpoint` creates before staging files.",
+      "finding_id": "RGF-0155",
+      "fingerprint": "858e6701a21c2003e44f5ea8a7a587f56afdfc402489e55fc68935e1d9216cab",
+      "latest_occurrence": {
+        "cell_id": "RGC-8769b06915f1af11",
+        "end_line": 562,
+        "finding_id": "RGF-0155",
+        "imprecise": 0,
+        "occurrence_id": 155,
+        "path": "src/review_gauntlet/checkpoint.py",
+        "run_id": 154,
+        "start_line": 561
+      },
+      "metadata": "{\"fingerprint\":\"858e6701a21c2003e44f5ea8a7a587f56afdfc402489e55fc68935e1d9216cab\",\"path\":\"src/review_gauntlet/checkpoint.py\",\"rule_id\":\"data-validation\",\"content\":\"Checkpoint artifact paths allow any single path segment as the checkpoint directory name. If a caller passes a generated file under `.review-gauntlet/checkpoints/latest/...`, or a hidden/temp directory such as `.review-gauntlet/checkpoints/.tmp/status.json`, it is treated as safe for checkpoint commits. Tighten the checkpoint id validation here to match the path-safe, non-latest RGC checkpoint ids that `write_latest_checkpoint` creates before staging files.\",\"suggestion_code\":\"        checkpoint_id, filename = parts[2], parts[3]\\n        if (\\n            checkpoint_id == \\\"latest\\\"\\n            or not checkpoint_id.startswith(\\\"RGC-\\\")\\n            or not checkpoint_id.isascii()\\n            or any(part in {\\\"\\\", \\\".\\\", \\\"..\\\"} for part in Path(checkpoint_id).parts)\\n            or Path(checkpoint_id).name != checkpoint_id\\n        ):\\n            return False\\n        return filename in {\",\"existing_code\":\"        checkpoint_id, filename = parts[2], parts[3]\\n        return checkpoint_id != \\\"latest\\\" and filename in {\",\"start_line\":561,\"end_line\":562,\"thinking\":\"This is a data validation issue on a commit allowlist. The function validates path traversal, but not the semantic checkpoint id segment, despite the writer using predictable RGC-* ids.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/checkpoint.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-7d2f570ffd4d",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "content": "`events.json` checkpoint validation only requires `event_id` to be an int and a few string fields, but it never validates that `from_state`/`to_state` are valid FindingState values. A corrupted or edited checkpoint can therefore be accepted as a review base with impossible transition states, which defeats the integrity checks this loader is trying to enforce.",
+      "finding_id": "RGF-0156",
+      "fingerprint": "5cdaac3af1d3d599b2b8a9ca35824951283f1b49c5bcb9366f89e4ea5b89e7aa",
+      "latest_occurrence": {
+        "cell_id": "RGC-8769b06915f1af11",
+        "end_line": 180,
+        "finding_id": "RGF-0156",
+        "imprecise": 0,
+        "occurrence_id": 156,
+        "path": "src/review_gauntlet/checkpoint.py",
+        "run_id": 156,
+        "start_line": 178
+      },
+      "metadata": "{\"fingerprint\":\"5cdaac3af1d3d599b2b8a9ca35824951283f1b49c5bcb9366f89e4ea5b89e7aa\",\"path\":\"src/review_gauntlet/checkpoint.py\",\"rule_id\":\"data-validation\",\"content\":\"`events.json` checkpoint validation only requires `event_id` to be an int and a few string fields, but it never validates that `from_state`/`to_state` are valid FindingState values. A corrupted or edited checkpoint can therefore be accepted as a review base with impossible transition states, which defeats the integrity checks this loader is trying to enforce.\",\"suggestion_code\":\"                text_fields = (\\\"finding_id\\\", \\\"from_state\\\", \\\"to_state\\\", \\\"reason\\\")\\n                if not all(isinstance(entry[field], str) for field in text_fields):\\n                    raise ValueError(f\\\"latest checkpoint is internally inconsistent: {name}\\\")\\n                if entry[\\\"from_state\\\"] not in {state.value for state in FindingState}:\\n                    raise ValueError(f\\\"latest checkpoint is internally inconsistent: {name}\\\")\\n                if entry[\\\"to_state\\\"] not in {state.value for state in FindingState}:\\n                    raise ValueError(f\\\"latest checkpoint is internally inconsistent: {name}\\\")\",\"existing_code\":\"                text_fields = (\\\"finding_id\\\", \\\"from_state\\\", \\\"to_state\\\", \\\"reason\\\")\\n                if not all(isinstance(entry[field], str) for field in text_fields):\\n                    raise ValueError(f\\\"latest checkpoint is internally inconsistent: {name}\\\")\",\"start_line\":178,\"end_line\":180,\"thinking\":\"Findings state is validated above, but event transition states are equally part of the checkpoint schema and are later trusted when a checkpoint is reused.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/checkpoint.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-7d2f570ffd4d",
+      "state": "fixed_verified"
+    }
+  ],
+  "schema_version": 1
+}

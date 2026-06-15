@@ -1,0 +1,596 @@
+{
+  "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+  "events": [
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 08:54:31",
+      "event_id": 276,
+      "finding_id": "RGF-0134",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Real data validation issue: latest checkpoint dir accepts a directory as valid pointer, bypassing symlink validation",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 08:54:38",
+      "event_id": 277,
+      "finding_id": "RGF-0132",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Real trust-boundary issue: generated_files from adapter stdout should be normalized and filtered before commit allowlist use",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 08:54:43",
+      "event_id": 278,
+      "finding_id": "RGF-0133",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Real data flow bug: compact_dashboard_text ignores caller-provided events by recomputing dashboard_state in progress_text()",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 09:02:46",
+      "event_id": 279,
+      "finding_id": "RGF-0136",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "commit_latest_checkpoint stages checkpoint paths before commit, and the CalledProcessError path returns without unstaging those paths, so failed commits can leave checkpoint artifacts staged.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 09:02:46",
+      "event_id": 280,
+      "finding_id": "RGF-0135",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "_run_step_payload persists stdout and stderr but omits SessionCommandResult artifact paths and output_tail, so captured adapter evidence is dropped from run step payloads.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 09:04:04",
+      "event_id": 281,
+      "finding_id": "RGF-0134",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "latest checkpoint pointer now rejects symlink, directory, unreadable file, invalid file content, and missing pointer paths instead of accepting a latest directory fallback",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 09:04:37",
+      "event_id": 282,
+      "finding_id": "RGF-0136",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "commit_latest_checkpoint now unstages checkpoint paths if git add/diff/commit path raises CalledProcessError",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 09:05:37",
+      "event_id": 283,
+      "finding_id": "RGF-0132",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "checkpoint_generated_files_from_stdout now normalizes, deduplicates, and only accepts relative .review-gauntlet/checkpoints artifact paths",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 09:05:59",
+      "event_id": 284,
+      "finding_id": "RGF-0135",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "run step payload now persists stdout/stderr/activity artifacts and structured output_tail evidence",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 09:06:15",
+      "event_id": 285,
+      "finding_id": "RGF-0133",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "compact dashboard fallback now renders the header from the event-aware dashboard view instead of recomputing without events",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 09:11:15",
+      "event_id": 286,
+      "finding_id": "RGF-0134",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 09:11:15",
+      "event_id": 287,
+      "finding_id": "RGF-0133",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 09:11:15",
+      "event_id": 288,
+      "finding_id": "RGF-0136",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 09:11:15",
+      "event_id": 289,
+      "finding_id": "RGF-0135",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 09:11:15",
+      "event_id": 290,
+      "finding_id": "RGF-0132",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 09:13:21",
+      "event_id": 291,
+      "finding_id": "RGF-0139",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Valid: stdout-json adapter payloads may nest verdict data, so generated checkpoint files under verdict.generated_files are currently ignored.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 09:13:21",
+      "event_id": 292,
+      "finding_id": "RGF-0137",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Valid: format_elapsed_time converts arbitrary float input with int() and non-finite values can raise during rendering.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 09:13:21",
+      "event_id": 293,
+      "finding_id": "RGF-0138",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Valid: format_duration converts arbitrary float input with int() and non-finite values can raise during lifecycle rendering.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 09:13:21",
+      "event_id": 294,
+      "finding_id": "RGF-0140",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Valid: agent output sanitization only redacts narrow environment assignment forms and misses common credential header, JSON, and key/value formats.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 09:16:20",
+      "event_id": 295,
+      "finding_id": "RGF-0139",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Handled nested verdict.generated_files fallback and added regression test",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 09:16:20",
+      "event_id": 296,
+      "finding_id": "RGF-0137",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Guarded elapsed time formatting against non-finite values and added regression test",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 09:16:20",
+      "event_id": 297,
+      "finding_id": "RGF-0138",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Guarded duration formatting against non-finite values and added regression test",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 09:16:20",
+      "event_id": 298,
+      "finding_id": "RGF-0140",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Expanded agent output redaction patterns for common credential forms and added regression tests",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 09:18:58",
+      "event_id": 299,
+      "finding_id": "RGF-0138",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 09:18:58",
+      "event_id": 300,
+      "finding_id": "RGF-0137",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 09:18:58",
+      "event_id": 301,
+      "finding_id": "RGF-0139",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 09:18:58",
+      "event_id": 302,
+      "finding_id": "RGF-0140",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 09:19:46",
+      "event_id": 303,
+      "finding_id": "RGF-0141",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Raw adapter argv can contain inline credentials and is rendered in the TUI without redaction; needs a code fix.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 09:21:08",
+      "event_id": 304,
+      "finding_id": "RGF-0141",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Sanitize fallback command argv label before rendering in TUI.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 09:23:44",
+      "event_id": 305,
+      "finding_id": "RGF-0141",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 09:36:50",
+      "event_id": 306,
+      "finding_id": "RGF-0142",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Added post-command interrupt check and regression test.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 09:36:50",
+      "event_id": 307,
+      "finding_id": "RGF-0143",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Constrained generated checkpoint files to JSON checkpoint paths and added regression test.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 09:36:50",
+      "event_id": 308,
+      "finding_id": "RGF-0144",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Blocked pre-existing staged checkpoint paths to avoid mutating caller index and added regression test.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 09:39:49",
+      "event_id": 309,
+      "finding_id": "RGF-0144",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 09:39:49",
+      "event_id": 310,
+      "finding_id": "RGF-0142",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 09:39:49",
+      "event_id": 311,
+      "finding_id": "RGF-0143",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 09:43:42",
+      "event_id": 312,
+      "finding_id": "RGF-0145",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Preserved pre-existing staged checkpoint artifacts while only unstaging paths staged by checkpoint commit on failure.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 09:45:09",
+      "event_id": 313,
+      "finding_id": "RGF-0145",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 09:48:48",
+      "event_id": 314,
+      "finding_id": "RGF-0146",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Added guard for checkpoint paths with both staged and unstaged changes to avoid committing stale staged checkpoint content.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 09:50:17",
+      "event_id": 315,
+      "finding_id": "RGF-0146",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 09:50:46",
+      "event_id": 316,
+      "finding_id": "RGF-0147",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Pre-existing staged checkpoint paths remaining staged after commit failure preserves the caller's pre-call index state; regression test covers this behavior.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 09:54:24",
+      "event_id": 317,
+      "finding_id": "RGF-0148",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Restricted checkpoint commit allowlist to generated checkpoint artifacts plus latest pointer and added stale artifact regression test.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 09:55:35",
+      "event_id": 318,
+      "finding_id": "RGF-0148",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 09:59:15",
+      "event_id": 319,
+      "finding_id": "RGF-0149",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Validated checkpoint session_id as ASCII alnum/hyphen/underscore single path segment and added newline rejection coverage.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 10:01:11",
+      "event_id": 320,
+      "finding_id": "RGF-0149",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 10:04:08",
+      "event_id": 321,
+      "finding_id": "RGF-0150",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Added required-field validation for findings/events checkpoint payload entries and regression coverage for malformed payload rejection.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 10:05:02",
+      "event_id": 322,
+      "finding_id": "RGF-0150",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 10:09:05",
+      "event_id": 323,
+      "finding_id": "RGF-0151",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Added type and FindingState validation for checkpoint findings/events payload entries with regression coverage.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 10:10:26",
+      "event_id": 324,
+      "finding_id": "RGF-0151",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 10:12:44",
+      "event_id": 325,
+      "finding_id": "RGF-0152",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Rollback now restores backed-up latest pointer even after replacement succeeds; added regression for post-replace cleanup failure.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 10:13:44",
+      "event_id": 326,
+      "finding_id": "RGF-0152",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 10:16:58",
+      "event_id": 327,
+      "finding_id": "RGF-0153",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Required sidecar schema_version to match checkpoint schema and updated legacy companion test to reject missing schema.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 10:18:12",
+      "event_id": 328,
+      "finding_id": "RGF-0153",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 10:18:46",
+      "event_id": 329,
+      "finding_id": "RGF-0154",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "paths_to_stage is only computed before blocked_paths; git add runs after blocked_paths returns, so unrelated dirty files are not staged on rejection.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 11:59:18",
+      "event_id": 330,
+      "finding_id": "RGF-0155",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "checkpoint artifact allowlist accepts arbitrary non-latest checkpoint directory names; code only rejects latest and does not enforce generated RGC-* checkpoint ids",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 12:10:57",
+      "event_id": 331,
+      "finding_id": "RGF-0155",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Tightened checkpoint artifact allowlist to require path-safe RGC checkpoint IDs and added regression coverage.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 12:12:45",
+      "event_id": 332,
+      "finding_id": "RGF-0155",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 12:19:29",
+      "event_id": 333,
+      "finding_id": "RGF-0156",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Added validation that from_state and to_state values in events.json must be valid FindingState enum values, matching the existing findings.json state validation.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-fbad54fd7f86-RGS-7d2f570ffd4d",
+      "created_at": "2026-06-15 12:21:54",
+      "event_id": 334,
+      "finding_id": "RGF-0156",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    }
+  ],
+  "schema_version": 1
+}
