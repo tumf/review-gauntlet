@@ -59,7 +59,12 @@ from review_gauntlet.review_adapter import (
     validate_verdict_json,
 )
 from review_gauntlet.review_cells import CellState, ReviewCell, cells_from_plan
-from review_gauntlet.run_controller import RunController, SessionCommandResult
+from review_gauntlet.run_controller import (
+    RUN_INTERRUPTED_ERROR,
+    RUN_INTERRUPTED_REASON,
+    RunController,
+    SessionCommandResult,
+)
 from review_gauntlet.run_tui import (
     TUI_FALLBACK_WARNING,
     TUI_INSTALL_GUIDANCE,
@@ -708,7 +713,10 @@ def _run_session_command(args: argparse.Namespace, root: Path) -> None:
         if prompt is None:
             raise SystemExit(1)
     elif args.command == "run":
-        result = _cmd_run(args, root, store)
+        try:
+            result = _cmd_run(args, root, store)
+        except KeyboardInterrupt:
+            result = _interrupted_run_result(store)
         if not bool(getattr(args, "_tui_rendered", False)):
             _emit_run(result, args.format)
         if not result["completed"]:
@@ -1375,6 +1383,21 @@ def _process_session_output_text(value: str | bytes | None) -> str:
     return value
 
 
+def _interrupted_run_result(store: SessionStore) -> dict[str, object]:
+    try:
+        session_id = store.active_session_id()
+    except LookupError:
+        session_id = None
+    return {
+        "completed": False,
+        "reason": RUN_INTERRUPTED_REASON,
+        "steps": [],
+        "step_count": 0,
+        "session_id": session_id,
+        "error": RUN_INTERRUPTED_ERROR,
+    }
+
+
 def _cmd_run(args: argparse.Namespace, root: Path, store: SessionStore) -> dict[str, object]:
     controller = RunController(
         root=root,
@@ -1390,15 +1413,18 @@ def _cmd_run(args: argparse.Namespace, root: Path, store: SessionStore) -> dict[
         no_tui=bool(getattr(args, "no_tui", False)),
         stdout_is_tty=sys.stdout.isatty(),
     )
-    if use_tui:
-        if textual_available():
-            app = create_run_app(controller)
-            result = cast(Any, app).run()
-            args._tui_rendered = True
-            return cast(dict[str, object], result)
-        print(TUI_FALLBACK_WARNING, file=sys.stderr)
-        print(TUI_INSTALL_GUIDANCE, file=sys.stderr)
-    return controller.run()
+    try:
+        if use_tui:
+            if textual_available():
+                app = create_run_app(controller)
+                result = cast(Any, app).run()
+                args._tui_rendered = True
+                return cast(dict[str, object], result)
+            print(TUI_FALLBACK_WARNING, file=sys.stderr)
+            print(TUI_INSTALL_GUIDANCE, file=sys.stderr)
+        return controller.run()
+    except KeyboardInterrupt:
+        return _interrupted_run_result(store)
 
 
 def _run_session_command_step_from_config(
@@ -1468,6 +1494,18 @@ def _run_session_command_step(
                 "reason": "timeout",
                 "error": f"command timed out after {config.timeout_seconds} seconds",
                 "timeout_seconds": config.timeout_seconds,
+            },
+        )
+    except KeyboardInterrupt:
+        return SessionCommandResult(
+            argv=argv,
+            cwd=None if cwd_path is None else str(cwd_path),
+            returncode=None,
+            stdout="",
+            stderr="",
+            failure={
+                "reason": RUN_INTERRUPTED_REASON,
+                "error": RUN_INTERRUPTED_ERROR,
             },
         )
     failure: dict[str, object] | None = None
