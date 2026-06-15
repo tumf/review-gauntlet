@@ -562,6 +562,10 @@ def _fake_controller_run(_self: object) -> dict[str, object]:
     return _successful_run_result()
 
 
+def _raise_controller_keyboard_interrupt(_self: object) -> dict[str, object]:
+    raise KeyboardInterrupt
+
+
 def test_cli_run_help_exposes_no_tui(capsys: pytest.CaptureFixture[str]) -> None:
     output = _help_output(["run"], capsys)
 
@@ -578,6 +582,54 @@ def test_cli_run_no_tui_accepts_flag(
 
     data = json.loads(capsys.readouterr().out)
     assert data["completed"] is True
+
+
+def test_cli_run_json_keyboard_interrupt_emits_parseable_json_without_traceback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "README.md").write_text("# docs\n", encoding="utf-8")
+    main(["init", str(tmp_path), "--worktree", "--format", "json"])
+    capsys.readouterr()
+    monkeypatch.setattr(
+        "review_gauntlet.cli.RunController.run", _raise_controller_keyboard_interrupt
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        main(["run", str(tmp_path), "--format", "json"])
+
+    captured = capsys.readouterr()
+    data = json.loads(captured.out)
+    assert exc_info.value.code == 1
+    assert data["completed"] is False
+    assert data["reason"] == "interrupted"
+    assert data["error"] == "run interrupted by user"
+    assert data["step_count"] == 0
+    assert data["steps"] == []
+    assert data["session_id"].startswith("RGS-")
+    assert "Traceback" not in captured.out
+    assert "Traceback" not in captured.err
+
+
+def test_cli_run_text_keyboard_interrupt_emits_concise_failure_without_traceback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "README.md").write_text("# docs\n", encoding="utf-8")
+    main(["init", str(tmp_path), "--worktree", "--format", "json"])
+    capsys.readouterr()
+    monkeypatch.setattr(
+        "review_gauntlet.cli.RunController.run", _raise_controller_keyboard_interrupt
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        main(["run", str(tmp_path), "--no-tui"])
+
+    captured = capsys.readouterr()
+    assert exc_info.value.code == 1
+    assert "completed: False" in captured.out
+    assert "reason: interrupted" in captured.out
+    assert "error: run interrupted by user" in captured.out
+    assert "Traceback" not in captured.out
+    assert "Traceback" not in captured.err
 
 
 def test_cli_run_json_does_not_emit_tui_fallback_warning(

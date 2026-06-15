@@ -123,6 +123,39 @@ def test_run_controller_reports_command_failure(tmp_path: Path) -> None:
     assert result["step_count"] == 1
 
 
+def test_run_controller_reports_interrupted_command_and_keeps_active_session(
+    tmp_path: Path,
+) -> None:
+    store = _store(tmp_path)
+
+    def command(
+        _config: CommandAdapterConfig, _root: Path, _state_dir: Path, _prompt: str
+    ) -> SessionCommandResult:
+        raise KeyboardInterrupt
+
+    controller = RunController(
+        root=tmp_path,
+        store=store,
+        config_path=None,
+        max_steps=3,
+        ready_prompt=lambda _store, _root: "ready prompt",
+        status_snapshot=_status,
+        command_runner=command,
+    )
+
+    result = controller.run()
+
+    assert result["completed"] is False
+    assert result["reason"] == "interrupted"
+    assert result["error"] == "run interrupted by user"
+    assert result["step_count"] == 0
+    assert result["steps"] == []
+    assert result["session_id"] == "RGS-test"
+    assert store.active_path.exists()
+    assert store.active_session_id() == "RGS-test"
+    assert [event.type for event in controller.events][-1] == "interrupted"
+
+
 def test_run_controller_reports_no_ready_task(tmp_path: Path) -> None:
     store = _store(tmp_path)
     controller = RunController(

@@ -9,6 +9,9 @@ from typing import cast
 from review_gauntlet.config import CommandAdapterConfig, load_config
 from review_gauntlet.session_store import SessionStore
 
+RUN_INTERRUPTED_ERROR = "run interrupted by user"
+RUN_INTERRUPTED_REASON = "interrupted"
+
 
 @dataclass(frozen=True)
 class SessionCommandResult:
@@ -140,12 +143,8 @@ class RunController:
         for step_number in range(1, self.max_steps + 1):
             self._step = step_number
             if self._interrupted:
-                return _run_result(
-                    completed=False,
-                    steps=steps,
-                    reason="interrupted",
-                    error="run interrupted by controller request",
-                    session_id=self._active_session_id_or_none(),
+                return self._interrupted_result(
+                    steps, error="run interrupted by controller request"
                 )
             session_id = self.store.active_session_id()
             prompt = self._ready_prompt(self.store, self.root)
@@ -160,12 +159,17 @@ class RunController:
                 )
             self._emit("step_started", step=step_number, prompt=prompt)
             self._agent_status = "running"
-            command_result = self._command_runner(
-                effective_config.adapter,
-                self.root,
-                self.store.state_dir,
-                prompt,
-            )
+            try:
+                command_result = self._command_runner(
+                    effective_config.adapter,
+                    self.root,
+                    self.store.state_dir,
+                    prompt,
+                )
+            except KeyboardInterrupt:
+                self._agent_status = "interrupted"
+                self._emit("interrupted", step=step_number, session_id=session_id)
+                return self._interrupted_result(steps)
             self._command_argv = tuple(command_result.argv)
             self._emit("agent_started", argv=command_result.argv, step=step_number)
             step_payload = _run_step_payload(step_number, prompt, command_result)
@@ -230,6 +234,17 @@ class RunController:
         self._events.append(event)
         if self._event_sink is not None:
             self._event_sink(event)
+
+    def _interrupted_result(
+        self, steps: list[dict[str, object]], *, error: str = RUN_INTERRUPTED_ERROR
+    ) -> dict[str, object]:
+        return _run_result(
+            completed=False,
+            steps=steps,
+            reason=RUN_INTERRUPTED_REASON,
+            error=error,
+            session_id=self._active_session_id_or_none(),
+        )
 
     def _active_session_id_or_none(self) -> str | None:
         try:
