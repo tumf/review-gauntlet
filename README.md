@@ -32,30 +32,21 @@ uvx review-gauntlet config init --preset opencode
 # 3. Start a review session for the current repository
 review-gauntlet init
 
-# 4. Run one review batch through the configured adapter
-review-gauntlet review
+# 4. Let Review Gauntlet drive the configured agent until the session completes
+review-gauntlet run
 
-# 5. Check coverage, findings, and the next required action
+# 5. Inspect the final checkpoint and findings if needed
 review-gauntlet status
 review-gauntlet findings
-
-# 6. Keep reviewing until coverage has no pending or stale cells
-review-gauntlet review
-review-gauntlet status
-
-# 7. Triage or fix live findings. Mark fixed items, then re-run the verifier.
-review-gauntlet mark <finding-id> fixed --reason "fixed in follow-up"
-review-gauntlet verify-fixes
-review-gauntlet status
-
-# 8. Finalize only after status reports can_finalize: true
-review-gauntlet finalize
 ```
 
-`review` advances only one batch at a time. `verify-fixes` re-checks findings marked
-`fixed_pending_verification` and moves them to `fixed_verified` or `reopened`.
-`finalize` succeeds only after required coverage is complete, live findings are
-closed, and `status` reports `can_finalize: true`.
+`run` repeatedly asks Review Gauntlet for the next ready task, invokes the configured
+external agent with that prompt, and stops when the active session has been finalized.
+`review` still advances only one review batch at a time for lower-level or custom
+workflows. `verify-fixes` re-checks findings marked `fixed_pending_verification` and
+moves them to `fixed_verified` or `reopened`. `finalize` succeeds only after required
+coverage is complete, live findings are closed, and `status` reports
+`can_finalize: true`.
 
 ## How is this different from AI review tools?
 
@@ -151,7 +142,7 @@ verify that `review-gauntlet review` runs end-to-end.
 uvx review-gauntlet config init --preset opencode
 # (install and authenticate the matching external review agent separately)
 review-gauntlet init
-review-gauntlet review
+review-gauntlet run
 review-gauntlet status
 ```
 
@@ -185,8 +176,8 @@ command with `uv tool install --reinstall .`.
 
 ## Basic usage
 
-Start by choosing an explicit review target, then repeat review steps until
-coverage is complete:
+Start by choosing an explicit review target, then use `run` to execute ready tasks
+through the configured external agent until the session is finalized:
 
 ```bash
 # Review the current workspace diff.
@@ -198,43 +189,33 @@ review-gauntlet init --from main --to HEAD
 # Or review the full repository.
 review-gauntlet init --all
 
-# Run one review step. Repeat this until status has no pending or stale coverage.
-review-gauntlet review
-review-gauntlet status
+# Recommended: run ready tasks until the active session finalizes.
+review-gauntlet run
 
-# Inspect live findings and record triage decisions.
+# Inspect state and findings when debugging or auditing the result.
+review-gauntlet status
 review-gauntlet findings
-review-gauntlet mark <finding-id> confirmed --reason "valid issue"
-review-gauntlet mark <finding-id> false-positive --reason "not applicable"
-review-gauntlet mark <finding-id> fixed --reason "fixed in follow-up"
-
-# Re-check fixed findings, then inspect status again.
-review-gauntlet verify-fixes
-review-gauntlet status
-
-# Finalize only after coverage is complete, live findings are closed,
-# and status reports can_finalize: true.
-review-gauntlet finalize
 ```
 
-`review` advances exactly one step per invocation. `finalize` is a gate, not a
-cleanup command: it fails until required coverage is complete and live findings are
-closed.
+`run` is the normal progression command. It does not change the constitution-backed
+behavior of `review`: `review` advances exactly one review batch per invocation, and
+`run` orchestrates repeated ready-task execution through the external agent. `finalize`
+is still a gate, not a cleanup command: it fails until required coverage is complete
+and live findings are closed.
 
-### Convenient `ready` usage
+### Advanced `ready` usage
 
-`ready` prints the next review prompt, making it easy to hand off one pending review
-unit to an external agent:
+`ready` prints the next review prompt for CI systems, custom orchestrators, external
+integrations, and debugging. Use it when you want to own the orchestration loop
+outside Review Gauntlet:
 
 ```bash
 review-gauntlet ready | opencode run
 ```
 
-To keep feeding ready prompts to opencode until no review unit remains:
-
-```bash
-while p=$(review-gauntlet ready); do opencode run "$p"; done
-```
+A custom orchestrator can repeatedly call `ready`, but this is no longer the
+recommended day-to-day workflow; prefer `review-gauntlet run` for normal session
+progression.
 
 ## Shell completion
 
@@ -286,14 +267,17 @@ review-gauntlet init --commit <commit-oid>
 # review-gauntlet-only full repository review: every eligible inventory file.
 review-gauntlet init --all
 
-# Execute exactly one review step for the initialized session.
+# Recommended: orchestrate ready tasks with the configured external agent.
+review-gauntlet run
+
+# Execute exactly one review step for lower-level/custom workflows.
 review-gauntlet review
 
 # Select at most 20 cells for this run and execute up to 4 adapter calls at once.
 review-gauntlet review --budget 20 --concurrency 4
 ```
 
-After a review step, inspect session state and findings, optionally record human
+After a run or review step, inspect session state and findings, optionally record human
 finding decisions, and finalize only when both coverage and findings are closed:
 
 ```bash

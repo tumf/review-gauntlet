@@ -157,36 +157,58 @@ Status and freshness computations SHALL use the same resolved repository root fo
 
 `review-gauntlet ready` SHALL expose whether a continuation task is available through both stdout and process exit status. When a ready prompt exists, the command SHALL emit the existing prompt output and exit `0`. When no continuation task exists, the command SHALL preserve the existing no-task output while exiting `1` so external orchestrators can distinguish no-op completion without parsing stdout. When current review cells are pending, `ready` SHALL prompt for pending review before prompting for reopened, untriaged, confirmed, fixed-pending, or stale work. When pending cells are exhausted but current review cells are stale, `ready` SHALL prompt for live finding work before prompting for generic stale review work. Live finding work SHALL include reopened findings, untriaged findings, confirmed findings, and fixed-pending verification. After review-cell and finding continuation work is exhausted, `ready` SHALL treat dirty working-tree finalize blockers as actionable by returning a prompt that instructs the agent to commit intended git changes before finalizing. Commit-resolvable dirty blockers include dirty review-universe files relative to `HEAD` and uncommitted non-review files. `ready` SHALL NOT treat non-dirty finalize blockers as commit-resolvable. `ready` SHALL NOT return a target-digest-drift review prompt solely because whole-target digest drift exists when current target-cell coverage is complete.
 
-#### Scenario: Fixed-pending path digest drift is verification work, not stale review work
+`review-gauntlet run` SHALL orchestrate an active session by repeatedly using the same continuation task prompt that `review-gauntlet ready` would emit. `run` SHALL NOT maintain independent task-selection priority logic. `run` SHALL invoke the configured command adapter as a session-level task runner with the ready prompt and then re-evaluate the active session. `run` SHALL NOT require the session-level agent invocation to emit OCR verdict JSON, and SHALL NOT use review-cell verdict parsing as the success criterion for a session-level task. `run` SHALL stop successfully when the active session has been finalized and the active-session marker is gone. `run` SHALL stop unsuccessfully when no ready task exists while a session remains active, when the configured command fails, or when the configured maximum step count is reached while the session remains active.
 
-**Given**: an active review session whose current target has reviewed cells for `app.py`
-**And**: `app.py` has at least one finding in `fixed_pending_verification`
-**And**: the contents of `app.py` changed after the cells were reviewed
-**When**: the developer runs `review-gauntlet status --format json`
-**Then**: stdout contains parseable JSON with `finding_state_counts.fixed_pending_verification` greater than `0`
-**And**: cells for `app.py` do not contribute to `coverage.stale`
-**And**: `next_required_action` is `run_verify_fixes`
-**And**: finalization remains blocked by fixed-finding verification
+#### Scenario: Run invokes the same prompt as ready
 
-#### Scenario: Incidental changed reviewed file remains stale during fix workflow
+**Given**: an active session with pending review cells
+**And**: the effective adapter config invokes a fake command that records its arguments
+**When**: the developer runs `review-gauntlet run --max-steps 1 --format json`
+**Then**: the fake command receives the same prompt text that `review-gauntlet ready` emits for that session state
+**And**: task selection comes from the ready prompt computation rather than from separate run-specific priority logic
 
-**Given**: an active review session whose current target has reviewed cells for `app.py` and `helper.py`
-**And**: `app.py` has at least one finding in `fixed_pending_verification`
-**And**: `helper.py` has no finding in `fixed_pending_verification`
-**And**: both files changed after their cells were reviewed
-**When**: the developer runs `review-gauntlet status --format json`
-**Then**: cells for `app.py` do not contribute to `coverage.stale`
-**And**: cells for `helper.py` do contribute to `coverage.stale`
-**And**: the stale coverage remains visible as a finalization blocker
+#### Scenario: Run completes after the agent finalizes the session
 
-#### Scenario: Review reconciliation does not persist stale state for fixed-pending paths
+**Given**: an active session whose next ready task can finalize the session
+**And**: the configured command performs the required finalization so `.review-gauntlet/active-session.json` is removed
+**When**: the developer runs `review-gauntlet run --format json`
+**Then**: the command exits `0`
+**And**: stdout contains structured output indicating the run completed
+**And**: the active session marker no longer exists
 
-**Given**: an active review session with a reviewed cell for `app.py`
-**And**: `app.py` has at least one finding in `fixed_pending_verification`
-**And**: the contents of `app.py` changed after the cell was reviewed
-**When**: the developer runs `review-gauntlet review --budget 0 --format json`
-**Then**: the persisted review cell for `app.py` is not changed to `stale`
-**And**: the fixed-pending finding remains visible for verification
+#### Scenario: Run fails when no ready task exists
+
+**Given**: an active session for which `review-gauntlet ready` would emit no ready task and exit `1`
+**When**: the developer runs `review-gauntlet run --format json`
+**Then**: the command exits `1`
+**And**: stdout contains structured output identifying that no ready task is available
+**And**: no agent command is invoked
+
+#### Scenario: Run fails when the configured command fails
+
+**Given**: an active session with a ready task
+**And**: the effective adapter config invokes a command that exits non-zero or cannot be started
+**When**: the developer runs `review-gauntlet run --format json`
+**Then**: the command exits `1`
+**And**: stdout contains structured failure information
+**And**: the active session remains available for later recovery
+
+#### Scenario: Run enforces max steps
+
+**Given**: an active session with a ready task
+**And**: the configured command exits `0` without finalizing or otherwise removing the active session
+**When**: the developer runs `review-gauntlet run --max-steps 1 --format json`
+**Then**: the command exits `1`
+**And**: stdout indicates the maximum step count was reached
+**And**: the active session remains available for continuation
+
+#### Scenario: Run does not parse session-level output as OCR verdict JSON
+
+**Given**: an active session with a ready task
+**And**: the configured command exits `0` while writing non-JSON progress text to stdout or stderr
+**When**: the developer runs `review-gauntlet run --max-steps 1 --format json`
+**Then**: the command does not fail solely because the session-level command output is not OCR verdict JSON
+**And**: success or failure is determined by process exit status, max-step state, and active-session completion state
 
 ### Requirement: Finalize SHALL validate completion without running review work
 

@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import posixpath
+import re
+import subprocess
 import sys
 import uuid
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
@@ -21,6 +24,8 @@ from review_gauntlet.checkpoint import (
     write_latest_checkpoint,
 )
 from review_gauntlet.config import (
+    TEMPLATE_PATTERN,
+    CommandAdapterConfig,
     ConfigError,
     default_global_config_path,
     default_project_config_path,
@@ -195,6 +200,17 @@ def build_parser() -> argparse.ArgumentParser:
     ready = subparsers.add_parser("ready")
     _root_arg(ready)
     _output_format_arg(ready)
+
+    run = subparsers.add_parser("run")
+    _root_arg(run)
+    run.add_argument(
+        "--max-steps",
+        type=_positive_int,
+        default=100,
+        help="Maximum ready-prompt executions before stopping (default: 100)",
+    )
+    run.add_argument("--config", type=Path)
+    _output_format_arg(run)
 
     findings = subparsers.add_parser("findings")
     _root_arg(findings)
@@ -677,6 +693,11 @@ def _run_session_command(args: argparse.Namespace, root: Path) -> None:
         prompt = _ready_prompt(store, root)
         _emit_ready(prompt, args.format)
         if prompt is None:
+            raise SystemExit(1)
+    elif args.command == "run":
+        result = _cmd_run(args, root, store)
+        _emit_run(result, args.format)
+        if not result["completed"]:
             raise SystemExit(1)
     elif args.command == "findings":
         _emit(
@@ -1327,6 +1348,261 @@ def _finalize_blocker_is_commit_resolvable(reason: str) -> bool:
     return reason.startswith(_DIRTY_REVIEW_UNIVERSE_PREFIX) or reason.startswith(
         _DIRTY_NON_REVIEW_PREFIX
     )
+
+
+@dataclass(frozen=True)
+class SessionCommandResult:
+    argv: list[str]
+    cwd: str | None
+    returncode: int | None
+    stdout: str
+    stderr: str
+    failure: dict[str, object] | None = None
+
+
+_SESSION_TEMPLATE_VARIABLES = frozenset({"repo_root", "state_dir", "prompt"})
+
+
+def _process_session_output_text(value: str | bytes | None) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    return value
+
+
+def _cmd_run(args: argparse.Namespace, root: Path, store: SessionStore) -> dict[str, object]:
+    config = load_config(root, args.config)
+    if config is None:
+        raise ValueError(_missing_config_guidance("run"))
+    _config_path, effective_config = config
+    steps: list[dict[str, object]] = []
+    max_steps = int(args.max_steps)
+    for step_number in range(1, max_steps + 1):
+        session_id = store.active_session_id()
+        prompt = _ready_prompt(store, root)
+        if prompt is None:
+            return _run_result(
+                completed=False,
+                steps=steps,
+                reason="no_ready_task",
+                error="active session remains but no ready task is actionable",
+                session_id=session_id,
+            )
+        command_result = _run_session_command_step(
+            config=effective_config.adapter,
+            root=root,
+            state_dir=store.state_dir,
+            prompt=prompt,
+        )
+        step_payload = _run_step_payload(step_number, prompt, command_result)
+        steps.append(step_payload)
+        if command_result.failure is not None:
+            return _run_result(
+                completed=False,
+                steps=steps,
+                reason=str(command_result.failure.get("reason", "command_failed")),
+                error=str(command_result.failure.get("error", "command failed")),
+                session_id=session_id,
+            )
+        if not store.active_path.exists():
+            return _run_result(
+                completed=True,
+                steps=steps,
+                reason="completed",
+                error=None,
+                session_id=session_id,
+            )
+    try:
+        session_id = store.active_session_id()
+    except LookupError:
+        return _run_result(
+            completed=True,
+            steps=steps,
+            reason="completed",
+            error=None,
+            session_id=None,
+        )
+    return _run_result(
+        completed=False,
+        steps=steps,
+        reason="max_steps_exhausted",
+        error=f"active session remains after {max_steps} run step(s)",
+        session_id=session_id,
+        max_steps=max_steps,
+    )
+
+
+def _run_result(
+    *,
+    completed: bool,
+    steps: list[dict[str, object]],
+    reason: str,
+    error: str | None,
+    session_id: str | None,
+    max_steps: int | None = None,
+) -> dict[str, object]:
+    result: dict[str, object] = {
+        "completed": completed,
+        "reason": reason,
+        "steps": steps,
+        "step_count": len(steps),
+        "session_id": session_id,
+    }
+    if error is not None:
+        result["error"] = error
+    if max_steps is not None:
+        result["max_steps"] = max_steps
+    return result
+
+
+def _run_session_command_step(
+    *, config: CommandAdapterConfig, root: Path, state_dir: Path, prompt: str
+) -> SessionCommandResult:
+    variables = {
+        "repo_root": str(root.resolve()),
+        "state_dir": str(state_dir.resolve()),
+        "prompt": prompt,
+    }
+    try:
+        argv = [_expand_session_template(config.command, variables)]
+        argv.extend(_expand_session_template(arg, variables) for arg in config.args)
+        cwd_path = _resolve_session_cwd(config, root, variables)
+        env = os.environ.copy()
+        env.update(
+            {key: _expand_session_template(value, variables) for key, value in config.env.items()}
+        )
+    except ValueError as exc:
+        return SessionCommandResult(
+            argv=[],
+            cwd=None,
+            returncode=None,
+            stdout="",
+            stderr="",
+            failure={"reason": "template_error", "error": str(exc)},
+        )
+    try:
+        completed = subprocess.run(
+            argv,
+            cwd=cwd_path,
+            env=env,
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            shell=False,
+            timeout=config.timeout_seconds,
+            check=False,
+        )
+    except FileNotFoundError as exc:
+        return SessionCommandResult(
+            argv=argv,
+            cwd=None if cwd_path is None else str(cwd_path),
+            returncode=None,
+            stdout="",
+            stderr="",
+            failure={
+                "reason": "startup_error",
+                "error": f"command not found: {argv[0]}",
+                "detail": str(exc),
+            },
+        )
+    except subprocess.TimeoutExpired as exc:
+        return SessionCommandResult(
+            argv=argv,
+            cwd=None if cwd_path is None else str(cwd_path),
+            returncode=None,
+            stdout=_process_session_output_text(exc.stdout),
+            stderr=_process_session_output_text(exc.stderr),
+            failure={
+                "reason": "timeout",
+                "error": f"command timed out after {config.timeout_seconds} seconds",
+                "timeout_seconds": config.timeout_seconds,
+            },
+        )
+    failure: dict[str, object] | None = None
+    if completed.returncode != 0:
+        failure = {
+            "reason": "command_failed",
+            "error": f"command exited with status {completed.returncode}",
+            "returncode": completed.returncode,
+        }
+    return SessionCommandResult(
+        argv=argv,
+        cwd=None if cwd_path is None else str(cwd_path),
+        returncode=completed.returncode,
+        stdout=completed.stdout,
+        stderr=completed.stderr,
+        failure=failure,
+    )
+
+
+def _run_step_payload(
+    step_number: int, prompt: str, result: SessionCommandResult
+) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "step": step_number,
+        "prompt": prompt,
+        "argv": result.argv,
+        "cwd": result.cwd,
+        "returncode": result.returncode,
+        "stdout": result.stdout,
+        "stderr": result.stderr,
+    }
+    if result.failure is not None:
+        payload["failure"] = result.failure
+    return payload
+
+
+def _expand_session_template(value: str, variables: dict[str, str]) -> str:
+    placeholder = "\x00REVIEW_GAUNTLET_LITERAL_BRACE\x00"
+    protected = value.replace("{{", placeholder + "OPEN").replace("}}", placeholder + "CLOSE")
+
+    def replace(match: re.Match[str]) -> str:
+        name = match.group(1)
+        if name not in _SESSION_TEMPLATE_VARIABLES:
+            raise ValueError(
+                f"template variable {{{name}}} is not available for run; supported variables: "
+                + ", ".join(f"{{{item}}}" for item in sorted(_SESSION_TEMPLATE_VARIABLES))
+            )
+        return variables[name]
+
+    expanded = TEMPLATE_PATTERN.sub(replace, protected)
+    return expanded.replace(placeholder + "OPEN", "{").replace(placeholder + "CLOSE", "}")
+
+
+def _resolve_session_cwd(
+    config: CommandAdapterConfig, root: Path, variables: dict[str, str]
+) -> Path | None:
+    if config.cwd is None:
+        return None
+    cwd = Path(_expand_session_template(config.cwd, variables))
+    resolved = (root / cwd).resolve() if not cwd.is_absolute() else cwd.resolve()
+    try:
+        resolved.relative_to(root.resolve())
+    except ValueError as exc:
+        raise ValueError(f"adapter.cwd must stay inside repository root: {resolved}") from exc
+    if not resolved.is_dir():
+        raise ValueError(f"adapter.cwd is not a directory: {resolved}")
+    return resolved
+
+
+def _emit_run(result: dict[str, object], output_format: str) -> None:
+    if output_format == "json":
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return
+    print(f"completed: {result['completed']}")
+    print(f"reason: {result['reason']}")
+    print(f"step_count: {result['step_count']}")
+    if "error" in result:
+        print(f"error: {result['error']}")
+    for step in cast(list[dict[str, object]], result["steps"]):
+        print(f"step {step['step']}: returncode={step['returncode']} argv={step['argv']}")
+        stdout = str(step.get("stdout", ""))
+        stderr = str(step.get("stderr", ""))
+        if stdout:
+            print(f"stdout: {stdout}")
+        if stderr:
+            print(f"stderr: {stderr}")
 
 
 def _emit_ready(prompt: str | None, output_format: str) -> None:
