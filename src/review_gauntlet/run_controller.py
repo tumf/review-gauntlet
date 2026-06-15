@@ -51,6 +51,7 @@ class RunSnapshot:
     agent_status: str
     command_argv: tuple[str, ...]
     elapsed_seconds: float
+    command_label: str | None = None
 
 
 ReadyPrompt = Callable[[SessionStore, Path], str | None]
@@ -86,6 +87,7 @@ class RunController:
         self._step = 0
         self._agent_status = "idle"
         self._command_argv: tuple[str, ...] = ()
+        self._command_label: str | None = None
         self._started_at = datetime.now(UTC)
 
     @property
@@ -124,6 +126,7 @@ class RunController:
             agent_status=self._agent_status,
             command_argv=self._command_argv,
             elapsed_seconds=(datetime.now(UTC) - self._started_at).total_seconds(),
+            command_label=self._command_label,
         )
 
     def run(self) -> dict[str, object]:
@@ -136,6 +139,7 @@ class RunController:
                 "`review-gauntlet config preset list`."
             )
         _config_path, effective_config = loaded
+        self._command_label = command_display_label(effective_config.adapter)
         steps: list[dict[str, object]] = []
         initial_session_id = self._active_session_id_or_none()
         self._emit("run_started", session_id=initial_session_id, max_steps=self.max_steps)
@@ -159,7 +163,11 @@ class RunController:
                 )
             self._emit("step_started", step=step_number, prompt=prompt)
             self._agent_status = "running"
-            self._emit("agent_started", argv=[], step=step_number)
+            self._emit(
+                "agent_started",
+                command_label=self._command_label,
+                step=step_number,
+            )
             try:
                 command_result = self._command_runner(
                     effective_config.adapter,
@@ -251,6 +259,14 @@ class RunController:
             return self.store.active_session_id()
         except LookupError:
             return None
+
+
+def command_display_label(config: CommandAdapterConfig) -> str:
+    parts = (config.command, *config.args)
+    visible_parts = [part for part in parts if "{" not in part and "}" not in part]
+    if not visible_parts:
+        return config.command
+    return " ".join(visible_parts)
 
 
 def _object_dict(value: object) -> dict[str, object]:

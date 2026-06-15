@@ -5,7 +5,11 @@ from pathlib import Path
 
 from review_gauntlet.config import CommandAdapterConfig
 from review_gauntlet.review_cells import CellState, ReviewCell
-from review_gauntlet.run_controller import RunController, SessionCommandResult
+from review_gauntlet.run_controller import (
+    RunController,
+    SessionCommandResult,
+    command_display_label,
+)
 from review_gauntlet.session_store import SessionStore
 
 
@@ -93,6 +97,48 @@ def test_run_controller_completes_when_command_finalizes_session(tmp_path: Path)
         "agent_finished",
         "finalized",
     ]
+
+
+def test_run_controller_exposes_command_label_before_command_returns(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    labels_during_command: list[str | None] = []
+    agent_started_payloads: list[dict[str, object]] = []
+
+    def command(
+        _config: CommandAdapterConfig, _root: Path, _state_dir: Path, _prompt: str
+    ) -> SessionCommandResult:
+        labels_during_command.append(controller.snapshot().command_label)
+        agent_started_payloads.extend(
+            event.payload for event in controller.events if event.type == "agent_started"
+        )
+        store.active_path.unlink()
+        return SessionCommandResult(
+            argv=["fake-agent", "ready prompt"], cwd=None, returncode=0, stdout="ok", stderr=""
+        )
+
+    controller = RunController(
+        root=tmp_path,
+        store=store,
+        config_path=None,
+        max_steps=1,
+        ready_prompt=lambda _store, _root: "ready prompt",
+        status_snapshot=_status,
+        command_runner=command,
+    )
+
+    result = controller.run()
+
+    assert result["completed"] is True
+    assert labels_during_command == ["fake-agent"]
+    assert agent_started_payloads == [{"command_label": "fake-agent", "step": 1}]
+
+
+def test_command_display_label_omits_template_arguments() -> None:
+    config = CommandAdapterConfig(
+        type="command", command="fake-agent", args=("--mode", "review", "{prompt}")
+    )
+
+    assert command_display_label(config) == "fake-agent --mode review"
 
 
 def test_run_controller_reports_command_failure(tmp_path: Path) -> None:

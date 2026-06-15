@@ -8,15 +8,26 @@ from typing import Any, cast
 import pytest
 
 from review_gauntlet import run_tui
-from review_gauntlet.run_controller import RunController, RunSnapshot, SessionCommandResult
+from review_gauntlet.run_controller import (
+    RunController,
+    RunEvent,
+    RunSnapshot,
+    SessionCommandResult,
+)
 from review_gauntlet.run_tui import (
+    activity_text,
     agent_activity_text,
     calculate_progress_metrics,
     coverage_text,
     create_run_app,
+    dashboard_state,
     findings_text,
+    footer_text,
     format_elapsed_time,
+    format_event_time,
+    format_task_title,
     progress_text,
+    short_session_id,
     should_use_tui,
     textual_available,
 )
@@ -39,6 +50,8 @@ def test_progress_metrics_exclude_superseded_and_treat_pending_stale_as_incomple
     assert metrics.total == 7
     assert metrics.percent == 57
     assert metrics.incomplete == 3
+    assert metrics.pending == 2
+    assert metrics.stale == 1
     assert metrics.superseded == 99
 
 
@@ -59,29 +72,31 @@ def test_elapsed_time_formatting() -> None:
     assert format_elapsed_time(-1) == "00:00"
 
 
-def test_progress_first_header_contains_dense_run_state() -> None:
+def test_dashboard_header_contains_human_run_state_and_short_session() -> None:
     snapshot = RunSnapshot(
-        session_id="RGS-progress",
+        session_id="RGS-progress-1234567890",
         coverage={"reviewed": 2, "pending": 1, "stale": 1, "superseded": 3},
         findings={"open": 2},
-        next_ready_prompt="review docs",
+        next_ready_prompt="review pending cells",
         step=4,
         agent_status="running",
         command_argv=("agent",),
         elapsed_seconds=125,
+        command_label="agent",
     )
 
     text = progress_text(snapshot, activity_frame=1)
 
-    assert "50%" in text
-    assert "2/4 current cells" in text
+    assert "Review dashboard" in text
+    assert "RGS-prog…7890" in text
+    assert "RUNNING - agent is working" in text
     assert "elapsed 02:05" in text
     assert "step 4" in text
     assert "agent ⠙ running" in text
-    assert "superseded 3" in text
+    assert "current cells" not in text
 
 
-def test_coverage_and_findings_render_high_density_summaries() -> None:
+def test_coverage_and_findings_render_dashboard_metrics_without_old_markers() -> None:
     snapshot = RunSnapshot(
         session_id="RGS-density",
         coverage={"reviewed": 2, "pending": 1, "stale": 1, "superseded": 1},
@@ -96,22 +111,42 @@ def test_coverage_and_findings_render_high_density_summaries() -> None:
     coverage = coverage_text(snapshot)
     findings = findings_text(snapshot)
 
-    assert "! pending" in coverage
-    assert "! stale" in coverage
-    assert "remaining" in coverage
-    assert "excluded" in coverage
-    assert "■" in coverage
-    assert "[fixed_pending_verification:1]" in findings
-    assert "[untriaged:2]" in findings
-    assert "untriaged: 2" not in findings
+    assert "50%" in coverage
+    assert "reviewed / total cells: 2 / 4" in coverage
+    assert "reviewed 2 | pending 1 | stale 1 | superseded 1" in coverage
+    assert "current cells" not in coverage
+    assert "! pending" not in coverage
+    assert "! stale" not in coverage
+    assert "open 0" in findings
+    assert "untriaged 2" in findings
+    assert "confirmed 0" in findings
+    assert "reopened 0" in findings
+    assert "fixed-pending 1" in findings
+    assert "closed 0" in findings
 
 
-def test_task_text_renders_prompt_as_plain_text() -> None:
+@pytest.mark.parametrize(
+    ("prompt", "title"),
+    [
+        ("review pending cells in this session", "REVIEW PENDING CELLS"),
+        ("review stale cells in this session", "REVIEW STALE CELLS"),
+        ("triage untriaged findings", "TRIAGE FINDINGS"),
+        ("fix confirmed finding", "FIX CONFIRMED FINDING"),
+        ("verify fixed_pending_verification findings", "VERIFY FIXES"),
+        ("finalize session", "FINALIZE SESSION"),
+    ],
+)
+def test_task_title_mapping_for_ready_prompt_intents(prompt: str, title: str) -> None:
+    assert format_task_title(prompt).title == title
+
+
+def test_task_text_sanitizes_unknown_prompt_and_omits_command_na() -> None:
+    prompt = "[bold]task[/bold]\x1b[31m\nwith a very long explanation " * 4
     snapshot = RunSnapshot(
         session_id="RGS-tui",
         coverage={},
         findings={},
-        next_ready_prompt="[bold]task[/bold]\x1b[31m",
+        next_ready_prompt=prompt,
         step=0,
         agent_status="idle",
         command_argv=(),
@@ -119,29 +154,35 @@ def test_task_text_renders_prompt_as_plain_text() -> None:
     )
 
     task_text = cast(Callable[[RunSnapshot], str], run_tui.__dict__["_task_text"])
+    text = task_text(snapshot)
 
-    assert task_text(snapshot) == "Current task\n\\[bold]task\\[/bold]�\\[31m\ncommand n/a"
+    assert "Current operation" in text
+    assert "READY TASK" in text
+    assert "\\[bold]task" in text
+    assert "\x1b" not in text
+    assert "command n/a" not in text
+    assert "argv=[]" not in text
 
 
-def test_agent_text_renders_status_and_argv_as_plain_text() -> None:
+def test_command_placeholder_and_agent_text_never_render_raw_empty_argv() -> None:
     snapshot = RunSnapshot(
         session_id="RGS-tui",
         coverage={},
         findings={},
-        next_ready_prompt=None,
+        next_ready_prompt="review pending cells",
         step=2,
-        agent_status="[red]running[/red]\x1b[31m",
-        command_argv=("agent", "[bold]arg[/bold]\x1b[32m"),
+        agent_status="running",
+        command_argv=(),
         elapsed_seconds=1.25,
     )
 
     agent_text = cast(Callable[[RunSnapshot], str], run_tui.__dict__["_agent_text"])
+    task_text = cast(Callable[[RunSnapshot], str], run_tui.__dict__["_task_text"])
 
-    assert agent_text(snapshot) == (
-        "Agent\n"
-        "status=\\[red]running\\[/red]�\\[31m step=2 elapsed=1.2s\n"
-        "argv=agent \\[bold]arg\\[/bold]�\\[32m"
-    )
+    assert "command resolving..." in agent_text(snapshot)
+    assert "command resolving..." in task_text(snapshot)
+    assert "command n/a" not in agent_text(snapshot)
+    assert "argv=[]" not in task_text(snapshot)
 
 
 def test_running_activity_animates_only_for_running_status() -> None:
@@ -153,11 +194,137 @@ def test_running_activity_animates_only_for_running_status() -> None:
     )
 
 
+def test_view_state_fields_and_terminal_state_classes() -> None:
+    snapshot = RunSnapshot(
+        session_id="RGS-abcdefghijk",
+        coverage={"reviewed": 1, "pending": 1},
+        findings={"open": 2},
+        next_ready_prompt="finalize session",
+        step=3,
+        agent_status="finalized",
+        command_argv=("agent", "run"),
+        elapsed_seconds=9,
+    )
+
+    view = dashboard_state(snapshot, ())
+
+    assert view.session_short_id == "RGS-abcd…hijk"
+    assert view.agent_name == "agent run"
+    assert view.step_label == "step 3"
+    assert view.task.title == "FINALIZE SESSION"
+    assert view.command_label == "agent run"
+    assert view.state_class == "panel-finalized"
+    assert "FINALIZED" in view.status_summary
+
+
+@pytest.mark.parametrize(
+    ("status", "word", "css_class"),
+    [
+        ("blocked", "BLOCKED", "panel-blocked"),
+        ("failed", "FAILED", "panel-failed"),
+        ("finalized", "FINALIZED", "panel-finalized"),
+    ],
+)
+def test_terminal_state_rendering(status: str, word: str, css_class: str) -> None:
+    snapshot = RunSnapshot(None, {}, {}, None, 0, status, (), 0)
+    view = dashboard_state(snapshot, ())
+
+    assert word in view.status_summary
+    assert view.state_class == css_class
+
+
+def test_activity_timeline_formats_events_without_raw_payloads() -> None:
+    events = (
+        RunEvent("run_started", "2026-06-15T12:34:56+00:00", {"session_id": "RGS-1234567890"}),
+        RunEvent("status_refreshed", "bad timestamp", {"session_id": "RGS-1234567890"}),
+        RunEvent(
+            "step_started",
+            "2026-06-15T12:35:01+00:00",
+            {"step": 1, "prompt": "review pending cells [bold]\x1b"},
+        ),
+        RunEvent(
+            "agent_started",
+            "2026-06-15T12:35:02+00:00",
+            {"argv": [], "command_label": "agent --safe"},
+        ),
+        RunEvent("failed", "2026-06-15T12:35:03+00:00", {"reason": "command_failed"}),
+        RunEvent("blocked", "2026-06-15T12:35:04+00:00", {"reason": "no_ready_task"}),
+        RunEvent("finalized", "2026-06-15T12:35:05+00:00", {"session_id": "RGS-1234567890"}),
+    )
+    snapshot = RunSnapshot("RGS-1234567890", {}, {}, None, 0, "idle", (), 0)
+
+    text = activity_text(dashboard_state(snapshot, events))
+
+    assert "12:34:56 run started - session RGS-1234…7890" in text
+    assert "--:--:-- status refreshed" in text
+    assert "12:35:01 step 1 started - REVIEW PENDING CELLS" in text
+    assert "12:35:02 agent started - agent --safe" in text
+    assert "failed - command_failed" in text
+    assert "blocked - no_ready_task" in text
+    assert "finalized - session RGS-1234…7890" in text
+    assert "2026-06-15T" not in text
+    assert "argv=[]" not in text
+    assert "[bold]" not in text
+
+
+def test_event_time_and_session_shortening_helpers() -> None:
+    assert format_event_time("2026-06-15T01:02:03+00:00") == "01:02:03"
+    assert format_event_time("not a date") == "--:--:--"
+    assert short_session_id("RGS-1234567890") == "RGS-1234…7890"
+    assert short_session_id(None) == "none"
+
+
+def test_compact_dashboard_text_keeps_required_sections() -> None:
+    snapshot = RunSnapshot(
+        session_id="RGS-compact-1234",
+        coverage={"reviewed": 8, "pending": 1, "stale": 1, "superseded": 2},
+        findings={},
+        next_ready_prompt="triage untriaged findings",
+        step=1,
+        agent_status="running",
+        command_argv=(),
+        elapsed_seconds=3,
+        command_label="agent",
+    )
+    view = dashboard_state(snapshot, ())
+    task_text = cast(Callable[[RunSnapshot], str], run_tui.__dict__["_task_text"])
+    compact = "\n".join(
+        [
+            progress_text(snapshot),
+            coverage_text(snapshot),
+            findings_text(snapshot),
+            task_text(snapshot),
+            activity_text(view),
+            footer_text(),
+        ]
+    )
+
+    assert "Review dashboard" in compact
+    assert "Coverage" in compact
+    assert "Findings" in compact
+    assert "TRIAGE FINDINGS" in compact
+    assert "Activity" in compact
+    assert "q stop after current step" in compact
+
+
+def test_footer_lists_only_implemented_controls() -> None:
+    footer = footer_text()
+
+    assert "q stop after current step" in footer
+    assert "r refresh" in footer
+    assert "h help" in footer
+    assert "Ctrl-C interrupt" in footer
+    assert "prompt" not in footer
+    assert "artifacts" not in footer
+
+
 def test_run_tui_source_does_not_import_default_header_footer() -> None:
     source = Path("src/review_gauntlet/run_tui.py").read_text(encoding="utf-8")
 
     assert "Header" not in source
     assert "Footer" not in source
+    assert "$warning" in source
+    assert "$accent" not in source
 
 
 def test_create_run_app_constructs_when_textual_available(tmp_path: Path) -> None:
