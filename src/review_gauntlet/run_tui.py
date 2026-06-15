@@ -222,6 +222,19 @@ def _plain_character(character: str) -> str:
     return "�"
 
 
+def _agent_text(snapshot: RunSnapshot) -> str:  # pyright: ignore[reportUnusedFunction]
+    argv = (
+        " ".join(_plain_text(argument) for argument in snapshot.command_argv)
+        if snapshot.command_argv
+        else "n/a"
+    )
+    return (
+        "Agent\n"
+        f"status={_plain_text(snapshot.agent_status)} step={snapshot.step} "
+        f"elapsed={snapshot.elapsed_seconds:.1f}s\nargv={argv}"
+    )
+
+
 def _events_text(events: tuple[RunEvent, ...]) -> str:
     lines = ["Events"]
     for event in events[-12:]:
