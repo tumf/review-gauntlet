@@ -649,6 +649,14 @@ def _cmd_validate_verdict(args: argparse.Namespace) -> None:
         fail(f"verdict file exceeds size limit: {path}")
     try:
         payload = validate_verdict_json(path.read_text(encoding="utf-8"))
+        for index, comment in enumerate(payload.comments):
+            if not comment.imprecise and (
+                comment.start_line < 1 or comment.end_line < comment.start_line
+            ):
+                raise ValueError(
+                    "comment has an invalid line range: "
+                    f"index={index} start_line={comment.start_line} end_line={comment.end_line}"
+                )
         expected_path = args.expected_path
         if expected_path is not None:
             mismatched_paths = sorted(

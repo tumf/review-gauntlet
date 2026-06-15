@@ -154,6 +154,28 @@ def test_validate_verdict_rejects_unexpected_comment_paths(
     assert "comment paths must match expected path app.py: other.py" in data["error"]
 
 
+@pytest.mark.parametrize(
+    "comment",
+    [
+        {"path": "app.py", "content": "x", "start_line": 0, "end_line": 5},
+        {"path": "app.py", "content": "x", "start_line": 5, "end_line": 4},
+    ],
+)
+def test_validate_verdict_rejects_invalid_precise_line_ranges(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], comment: dict[str, object]
+) -> None:
+    verdict = tmp_path / "verdict.json"
+    verdict.write_text(json.dumps({"comments": [comment]}), encoding="utf-8")
+
+    with pytest.raises(SystemExit) as excinfo:
+        main(["validate-verdict", str(verdict), "--format", "json"])
+
+    data = json.loads(capsys.readouterr().out)
+    assert excinfo.value.code == 1
+    assert data["valid"] is False
+    assert "comment has an invalid line range" in data["error"]
+
+
 def test_cli_config_preset_list_outputs_text(capsys: pytest.CaptureFixture[str]) -> None:
     main(["config", "preset", "list"])
 
