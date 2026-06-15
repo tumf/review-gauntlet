@@ -616,12 +616,10 @@ def terminal_state(agent_status: str) -> tuple[str, str]:
 
 
 def header_text(view: RunViewState) -> str:
-    timeout = view.agent_summary.timeout.replace("timeout in ", "timeout ")
     return (
         "Review Gauntlet\n"
         f"{view.status_summary} · {view.gate_label} · {view.active_gate.title}\n"
-        f"session {view.session_short_id} · agent {view.agent_name} · "
-        f"{view.liveness_detail} · {timeout}"
+        f"session {view.session_short_id} · agent {view.agent_name} · {view.liveness_detail}"
     )
 
 
