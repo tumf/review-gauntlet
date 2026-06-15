@@ -477,7 +477,8 @@ def test_new_dashboard_checklist_rows_and_blocker_classification_hide_internal_n
         ]
     )
 
-    assert "RUNNING · gate 1/6 · Review coverage" in text
+    assert "RUNNING · gate 5/6 · Final checks" in text
+    assert "Current   final checks" in text
     assert "Next to finalize" not in text
     for title in (
         "Review coverage",
@@ -497,6 +498,100 @@ def test_new_dashboard_checklist_rows_and_blocker_classification_hide_internal_n
     checklist = run_tui.finalize_path_text(view)
     assert "gate 1/6" not in checklist
     assert "gate 2/6" not in checklist
+
+
+@pytest.mark.parametrize(
+    ("next_required_action", "gate_index", "gate_title"),
+    [
+        ("run_review", 1, "Review coverage"),
+        ("triage_findings", 2, "Triage findings"),
+        ("fix_confirmed_findings", 3, "Fix confirmed findings"),
+        ("run_verify_fixes", 4, "Verify fixes"),
+        ("resolve_finalize_blockers", 5, "Final checks"),
+        ("finalize", 6, "Finalize checkpoint"),
+        ("cleanup_git_worktree", 6, "Finalize checkpoint"),
+    ],
+)
+def test_finalize_checklist_uses_next_required_action_for_active_gate(
+    next_required_action: str, gate_index: int, gate_title: str
+) -> None:
+    snapshot = RunSnapshot(
+        session_id="RGS-next-action",
+        coverage={"pending": 2},
+        findings={"untriaged": 1, "confirmed": 1, "fixed_pending_verification": 1},
+        next_ready_prompt=next_required_action,
+        step=1,
+        agent_status="running",
+        command_argv=(),
+        elapsed_seconds=0,
+        command_label="agent",
+        finalize_blockers=("working tree has uncommitted changes",),
+        next_required_action=next_required_action,
+    )
+
+    view = dashboard_state(snapshot, ())
+    rendered = compact_dashboard_text(snapshot)
+
+    assert view.active_gate.index == gate_index
+    assert view.active_gate.title == gate_title
+    assert f"RUNNING · gate {gate_index}/6 · {gate_title}" in rendered
+    assert f"Current   {gate_title.lower()}" in rendered
+    if "_" in next_required_action:
+        assert next_required_action not in rendered
+
+
+def test_finalize_checklist_uses_next_required_action_for_active_gate_with_stale_coverage() -> None:
+    snapshot = RunSnapshot(
+        session_id="RGS-next-action-stale",
+        coverage={"reviewed": 3, "stale": 2},
+        findings={"fixed_pending_verification": 1},
+        next_ready_prompt="verify fixed_pending_verification findings",
+        step=3,
+        agent_status="running",
+        command_argv=(),
+        elapsed_seconds=0,
+        command_label="agent",
+        finalize_blockers=(
+            "review cells are stale",
+            "fixed findings require verification",
+        ),
+        next_required_action="run_verify_fixes",
+    )
+
+    view = dashboard_state(snapshot, ())
+    checklist = run_tui.finalize_path_text(view)
+    rendered = compact_dashboard_text(snapshot)
+
+    assert view.active_gate.index == 4
+    assert view.active_gate.title == "Verify fixes"
+    assert "RUNNING · gate 4/6 · Verify fixes" in rendered
+    assert "Current   verify fixes" in rendered
+    assert "Review coverage" in checklist
+    assert "3 / 5 reviewed, 2 pending" in checklist
+    assert "run_verify_fixes" not in rendered
+
+
+def test_unknown_next_required_action_preserves_derived_active_gate() -> None:
+    snapshot = RunSnapshot(
+        session_id="RGS-unknown-next-action",
+        coverage={"reviewed": 3, "pending": 1},
+        findings={"fixed_pending_verification": 1},
+        next_ready_prompt="custom adapter action",
+        step=2,
+        agent_status="running",
+        command_argv=(),
+        elapsed_seconds=0,
+        command_label="agent",
+        next_required_action="custom_internal_action",
+    )
+
+    view = dashboard_state(snapshot, ())
+    rendered = compact_dashboard_text(snapshot)
+
+    assert view.active_gate.index == 1
+    assert view.active_gate.title == "Review coverage"
+    assert "RUNNING · gate 1/6 · Review coverage" in rendered
+    assert "custom_internal_action" not in rendered
 
 
 def test_finalize_checklist_state_derivation_across_gates() -> None:
