@@ -10,6 +10,7 @@ import pytest
 from review_gauntlet import run_tui
 from review_gauntlet.run_controller import (
     AgentLifecycle,
+    AgentOutputEntry,
     RunController,
     RunEvent,
     RunSnapshot,
@@ -108,11 +109,10 @@ def test_dashboard_header_contains_human_run_state_and_short_session() -> None:
 
     assert "Review Gauntlet" in text
     assert "RGS-prog…7890" in text
-    assert "RUNNING - agent is working" in text
-    assert "elapsed 02:05" in text
-    assert "gate 1/6" in text
-    assert "agent step 4" in text
-    assert "agent ⠙ running" in text
+    assert "RUNNING · gate 1/6 · Review coverage" in text
+    assert "elapsed 02:05" not in text
+    assert "agent step 4" not in text
+    assert "agent agent" in text
     assert "current cells" not in text
 
 
@@ -140,12 +140,15 @@ def test_header_and_current_operation_show_quiet_timeout_and_artifact_liveness()
     operation = run_tui.current_operation_text(view)
     activity = activity_text(view)
 
-    assert "last output 7s ago" in header
     assert "quiet 7s" in header
-    assert "timeout in 53s" in header
-    assert "agent still running" in activity
+    assert "timeout 53s" in header
+    assert "last output 7s ago" not in header
+    assert "timeout in 53s" not in header
+    assert "event - agent alive no output for 7s" in activity
     assert "artifact .review-gauntlet/runs/run-1/activity.jsonl" in operation
-    assert "timeout in 53s" in operation
+    assert "status  quiet 7s" in operation
+    assert "output  last output 7s ago" in operation
+    assert "timeout timeout in 53s" in operation
 
 
 def test_liveness_synthesizes_non_flooding_quiet_heartbeat_rows() -> None:
@@ -161,8 +164,10 @@ def test_liveness_synthesizes_non_flooding_quiet_heartbeat_rows() -> None:
         agent_lifecycle=AgentLifecycle(status="quiet", last_output_age_seconds=9.0),
     )
 
-    assert "agent still running" in activity_text(dashboard_state(snapshot, (), activity_frame=0))
-    assert "agent still running" not in activity_text(
+    assert "agent alive no output for 9s" in activity_text(
+        dashboard_state(snapshot, (), activity_frame=0)
+    )
+    assert "agent alive no output for 9s" not in activity_text(
         dashboard_state(snapshot, (), activity_frame=1)
     )
 
@@ -271,7 +276,8 @@ def test_task_text_sanitizes_unknown_prompt_and_omits_command_na() -> None:
     text = task_text(snapshot)
 
     assert "Current operation" not in text
-    assert "Finalize checkpoint" in text
+    assert "Finalize checkpoint" not in text
+    assert "command command resolving..." in text
     assert "\\[bold]task" not in text
     assert "\x1b" not in text
     assert "command n/a" not in text
@@ -369,13 +375,13 @@ def test_activity_timeline_formats_events_without_raw_payloads() -> None:
 
     text = activity_text(dashboard_state(snapshot, events))
 
-    assert "12:34:56 run started - session RGS-1234…7890" in text
-    assert "--:--:-- status refreshed" in text
-    assert "12:35:01 step 1 started - REVIEW PENDING CELLS" in text
-    assert "12:35:02 agent started - agent --safe" in text
-    assert "failed - command_failed" in text
-    assert "blocked - no_ready_task" in text
-    assert "finalized - session RGS-1234…7890" in text
+    assert "12:34:56 event - run started session RGS-1234…7890" in text
+    assert "--:--:-- event - status refreshed" in text
+    assert "12:35:01 event - step 1 started REVIEW PENDING CELLS" in text
+    assert "12:35:02 event - agent started agent --safe" in text
+    assert "event - failed command_failed" in text
+    assert "event - blocked no_ready_task" in text
+    assert "event - finalized session RGS-1234…7890" in text
     assert "2026-06-15T" not in text
     assert "argv=[]" not in text
     assert "[bold]" not in text
@@ -416,12 +422,164 @@ def test_compact_dashboard_text_keeps_required_sections() -> None:
     compact = compact_dashboard_text(snapshot)
 
     assert "Review Gauntlet" in compact
-    assert "Finalize path" in compact
-    assert "Session metrics" in compact
-    assert "Findings" in compact
+    assert "Next to finalize" in compact
+    assert "Session metrics" not in compact
+    assert "Current operation" not in compact
+    assert "Finalize path" not in compact
+    assert "Agent" in compact
+    assert "Session" in compact
     assert "Review coverage" in compact
     assert "Activity" in compact
     assert "q stop after current step" in compact
+
+
+def test_new_dashboard_checklist_rows_and_blocker_classification_hide_internal_names() -> None:
+    snapshot = RunSnapshot(
+        session_id="RGS-redesign-1234567890",
+        coverage={"pending": 9},
+        findings={},
+        next_ready_prompt="run_review",
+        step=1,
+        agent_status="running",
+        command_argv=(),
+        elapsed_seconds=0,
+        command_label="opencode",
+        finalize_blockers=("review cells are still pending",),
+        next_required_action="resolve_finalize_blockers",
+    )
+    view = dashboard_state(snapshot, ())
+    text = "\n".join(
+        [
+            run_tui.header_text(view),
+            run_tui.finalize_path_text(view),
+            run_tui.agent_summary_text(view),
+            run_tui.session_summary_text(view),
+            activity_text(view),
+        ]
+    )
+
+    assert "RUNNING · gate 1/6 · Review coverage" in text
+    assert "Next to finalize" not in text
+    for title in (
+        "Review coverage",
+        "Triage findings",
+        "Fix confirmed findings",
+        "Verify fixes",
+        "Final checks",
+        "Finalize checkpoint",
+    ):
+        assert title in text
+    assert "Final checks" in text
+    assert "later" in text
+    assert "checked after review/findings" in text
+    assert "1 finalize blocker(s)" not in text
+    assert "run_review" not in text
+    assert "resolve_finalize_blockers" not in text
+    checklist = run_tui.finalize_path_text(view)
+    assert "gate 1/6" not in checklist
+    assert "gate 2/6" not in checklist
+
+
+def test_finalize_checklist_state_derivation_across_gates() -> None:
+    pending = dashboard_state(
+        RunSnapshot("RGS-a", {"pending": 1}, {}, None, 0, "running", (), 0), ()
+    ).gates
+    triage = dashboard_state(
+        RunSnapshot("RGS-b", {"reviewed": 1}, {"untriaged": 1}, None, 0, "running", (), 0),
+        (),
+    ).gates
+    fix = dashboard_state(
+        RunSnapshot("RGS-c", {"reviewed": 1}, {"confirmed": 1}, None, 0, "running", (), 0),
+        (),
+    ).gates
+    verify = dashboard_state(
+        RunSnapshot(
+            "RGS-d",
+            {"reviewed": 1},
+            {"fixed_pending_verification": 1},
+            None,
+            0,
+            "running",
+            (),
+            0,
+        ),
+        (),
+    ).gates
+    final_blocked = dashboard_state(
+        RunSnapshot(
+            "RGS-e",
+            {"reviewed": 1},
+            {},
+            None,
+            0,
+            "running",
+            (),
+            0,
+            finalize_blockers=("working tree has uncommitted changes",),
+        ),
+        (),
+    ).gates
+    finalized = dashboard_state(
+        RunSnapshot("RGS-f", {"reviewed": 1}, {}, None, 0, "finalized", (), 0), ()
+    ).gates
+
+    assert pending[0].state == "running"
+    assert triage[1].state == "running"
+    assert fix[2].state == "running"
+    assert verify[3].state == "running"
+    assert final_blocked[4].state == "blocked"
+    assert final_blocked[4].detail == "working tree has uncommitted changes"
+    assert all(gate.state == "done" for gate in finalized)
+
+
+def test_agent_session_summary_and_activity_rows_are_human_facing_and_sanitized() -> None:
+    snapshot = RunSnapshot(
+        session_id="RGS-summary-1234",
+        coverage={"pending": 9},
+        findings={"open": 0},
+        next_ready_prompt=None,
+        step=1,
+        agent_status="running",
+        command_argv=("opencode", "run", "--secret", "x"),
+        elapsed_seconds=0,
+        command_label="opencode",
+        agent_lifecycle=AgentLifecycle(
+            status="quiet",
+            last_output_age_seconds=120,
+            timeout_remaining_seconds=426,
+            artifact_path="/tmp/repo/.review-gauntlet/runs/run-1/output.txt",
+            output_tail=(
+                AgentOutputEntry("stdout", "hello TOKEN=supersecret", "2026-06-15T12:00:01+00:00"),
+                AgentOutputEntry("stderr", "\x1b[31mwarn SECRET=value"),
+            ),
+        ),
+    )
+    events = (
+        RunEvent("run_started", "2026-06-15T12:00:00+00:00", {"session_id": snapshot.session_id}),
+    )
+    view = dashboard_state(snapshot, events, activity_frame=0)
+    agent = run_tui.agent_summary_text(view)
+    session = run_tui.session_summary_text(view)
+    activity = activity_text(view)
+
+    assert "Agent" not in agent
+    assert "command opencode" in agent
+    assert "status  quiet 2m00s" in agent
+    assert "output  last output 2m00s ago" in agent
+    assert "timeout timeout in 7m06s" in agent
+    assert "last output 2m00s ago | quiet 2m00s" not in agent
+    assert "artifact .review-gauntlet/runs/run-1/output.txt" in agent
+    assert "Session" not in session
+    assert "Coverage  0%   0 / 9" in session
+    assert "Findings  open 0" in session
+    assert "Current   review coverage" in session
+    assert "Agent step 1" in session
+    assert "event - run started session RGS-summ…1234" in activity
+    assert "event - agent alive no output for 2m00s" in activity
+    assert "stdout - hello <redacted>" in activity
+    assert "stderr - warn <redacted>" in activity
+    assert "supersecret" not in activity
+    assert "SECRET=value" not in activity
 
 
 def test_footer_lists_only_implemented_controls() -> None:

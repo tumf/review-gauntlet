@@ -2,83 +2,100 @@
 
 ### Requirement: Status and findings commands SHALL expose actionable session state
 
-`findings --mark` SHALL map public CLI mark names to the persisted finding state values before filtering. Hyphenated public names such as `false-positive`, `accepted-risk`, and `fixed-pending-verification` SHALL match their underscore persisted states subject to the existing default terminal suppression and `--all` visibility rules.
+`review-gauntlet run` SHALL continue to orchestrate active sessions without changing task selection, command execution, result payloads, interruption behavior, JSON output behavior, non-TUI behavior, fallback behavior, or session finalization semantics.
 
-`findings --path` filters SHALL accept only repository-relative paths and directory prefixes. Absolute paths and parent-directory traversal SHALL fail with a usage error so filtering semantics remain repository-scoped and deterministic.
+Interactive `run` TUI presentation SHALL render a compact dashboard that is faithful to the target user-facing structure: a `Review Gauntlet` header, a `Next to finalize` checklist, side-by-side `Agent` and `Session` summary panels where terminal width allows, an `Activity` timeline, and compact implemented controls. The TUI SHALL derive a human-facing dashboard view model from raw controller and session state before rendering. That view model SHALL include header fields, finalize checklist rows, agent summary fields, session summary fields, and normalized activity rows. TUI widgets SHALL render the view model rather than directly dumping raw prompt text, raw argv payloads, raw event payloads, raw full session IDs, raw finalize action names, or raw blocker lists.
 
-`findings` SHALL cap emitted findings to 10 records by default after applying terminal visibility, path filters, and mark filters. `findings --limit N` SHALL cap emitted findings to the requested positive integer limit. `findings --all-findings` SHALL disable the result-size cap without changing terminal visibility. `findings --limit N --all-findings` SHALL fail with a usage error.
+The header SHALL use a concise two-line summary. The first line SHALL include terminal run status, `gate x/6`, and the current checklist title. The second line SHALL include shortened session id, agent or command display name, a concise liveness label, and timeout label when known. Gate numbering SHALL be displayed in the header only and SHALL NOT be repeated on each checklist row.
 
-`findings` SHALL expose count metadata in both structured and text result payloads. `total` SHALL be the number of findings after terminal visibility, path, and mark filters but before result-size limiting. `returned` SHALL be the number of findings actually emitted. Findings SHALL be ordered deterministically by path, start line, end line, and finding ID before any result-size cap is applied.
+The primary progress panel SHALL be titled `Next to finalize` and SHALL render exactly these six ordered checklist rows: Review coverage, Triage findings, Fix confirmed findings, Verify fixes, Final checks, and Finalize checkpoint. Each row SHALL use only one of these TUI state labels: `running`, `done`, `next`, `later`, `blocked`, or `failed`. Internal states such as `pending`, `stale`, `untriaged`, `confirmed`, `reopened`, and `fixed_pending_verification` MAY appear in row details but SHALL NOT be used as primary row states. The TUI SHALL NOT render the old `Resolve finalize blockers` checklist row.
 
-Status and freshness computations SHALL use the same resolved repository root for review-universe traversal and relative digest paths. `status` SHALL report `coverage` as an effective read-only view of the active session's current target rather than a raw persisted review-cell count. Effective coverage SHALL be derived by comparing current target cells and current file digests against persisted review-cell rows without mutating the ledger. Current target cells missing from persisted rows SHALL count as `pending`. Current target cells whose persisted digest no longer matches the current digest SHALL count as `stale` only when their path has no live `fixed_pending_verification` findings. Persisted cells that are no longer part of the current target SHALL remain visible as `superseded` coverage when included in the effective coverage summary. Invoking session status with the default root `.` SHALL be equivalent to invoking it with the absolute repository root. When current review cells are pending, `status` SHALL expose review work as the next required action before exposing live finding work. When pending cells are exhausted but current review cells are stale, `status` SHALL expose live finding work before generic stale review work so fix-driven stale coverage can be handled after finding work. Live finding work SHALL include reopened findings, untriaged findings, confirmed findings, and fixed-pending verification. When the last reviewed target digest differs from the current target digest, `status` SHALL NOT expose review work solely because of that whole-target digest drift if all current target cells are already present, reviewed, and have matching content digests, or if digest drift exists only on paths already represented by live `fixed_pending_verification` findings. In those cases, `status` SHALL continue normal finding-state priority, including fixed-finding verification.
+The TUI SHALL classify finalize blockers for display. Coverage blockers, including pending review cells and stale review cells, SHALL be represented by the Review coverage row. Finding blockers, including untriaged, reopened, confirmed, and fixed-pending-verification findings, SHALL be represented by the corresponding finding rows. Finalize-only blockers, including dirty worktree blockers, target digest drift, expired waived or accepted-risk findings, no completed review run, and unclassified finalization blockers, SHALL be represented by Final checks. While any earlier checklist row is incomplete, Final checks SHALL render as `later` with human wording such as `checked after review/findings` rather than displaying a generic finalize blocker count. Final checks SHALL render as `blocked` only when prior rows are complete and finalize-only blockers remain.
 
-`review-gauntlet ready` SHALL expose whether a continuation task is available through both stdout and process exit status. When a ready prompt exists, the command SHALL emit the existing prompt output and exit `0`. When no continuation task exists, the command SHALL preserve the existing no-task output while exiting `1` so external orchestrators can distinguish no-op completion without parsing stdout. When current review cells are pending, `ready` SHALL prompt for pending review before prompting for reopened, untriaged, confirmed, fixed-pending, or stale work. When pending cells are exhausted but current review cells are stale, `ready` SHALL prompt for live finding work before prompting for generic stale review work. Live finding work SHALL include reopened findings, untriaged findings, confirmed findings, and fixed-pending verification. After review-cell and finding continuation work is exhausted, `ready` SHALL treat dirty working-tree finalize blockers as actionable by returning a prompt that instructs the agent to commit intended git changes before finalizing. Commit-resolvable dirty blockers include dirty review-universe files relative to `HEAD` and uncommitted non-review files. `ready` SHALL NOT treat non-dirty finalize blockers as commit-resolvable. `ready` SHALL NOT return a target-digest-drift review prompt solely because whole-target digest drift exists when current target-cell coverage is complete.
+The TUI SHALL replace standalone `Session metrics`, standalone `Findings`, and standalone `Current operation` panels with compact `Agent` and `Session` summary panels. The Agent panel SHALL show command label, alive/running/quiet/terminal status, output recency, timeout remaining when known, and artifact path when available. The Session panel SHALL show compact coverage percent and reviewed/total counts, open finding count, current checklist title, and agent step. Coverage denominator rules SHALL continue to exclude superseded cells, and this presentation calculation SHALL NOT mutate durable coverage state.
 
-`review-gauntlet run` SHALL orchestrate an active session by repeatedly using the same continuation task prompt that `review-gauntlet ready` would emit. `run` SHALL NOT maintain independent task-selection priority logic. `run` SHALL invoke the configured command adapter as a session-level task runner with the ready prompt and then re-evaluate the active session. `run` SHALL NOT require the session-level agent invocation to emit OCR verdict JSON, and SHALL NOT use review-cell verdict parsing as the success criterion for a session-level task. `run` SHALL stop successfully when the active session has been finalized and the active-session marker is gone. `run` SHALL stop unsuccessfully when no ready task exists while a session remains active, when the configured command fails, when the configured maximum step count is reached while the session remains active, or when a user-requested stop after the current step leaves the session active. Interactive text executions of `review-gauntlet run` SHOULD use a Textual TUI by default when TUI support is installed, stdout is a TTY, `--format text` is selected, and `--no-tui` is not provided. `run --format json`, `run --no-tui`, and non-TTY executions SHALL NOT launch the TUI. TUI presentation SHALL NOT change task selection, command execution semantics, run result semantics, or session finalization semantics. TUI dependencies SHALL be optional; when TUI support is unavailable for an otherwise TUI-eligible run, the command SHALL warn and fall back to non-TUI text mode. When interrupted by the user, `run` SHALL NOT print a Python traceback. Instead, it SHALL return or emit a structured interrupted run result with `completed: false`, `reason: interrupted`, current step evidence when available, and the active session ID when available.
+The Activity panel SHALL mix normalized Review Gauntlet events and bounded agent stdout/stderr tail rows in one timeline. Activity row kinds SHALL be human labels such as `event`, `stdout`, and `stderr`. The TUI MAY synthesize display-only activity rows such as `gate started` and `agent alive` from the current view model. When an agent is quiet but still running, the TUI SHALL render a non-flooding heartbeat row such as `event agent alive no output for 2m00s`. Agent output displayed in Activity SHALL remain bounded, line-oriented, sanitized, truncated, and redacted, and full output artifacts SHALL remain the audit source of truth.
 
-Interactive `run` TUI presentation SHALL use Textual as the interactive TTY dashboard framework. Rich renderables MAY be used inside Textual widgets, but the TUI SHALL be structured as an application dashboard rather than raw Rich panels arranged as a log display. The TUI SHALL derive a human-facing run view model from raw controller state before rendering. The view model SHALL include status, shortened session ID, agent or command display name, step label, elapsed time, coverage metrics, finding metrics, current task title and description, command label, and human-readable timeline events. Widgets SHALL render this view model rather than directly dumping raw prompt text, raw argv payloads, raw event payloads, or raw session IDs.
+The TUI SHALL avoid user-facing internal action names such as `run_review` and `resolve_finalize_blockers`. It SHALL map those internal actions to human wording such as `waiting`, `ready to finalize`, `waits for coverage`, `checked after review/findings`, or the relevant checklist title.
 
-Interactive `run` TUI presentation SHALL prioritize current-target progress over generic application chrome. Its first visible dashboard area SHALL show percent complete, completed cells over total cells, elapsed time, current step, session-level agent status, and shortened session ID. The progress denominator SHALL exclude `superseded` coverage. The incomplete count SHALL include current-target `pending` and `stale` coverage. Current-target cells in other coverage states SHALL count as complete for presentation purposes only; this presentation calculation SHALL NOT mutate or redefine durable coverage state. The TUI SHALL display coverage composition with compact graphical bars or equivalent dense visual text and SHALL keep pending and stale states visibly emphasized without rendering error-like markers such as `! pending` or `! stale`. The TUI SHALL display actionable finding-state counts from the run status payload, including payloads where counts are exposed as `finding_state_counts` rather than `findings`. Findings SHALL remain visible even when all finding counts are zero. While the run controller reports the session-level agent status as `running`, the TUI SHALL show visible activity animation such as a spinner or pulse indicator. When the agent is not running, the activity indicator SHALL stop or dim. The TUI SHALL remove default Textual header and footer chrome that would otherwise show a generic app title such as `RunApp` or a default left-side icon. Keyboard controls SHALL remain available through a compact in-dashboard hint that lists only implemented controls. These presentation requirements SHALL NOT change task selection, command execution, result payloads, interruption behavior, or fallback behavior.
+<!-- Expected canonical result after archive: the canonical review-sessions spec will define the run TUI as a Textual dashboard faithful to the Review Gauntlet / Next to finalize / Agent + Session / Activity mock, with human-facing checklist states, blocker classification, compact summaries, mixed agent activity, and unchanged run semantics. -->
 
-Interactive `run` TUI presentation SHALL use semantic state colors. Normal panel borders SHALL use muted blue or gray styling, not yellow. Yellow SHALL be reserved for pending work, blockers, human-action-needed states, or warnings. Failed states SHALL use red semantic styling, finalized states SHALL use green semantic styling, and active/running task focus MAY use blue or green styling. Blocked, failed, and finalized states SHALL have distinct human-readable summary text describing the current condition and next action or evidence path when available.
+#### Scenario: Run TUI renders the mock-aligned dashboard structure
 
-Interactive `run` TUI activity presentation SHALL render human-readable timeline rows instead of raw event logs. Timeline timestamps SHALL be displayed as `HH:MM:SS`. Timeline labels SHALL describe events such as run start, status refresh, step start, agent start, agent finish, blocked, failed, and finalized. Timeline details SHALL shorten session IDs, summarize prompt intent through task titles, omit empty argv values, and avoid displaying `argv=[]`, `command n/a`, raw full prompts, or ISO timestamps. Malformed event timestamps or unexpected payloads SHALL NOT crash TUI rendering.
-
-Interactive `run` TUI current operation presentation SHALL render ready prompts as human task titles and descriptions rather than displaying the full prompt as the primary text. At minimum, pending review, stale review, untriaged finding triage, confirmed finding fix, fixed-pending verification, and finalization prompts SHALL map to stable task titles. Unknown prompt text SHALL be sanitized and summarized without dumping the full internal instruction body.
-
-Interactive `run` TUI presentation SHALL include a compact layout suitable for approximately 80x24 terminals. In compact layout, Coverage and Findings MAY stack vertically and labels MAY be shortened, but status, coverage progress, pending/stale visibility, finding counts, current task, recent activity, and implemented controls SHALL remain readable.
-
-<!-- Expected canonical result after archive: the canonical review-sessions spec will define the run TUI as a Textual dashboard driven by a human-facing view model, with semantic colors, stable coverage/findings metrics, prompt-to-task presentation, readable timelines, terminal-state summaries, and compact layout behavior while preserving run semantics. -->
-
-#### Scenario: Run TUI renders a Textual dashboard from a view model
-
-**Given**: an active review session with a configured command adapter and effective coverage/finding status
+**Given**: an active review session with a configured command adapter
 **And**: the `run` TUI is eligible for an interactive text execution
 **When**: the TUI renders the session snapshot
-**Then**: the TUI uses Textual dashboard regions for header, metrics, current operation, activity, and controls
-**And**: the rendered widgets use human-facing view model fields rather than raw controller payload dumps
-**And**: task selection, command execution, result payloads, interruption behavior, and fallback behavior remain unchanged
+**Then**: the dashboard contains panels titled `Review Gauntlet`, `Next to finalize`, `Agent`, `Session`, and `Activity` in that order
+**And**: the dashboard does not render standalone `Session metrics`, `Current operation`, or `Finalize path` panel labels
+**And**: task selection, command execution, result payloads, interruption behavior, JSON output behavior, non-TUI behavior, and fallback behavior remain unchanged
 
-#### Scenario: Run TUI shows dashboard coverage and findings metrics
+#### Scenario: Run TUI renders a two-line header without noisy duplicates
 
-**Given**: an active session with effective coverage containing reviewed, pending, stale, and superseded cells
-**And**: finding counts for open, untriaged, confirmed, reopened, fixed-pending, and closed findings
-**When**: the `run` TUI renders the metrics dashboard
-**Then**: Coverage shows percent complete, a progress bar or equivalent dense indicator, reviewed cells over total cells, and reviewed, pending, stale, and superseded counts
-**And**: the progress denominator excludes superseded cells
-**And**: Findings remains visible even when every finding count is zero
-**And**: the coverage text does not use `current cells`, `! pending`, or `! stale`
+**Given**: an active session whose current checklist row is Review coverage
+**And**: the command adapter is `opencode`
+**And**: the agent is quiet with a known timeout remaining
+**When**: the TUI renders the header
+**Then**: the first header line includes `RUNNING`, `gate 1/6`, and `Review coverage`
+**And**: the second header line includes the shortened session id, `agent opencode`, a quiet liveness label, and timeout label
+**And**: the header does not render raw argv, a full session id, or repeated last-output and quiet labels for the same liveness signal
 
-#### Scenario: Run TUI renders human-readable current operation
+#### Scenario: Run TUI renders Next to finalize as a checklist
 
-**Given**: `review-gauntlet ready` returns a prompt for pending review, stale review, finding triage, confirmed finding fix, fixed-pending verification, or finalization
-**When**: the `run` TUI renders the current operation panel
-**Then**: the TUI displays a stable human task title and short description for that prompt intent
-**And**: the full internal prompt is not displayed as the primary task text
-**And**: unresolved command state does not render `command n/a`
+**Given**: an active session with 0 reviewed cells and 9 pending cells
+**And**: no open findings have been recorded yet
+**When**: the TUI renders `Next to finalize`
+**Then**: it renders Review coverage as `running` with detail such as `0 / 9 reviewed, 9 pending`
+**And**: it renders Triage findings as `next` with detail such as `waits for coverage`
+**And**: it renders Fix confirmed findings as `next` with detail such as `no confirmed findings yet`
+**And**: it renders Verify fixes as `next` with detail such as `no fixed-pending findings yet`
+**And**: it renders Final checks as `later` with detail such as `checked after review/findings`
+**And**: it renders Finalize checkpoint as `later` with detail such as `waiting`
+**And**: none of the checklist rows include `gate 1/6`, `gate 2/6`, or other per-row gate numbering
 
-#### Scenario: Run TUI renders human-readable activity timeline
+#### Scenario: Run TUI classifies blockers before displaying Final checks
 
-**Given**: the run controller has emitted events containing ISO timestamps, session IDs, prompt payloads, or argv payloads
-**When**: the `run` TUI renders the activity timeline
-**Then**: each visible event row uses `HH:MM:SS` timestamp formatting
-**And**: event labels are human-readable
-**And**: session IDs are shortened
-**And**: empty argv values are omitted
-**And**: the timeline does not display `argv=[]`, raw full prompts, or raw ISO timestamps
+**Given**: an active session whose status payload includes finalize blockers for pending or stale review cells
+**And**: coverage is still incomplete
+**When**: the TUI renders the checklist
+**Then**: Review coverage represents the incomplete coverage state
+**And**: Final checks is rendered as `later`, not `blocked`
+**And**: the checklist does not render `Resolve finalize blockers`
+**And**: the checklist does not render a generic detail such as `1 finalize blocker(s)` for coverage or finding blockers
 
-#### Scenario: Run TUI distinguishes terminal states semantically
+#### Scenario: Run TUI blocks Final checks only for finalize-only blockers
 
-**Given**: a run is blocked, failed, or finalized
-**When**: the `run` TUI renders the dashboard
-**Then**: blocked state uses warning styling and explains the blocker or next action
-**And**: failed state uses failure styling and points to available command failure evidence
-**And**: finalized state uses success styling and summarizes completed coverage and open findings
-**And**: normal non-terminal panel borders do not use warning styling
+**Given**: coverage, triage, fixing, and verification checklist rows are complete
+**And**: a finalize-only blocker such as an uncommitted worktree file remains
+**When**: the TUI renders the checklist
+**Then**: Final checks is rendered as `blocked`
+**And**: Final checks detail identifies the human blocker, such as uncommitted files
+**And**: Finalize checkpoint remains `later` until Final checks is done
 
-#### Scenario: Run TUI remains readable in compact terminals
+#### Scenario: Run TUI hides internal action names
 
-**Given**: the terminal is approximately 80 columns by 24 rows
-**When**: the `run` TUI renders the dashboard
-**Then**: the layout remains readable without losing status, coverage progress, pending/stale counts, finding counts, current task, recent activity, or implemented controls
-**And**: Coverage and Findings may stack vertically if horizontal metric cards would not fit
+**Given**: the session status contains `next_required_action` values such as `run_review` or `resolve_finalize_blockers`
+**When**: the TUI renders header, checklist, Agent, Session, and Activity text
+**Then**: the rendered dashboard does not contain `run_review`
+**And**: the rendered dashboard does not contain `resolve_finalize_blockers`
+**And**: equivalent human wording is shown instead
+
+#### Scenario: Run TUI renders compact Agent and Session summaries
+
+**Given**: an active session with a command label, agent lifecycle state, coverage counts, finding counts, and agent step
+**When**: the TUI renders the summary panels
+**Then**: the Agent panel shows the command label, status/liveness, output recency, and timeout when known
+**And**: the Session panel shows compact coverage percent and reviewed/total counts
+**And**: the Session panel shows open finding count, current checklist title, and agent step
+**And**: the old expanded coverage text is not the primary dashboard panel
+
+#### Scenario: Run TUI activity mixes events, output, and heartbeat rows
+
+**Given**: the run controller has emitted Review Gauntlet events
+**And**: the active agent has emitted stdout and stderr output lines
+**And**: the agent later becomes quiet while still running
+**When**: the TUI renders Activity
+**Then**: event rows use the `event` kind and human labels such as `run started`, `gate started`, or `agent started`
+**And**: agent stdout rows use the `stdout` kind
+**And**: agent stderr rows use the `stderr` kind
+**And**: a quiet running agent produces a non-flooding `event` heartbeat row such as `agent alive` with detail such as `no output for 2m00s`
+**And**: displayed output remains bounded, sanitized, truncated, and redacted

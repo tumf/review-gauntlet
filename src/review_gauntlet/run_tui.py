@@ -11,10 +11,10 @@ from review_gauntlet.run_controller import AgentOutputEntry, RunController, RunE
 TUI_FALLBACK_WARNING = "TUI support is not installed; falling back to text mode."
 TUI_INSTALL_GUIDANCE = 'Install with: uv tool install "review-gauntlet[tui]"'
 PANEL_TITLES = {
-    "finalize_path": "Finalize path",
-    "coverage": "Session metrics",
-    "findings": "Findings",
-    "current_operation": "Current operation",
+    "header": "Review Gauntlet",
+    "finalize_path": "Next to finalize",
+    "agent": "Agent",
+    "session": "Session",
     "activity": "Activity",
 }
 
@@ -51,7 +51,9 @@ def create_run_app(controller: RunController) -> object:
         Screen { layout: vertical; }
         #body { height: 1fr; padding: 1; }
         #session_header { border: round $primary; padding: 1; height: auto; }
-        #metrics { height: auto; }
+        #summary { height: auto; }
+        #agent_panel { width: 1fr; }
+        #session_panel { width: 1fr; }
         .panel {
             border: round $surface-lighten-2;
             border-title-color: $text-muted;
@@ -65,8 +67,7 @@ def create_run_app(controller: RunController) -> object:
         .panel-finalized { border: round $success; border-title-color: $success; }
         #activity_panel { height: 1fr; }
         #activity_timeline { height: 1fr; }
-        #controls { color: $text-muted; height: auto; }
-        """
+        #controls { color: $text-muted; height: auto; }        """
         BINDINGS = [
             ("q", "stop_after_current_step", "Stop after current step"),
             ("ctrl+c", "interrupt", "Interrupt"),
@@ -93,21 +94,17 @@ def create_run_app(controller: RunController) -> object:
                     id="finalize_path_panel",
                     classes=f"panel {view.state_class}",
                 )
-                with Horizontal(id="metrics"):
+                with Horizontal(id="summary"):
                     yield titled_panel(
-                        PANEL_TITLES["coverage"],
-                        Static(coverage_text(self.snapshot), id="coverage_panel"),
+                        PANEL_TITLES["agent"],
+                        Static(agent_summary_text(view), id="agent_panel"),
+                        id="agent_panel_container",
                     )
                     yield titled_panel(
-                        PANEL_TITLES["findings"],
-                        Static(findings_text(self.snapshot), id="findings_panel"),
+                        PANEL_TITLES["session"],
+                        Static(session_summary_text(view), id="session_panel"),
+                        id="session_panel_container",
                     )
-                yield titled_panel(
-                    PANEL_TITLES["current_operation"],
-                    Static(current_operation_text(view), id="task_panel"),
-                    id="task_panel_container",
-                    classes=f"panel {view.state_class}",
-                )
                 yield titled_panel(
                     PANEL_TITLES["activity"],
                     Static(activity_text(view), id="activity_timeline"),
@@ -157,10 +154,11 @@ def create_run_app(controller: RunController) -> object:
                 session_header = self.query_one("#session_header", Static)
                 finalize_path_panel = self.query_one("#finalize_path_panel", Vertical)
                 finalize_path = self.query_one("#finalize_path", Static)
-                coverage_panel = self.query_one("#coverage_panel", Static)
-                findings_panel = self.query_one("#findings_panel", Static)
-                task_panel_container = self.query_one("#task_panel_container", Vertical)
-                task_panel = self.query_one("#task_panel", Static)
+                agent_panel_container = self.query_one("#agent_panel_container", Vertical)
+                session_panel_container = self.query_one("#session_panel_container", Vertical)
+                agent_panel = self.query_one("#agent_panel", Static)
+                session_panel = self.query_one("#session_panel", Static)
+                activity_panel = self.query_one("#activity_panel", Vertical)
                 activity_timeline = self.query_one("#activity_timeline", Static)
             except NoMatches:
                 return
@@ -175,11 +173,12 @@ def create_run_app(controller: RunController) -> object:
                 enabled = state_class == "panel" or state_class == view.state_class
                 session_header.set_class(state_class == view.state_class, state_class)
                 finalize_path_panel.set_class(enabled, state_class)
-                task_panel_container.set_class(enabled, state_class)
+                agent_panel_container.set_class(enabled, state_class)
+                session_panel_container.set_class(enabled, state_class)
+                activity_panel.set_class(enabled, state_class)
             finalize_path.update(finalize_path_text(view))
-            coverage_panel.update(coverage_text(self.snapshot))
-            findings_panel.update(findings_text(self.snapshot))
-            task_panel.update(current_operation_text(view))
+            agent_panel.update(agent_summary_text(view))
+            session_panel.update(session_summary_text(view))
             activity_timeline.update(activity_text(view))
 
     return RunApp(controller)
@@ -225,6 +224,23 @@ class TimelineEvent:
 
 
 @dataclass(frozen=True)
+class AgentSummary:
+    command: str
+    status: str
+    output: str
+    timeout: str
+    artifact: str | None
+
+
+@dataclass(frozen=True)
+class SessionSummary:
+    coverage: str
+    findings: str
+    current: str
+    agent_step: str
+
+
+@dataclass(frozen=True)
 class FinalizeGate:
     index: int
     title: str
@@ -247,6 +263,8 @@ class RunViewState:
     open_findings: int
     task: TaskDisplay
     command_label: str | None
+    agent_summary: AgentSummary
+    session_summary: SessionSummary
     timeline_events: tuple[TimelineEvent, ...]
     activity: str
     liveness_detail: str
@@ -356,7 +374,8 @@ def dashboard_state(
     command_label = format_command_label(snapshot)
     gates = derive_finalize_gates(snapshot)
     active_gate = next(
-        (gate for gate in gates if gate.state in {"active", "blocked", "failed"}), gates[-1]
+        (gate for gate in gates if gate.state in {"running", "blocked", "failed", "next"}),
+        gates[-1],
     )
     timeline_events = tuple(format_activity_event(event) for event in events[-10:])
     output_events = tuple(
@@ -364,6 +383,9 @@ def dashboard_state(
     )
     liveness_detail = agent_liveness_detail(snapshot)
     heartbeat_events = heartbeat_timeline_events(snapshot, activity_frame=activity_frame)
+    coverage = calculate_progress_metrics(snapshot.coverage)
+    task = format_task_title(snapshot.next_ready_prompt)
+    artifact_path = snapshot.agent_lifecycle.artifact_path
     return RunViewState(
         status=snapshot.agent_status,
         status_summary=status_summary,
@@ -374,18 +396,86 @@ def dashboard_state(
         gate_label=f"gate {active_gate.index}/6",
         active_gate=active_gate,
         gates=gates,
-        coverage=calculate_progress_metrics(snapshot.coverage),
+        coverage=coverage,
         open_findings=_count_value(snapshot.findings.get("open", 0)),
-        task=format_task_title(snapshot.next_ready_prompt),
+        task=task,
         command_label=command_label,
+        agent_summary=build_agent_summary(snapshot, command_label, liveness_detail, artifact_path),
+        session_summary=build_session_summary(snapshot, coverage, active_gate),
         timeline_events=timeline_events + heartbeat_events + output_events,
         activity=agent_activity_text(
             _display_agent_status(snapshot), activity_frame=activity_frame
         ),
         liveness_detail=liveness_detail,
-        artifact_path=snapshot.agent_lifecycle.artifact_path,
+        artifact_path=artifact_path,
         elapsed=format_elapsed_time(snapshot.elapsed_seconds),
     )
+
+
+def build_agent_summary(
+    snapshot: RunSnapshot,
+    command_label: str | None,
+    liveness_detail: str,
+    artifact_path: str | None,
+) -> AgentSummary:
+    lifecycle = snapshot.agent_lifecycle
+    output = "no output yet"
+    if lifecycle.last_output_age_seconds is not None:
+        output = f"last output {format_duration(lifecycle.last_output_age_seconds)} ago"
+    timeout = "timeout not set"
+    if lifecycle.timeout_remaining_seconds is not None:
+        timeout = f"timeout in {format_duration(lifecycle.timeout_remaining_seconds)}"
+    artifact = short_artifact_path(artifact_path) if artifact_path is not None else None
+    return AgentSummary(
+        command=command_label or "command resolving...",
+        status=liveness_detail,
+        output=output,
+        timeout=timeout,
+        artifact=artifact,
+    )
+
+
+def build_session_summary(
+    snapshot: RunSnapshot, coverage: ProgressMetrics, active_gate: FinalizeGate
+) -> SessionSummary:
+    return SessionSummary(
+        coverage=f"{coverage.percent}%   {coverage.completed} / {coverage.total}",
+        findings=f"open {_count_value(snapshot.findings.get('open', 0))}",
+        current=active_gate.title.lower(),
+        agent_step=str(snapshot.step),
+    )
+
+
+@dataclass(frozen=True)
+class BlockerGroups:
+    coverage: tuple[str, ...]
+    findings: tuple[str, ...]
+    final_checks: tuple[str, ...]
+
+
+def classify_finalize_blockers(blockers: tuple[str, ...]) -> BlockerGroups:
+    coverage: list[str] = []
+    findings: list[str] = []
+    final_checks: list[str] = []
+    for blocker in blockers:
+        normalized = blocker.lower()
+        if "review cells are still pending" in normalized or "review cells are stale" in normalized:
+            coverage.append(blocker)
+        elif any(
+            needle in normalized
+            for needle in (
+                "untriaged",
+                "reopened",
+                "confirmed",
+                "fixed-pending",
+                "fixed_pending",
+                "fixed findings require verification",
+            )
+        ):
+            findings.append(blocker)
+        else:
+            final_checks.append(blocker)
+    return BlockerGroups(tuple(coverage), tuple(findings), tuple(final_checks))
 
 
 def derive_finalize_gates(snapshot: RunSnapshot) -> tuple[FinalizeGate, ...]:
@@ -396,52 +486,74 @@ def derive_finalize_gates(snapshot: RunSnapshot) -> tuple[FinalizeGate, ...]:
     )
     fix_count = _count_value(findings.get("confirmed", 0))
     verify_count = _count_value(findings.get("fixed_pending_verification", 0))
-    blocker_count = len(snapshot.finalize_blockers)
+    blockers = classify_finalize_blockers(snapshot.finalize_blockers)
     failed = snapshot.agent_status in {"failed", "interrupted", "timed_out", "cancelled"}
-    finalized = snapshot.agent_status == "finalized" or (
-        snapshot.session_state == "finalized" and snapshot.can_finalize
+    finalized = snapshot.agent_status == "finalized" or snapshot.session_state == "finalized"
+
+    review_state = "done" if coverage.incomplete == 0 else "running"
+    review_detail = (
+        f"{coverage.completed} / {coverage.total} reviewed, {coverage.incomplete} pending"
     )
-    specs = [
-        (
-            "Review coverage",
-            coverage.incomplete,
-            f"{coverage.completed}/{coverage.total} cells reviewed",
-        ),
-        ("Triage findings", triage_count, f"{triage_count} finding(s) need triage"),
-        ("Fix confirmed findings", fix_count, f"{fix_count} confirmed finding(s) need fixes"),
-        ("Verify fixes", verify_count, f"{verify_count} fixed finding(s) need verification"),
-        ("Resolve finalize blockers", blocker_count, f"{blocker_count} finalize blocker(s)"),
-        (
-            "Finalize checkpoint",
-            0 if finalized else 1,
-            snapshot.next_required_action or "checkpoint not finalized",
-        ),
+    triage_state = "next" if review_state != "done" else ("running" if triage_count else "done")
+    triage_detail = (
+        "waits for coverage"
+        if review_state != "done"
+        else _count_detail(triage_count, "finding needs triage", "no findings need triage")
+    )
+    fix_state = "next" if triage_state != "done" else ("running" if fix_count else "done")
+    fix_detail = (
+        "no confirmed findings yet"
+        if triage_state != "done"
+        else _count_detail(fix_count, "confirmed finding needs fix", "no confirmed findings")
+    )
+    verify_state = "next" if fix_state != "done" else ("running" if verify_count else "done")
+    verify_detail = (
+        "no fixed-pending findings yet"
+        if fix_state != "done"
+        else _count_detail(
+            verify_count, "fixed-pending finding needs verification", "no fixes need verification"
+        )
+    )
+    prior_done = all(
+        state == "done" for state in (review_state, triage_state, fix_state, verify_state)
+    )
+    if not prior_done:
+        final_checks_state = "later"
+        final_checks_detail = "checked after review/findings"
+    elif blockers.final_checks:
+        final_checks_state = "blocked"
+        final_checks_detail = _summarize_text(blockers.final_checks[0], limit=64)
+    else:
+        final_checks_state = "done"
+        final_checks_detail = "ready"
+    if finalized:
+        checkpoint_state = "done"
+        checkpoint_detail = "complete"
+    elif final_checks_state == "done" and snapshot.can_finalize:
+        checkpoint_state = "running"
+        checkpoint_detail = "ready to finalize"
+    else:
+        checkpoint_state = "later"
+        checkpoint_detail = "waiting"
+    gates = [
+        FinalizeGate(1, "Review coverage", review_state, review_detail),
+        FinalizeGate(2, "Triage findings", triage_state, triage_detail),
+        FinalizeGate(3, "Fix confirmed findings", fix_state, fix_detail),
+        FinalizeGate(4, "Verify fixes", verify_state, verify_detail),
+        FinalizeGate(5, "Final checks", final_checks_state, final_checks_detail),
+        FinalizeGate(6, "Finalize checkpoint", checkpoint_state, checkpoint_detail),
     ]
-    gates: list[FinalizeGate] = []
-    active_assigned = False
-    for index, (title, remaining, detail) in enumerate(specs, start=1):
-        if finalized:
-            state = "done"
-            gate_detail = "complete" if index == 6 else detail
-        elif failed and not active_assigned:
-            state = "failed"
-            gate_detail = detail
-            active_assigned = True
-        elif index == 5 and blocker_count > 0:
-            state = "blocked"
-            gate_detail = detail
-            active_assigned = True
-        elif remaining <= 0:
-            state = "done" if index in {1, 5, 6} else "skipped"
-            gate_detail = detail
-        elif not active_assigned:
-            state = "active"
-            gate_detail = detail
-            active_assigned = True
-        else:
-            state = "waiting"
-            gate_detail = detail
-        gates.append(FinalizeGate(index, title, state, gate_detail))
+    if finalized:
+        return tuple(FinalizeGate(gate.index, gate.title, "done", "complete") for gate in gates)
+    if failed:
+        for gate in gates:
+            if gate.state in {"running", "blocked", "next", "later"}:
+                return tuple(
+                    FinalizeGate(item.index, item.title, "failed", item.detail)
+                    if item.index == gate.index
+                    else item
+                    for item in gates
+                )
     return tuple(gates)
 
 
@@ -452,21 +564,14 @@ def _display_agent_status(snapshot: RunSnapshot) -> str:
 
 
 def agent_liveness_detail(snapshot: RunSnapshot) -> str:
-    parts: list[str] = []
     lifecycle = snapshot.agent_lifecycle
-    if lifecycle.last_output_age_seconds is not None:
-        parts.append(f"last output {format_duration(lifecycle.last_output_age_seconds)} ago")
-    if _display_agent_status(snapshot) == "quiet":
+    display_status = _display_agent_status(snapshot)
+    if display_status == "quiet":
         quiet_for = lifecycle.last_output_age_seconds
         if quiet_for is not None:
-            parts.append(f"quiet {format_duration(quiet_for)}")
-        else:
-            parts.append("quiet but alive")
-    if lifecycle.timeout_remaining_seconds is not None:
-        parts.append(f"timeout in {format_duration(lifecycle.timeout_remaining_seconds)}")
-    if not parts:
-        return agent_activity_text(_display_agent_status(snapshot))
-    return " | ".join(parts)
+            return f"quiet {format_duration(quiet_for)}"
+        return "quiet but alive"
+    return agent_activity_text(display_status)
 
 
 def heartbeat_timeline_events(
@@ -475,10 +580,15 @@ def heartbeat_timeline_events(
     display_status = _display_agent_status(snapshot)
     if display_status != "quiet":
         return ()
-    detail = agent_liveness_detail(snapshot)
+    quiet_for = snapshot.agent_lifecycle.last_output_age_seconds
+    detail = (
+        f"agent alive no output for {format_duration(quiet_for)}"
+        if quiet_for is not None
+        else "agent alive no output yet"
+    )
     if activity_frame % 4 != 0:
         return ()
-    return (TimelineEvent("--:--:--", "agent heartbeat", f"agent still running - {detail}"),)
+    return (TimelineEvent("--:--:--", "event", detail),)
 
 
 def format_duration(seconds: float) -> str:
@@ -495,21 +605,23 @@ def format_duration(seconds: float) -> str:
 def terminal_state(agent_status: str) -> tuple[str, str]:
     status = _plain_text(agent_status)
     if status == "running":
-        return "RUNNING - agent is working", "panel-active"
+        return "RUNNING", "panel-active"
     if status == "blocked":
-        return "BLOCKED - human attention needed", "panel-blocked"
+        return "BLOCKED", "panel-blocked"
     if status in {"failed", "interrupted"}:
-        return "FAILED - run stopped before completion", "panel-failed"
+        return "FAILED", "panel-failed"
     if status in {"finalized", "completed"}:
-        return "FINALIZED - review session complete", "panel-finalized"
-    return f"READY - {status}", "panel"
+        return "FINALIZED", "panel-finalized"
+    return f"READY {status}", "panel"
 
 
 def header_text(view: RunViewState) -> str:
+    timeout = view.agent_summary.timeout.replace("timeout in ", "timeout ")
     return (
-        f"Review Gauntlet | session {view.session_short_id} | {view.status_summary}\n"
-        f"{view.gate_label} {view.active_gate.title} | {view.step_label} | "
-        f"elapsed {view.elapsed} | agent {view.activity} | {view.liveness_detail}"
+        "Review Gauntlet\n"
+        f"{view.status_summary} · {view.gate_label} · {view.active_gate.title}\n"
+        f"session {view.session_short_id} · agent {view.agent_name} · "
+        f"{view.liveness_detail} · {timeout}"
     )
 
 
@@ -527,9 +639,8 @@ def compact_dashboard_text(snapshot: RunSnapshot, events: tuple[RunEvent, ...] =
         [
             progress_text(snapshot),
             titled_section(PANEL_TITLES["finalize_path"], finalize_path_text(view)),
-            titled_section(PANEL_TITLES["coverage"], coverage_text(snapshot)),
-            titled_section(PANEL_TITLES["findings"], findings_text(snapshot)),
-            titled_section(PANEL_TITLES["current_operation"], current_operation_text(view)),
+            titled_section(PANEL_TITLES["agent"], agent_summary_text(view)),
+            titled_section(PANEL_TITLES["session"], session_summary_text(view)),
             titled_section(PANEL_TITLES["activity"], activity_text(view)),
             footer_text(),
         ]
@@ -539,10 +650,8 @@ def compact_dashboard_text(snapshot: RunSnapshot, events: tuple[RunEvent, ...] =
 def finalize_path_text(view: RunViewState) -> str:
     lines: list[str] = []
     for gate in view.gates:
-        marker = {"done": "✓", "active": "▶", "blocked": "!", "failed": "×", "skipped": "-"}.get(
-            gate.state, "·"
-        )
-        lines.append(f"{marker} gate {gate.index}/6 {gate.title} [{gate.state}] - {gate.detail}")
+        marker = {"done": "✓", "running": "▶", "blocked": "!", "failed": "×"}.get(gate.state, " ")
+        lines.append(f"{marker} {gate.title:<24} {gate.state:<7} {gate.detail}")
     return "\n".join(lines)
 
 
@@ -568,18 +677,31 @@ def findings_text(snapshot: RunSnapshot) -> str:
     return " | ".join(parts)
 
 
-def current_operation_text(view: RunViewState) -> str:
+def agent_summary_text(view: RunViewState) -> str:
     lines = [
-        f"{view.active_gate.title} ({view.active_gate.state})",
-        view.active_gate.detail,
-        f"liveness {view.activity}",
-        f"agent {view.liveness_detail}",
+        f"command {view.agent_summary.command}",
+        f"status  {view.agent_summary.status}",
+        f"output  {view.agent_summary.output}",
+        f"timeout {view.agent_summary.timeout}",
     ]
-    if view.command_label is not None:
-        lines.append(f"command {view.command_label}")
-    if view.artifact_path is not None:
-        lines.append(f"artifact {short_artifact_path(view.artifact_path)}")
+    if view.agent_summary.artifact is not None:
+        lines.append(f"artifact {view.agent_summary.artifact}")
     return "\n".join(lines)
+
+
+def session_summary_text(view: RunViewState) -> str:
+    return "\n".join(
+        [
+            f"Coverage  {view.session_summary.coverage}",
+            f"Findings  {view.session_summary.findings}",
+            f"Current   {view.session_summary.current}",
+            f"Agent step {view.session_summary.agent_step}",
+        ]
+    )
+
+
+def current_operation_text(view: RunViewState) -> str:
+    return agent_summary_text(view)
 
 
 def _task_text(snapshot: RunSnapshot) -> str:  # pyright: ignore[reportUnusedFunction]
@@ -595,7 +717,7 @@ def agent_activity_text(agent_status: str, *, activity_frame: int = 0) -> str:
 
 
 def format_agent_output_entry(entry: AgentOutputEntry) -> TimelineEvent:
-    label = "agent stderr" if entry.stream == "stderr" else "agent stdout"
+    label = "stderr" if entry.stream == "stderr" else "stdout"
     return TimelineEvent("--:--:--", label, sanitize_agent_output_line(entry.text))
 
 
@@ -608,8 +730,11 @@ def sanitize_agent_output_line(value: object, *, limit: int = 120) -> str:
 
 
 def format_activity_event(event: RunEvent) -> TimelineEvent:
-    label = _event_label(event)
-    detail = _event_detail(event)
+    label = "event"
+    detail = _event_label(event)
+    event_detail = _event_detail(event)
+    if event_detail:
+        detail = f"{detail} {event_detail}"
     return TimelineEvent(format_event_time(event.timestamp), label, detail)
 
 
@@ -703,6 +828,13 @@ def _progress_bar(completed: int, total: int) -> str:
         return "[" + "·" * _BAR_WIDTH + "]"
     filled = min(_BAR_WIDTH, max(0, round((completed / total) * _BAR_WIDTH)))
     return "[" + "█" * filled + "░" * (_BAR_WIDTH - filled) + "]"
+
+
+def _count_detail(count: int, singular: str, zero: str) -> str:
+    if count == 0:
+        return zero
+    suffix = "" if count == 1 else "s"
+    return f"{count} {singular}{suffix}"
 
 
 def _count_value(value: object) -> int:
