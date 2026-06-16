@@ -199,7 +199,7 @@ def test_verify_fixes_resolves_fixed_pending_path_digest_drift(
     assert _states_by_path(tmp_path)["README.md"] == "fixed_verified"
 
 
-def test_verify_fixes_refreshes_targeted_file_siblings_without_staling_them(
+def test_verify_fixes_refreshes_stale_targeted_file_siblings_without_promoting_them(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     (tmp_path / "app.py").write_text("print('hello')\n", encoding="utf-8")
@@ -228,6 +228,12 @@ def test_verify_fixes_refreshes_targeted_file_siblings_without_staling_them(
         finding_id = str(conn.execute("select finding_id from findings").fetchone()[0])
     main(["mark", str(tmp_path), finding_id, "fixed", "--format", "json"])
     capsys.readouterr()
+    store = SessionStore(tmp_path)
+    with store.connect() as conn:
+        conn.execute(
+            "update review_cells set state = ? where cell_id = ?",
+            ("stale", sibling_cell),
+        )
     before_rows = _cell_rows_by_path(tmp_path, "app.py")
     before_digest = str(before_rows[0]["content_digest"])
     (tmp_path / "app.py").write_text("print('fixed')\n", encoding="utf-8")
@@ -254,8 +260,8 @@ def test_verify_fixes_refreshes_targeted_file_siblings_without_staling_them(
     assert {str(row["content_digest"]) for row in after_rows} != {before_digest}
     assert len({str(row["content_digest"]) for row in after_rows}) == 1
     assert states_by_rule["data-validation"] == "reviewed"
-    assert states_by_rule["test-evidence"] == "reviewed"
-    assert {str(row["state"]) for row in after_rows} == {"reviewed"}
+    assert states_by_rule["test-evidence"] == "stale"
+    assert "pending" not in {str(row["state"]) for row in after_rows}
 
 
 def test_verify_fixes_redetection_reopens_without_command_failure(

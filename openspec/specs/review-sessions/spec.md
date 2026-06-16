@@ -512,6 +512,7 @@ The README Design section SHALL reflect the current implemented capabilities: in
 **Then**: the finding may transition according to the verification verdict
 **And**: all review cells on that targeted path store the current content digest
 **And**: unselected sibling cells on that same path are not marked `stale` solely because the targeted path changed
+**And**: unselected sibling cells on that same path are not promoted to `pending` solely because the targeted path was evaluated
 **And**: unrelated pending or stale cells on other paths are not selected merely to refresh freshness
 
 #### Scenario: Verify fixes supports focused finding and path filters
@@ -650,7 +651,7 @@ The README Design section SHALL reflect the current implemented capabilities: in
 
 **Given**: an active review session with multiple kinds of incomplete work
 **When**: the developer runs `review-gauntlet ready --format json`
-**Then**: the selected prompt corresponds to the first available category in this order: stale review cells, pending review cells, reopened findings, untriaged findings, confirmed findings, fixed-pending verification findings, finalize
+**Then**: the selected prompt corresponds to the first available category in this order: pending review cells, reopened findings, untriaged findings, confirmed findings, fixed-pending verification findings, stale review cells, finalize
 **And**: finding prompts remain reachable after review-cell coverage is complete.
 
 #### Scenario: Ready leaves status output unchanged
