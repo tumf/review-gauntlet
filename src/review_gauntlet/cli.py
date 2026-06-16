@@ -1835,7 +1835,14 @@ def _finding_sort_key(finding: dict[str, object]) -> tuple[str, int, int, str]:
 
 def _finding_int_field(finding: dict[str, object], key: str) -> int:
     value = finding.get(key)
-    return int(value) if isinstance(value, int | str) else 0
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return 0
+    return 0
 
 
 def _terminal_finding_states() -> set[FindingState]:
@@ -2054,7 +2061,11 @@ def _expired_terminal_decision_count(store: SessionStore, session_id: str) -> in
                 """,
                 (row["finding_id"], row["state"]),
             ).fetchone()
-            if event is not None and _is_expired(str(event["metadata"]), today):
+            if (
+                event is not None
+                and event["metadata"] is not None
+                and _is_expired(str(event["metadata"]), today)
+            ):
                 expired += 1
     return expired
 
@@ -2070,7 +2081,11 @@ def _is_expired(metadata_json: str, today: date) -> bool:
             return False
         return date.fromisoformat(str(until)) < today
     except (json.JSONDecodeError, ValueError, TypeError):
-        return True
+        print(
+            "warning: unparseable metadata JSON in finding event, treating as not expired",
+            file=sys.stderr,
+        )
+        return False
 
 
 def _next_action(

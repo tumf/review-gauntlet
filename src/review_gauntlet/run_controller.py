@@ -250,7 +250,16 @@ class RunController:
                 return self._interrupted_result(
                     steps, error="run interrupted by controller request"
                 )
-            session_id = self.store.active_session_id()
+            session_id = self._active_session_id_or_none()
+            if session_id is None:
+                self._emit("blocked", reason="session_disappeared")
+                return _run_result(
+                    completed=False,
+                    steps=steps,
+                    reason="session_disappeared",
+                    error="active session disappeared during run",
+                    session_id=None,
+                )
             prompt = self._ready_prompt(self.store, self.root)
             if prompt is None:
                 self._emit("blocked", reason="no_ready_task", session_id=session_id)

@@ -338,7 +338,7 @@ def calculate_progress_metrics(coverage: dict[str, object]) -> ProgressMetrics:
         if state in COMPLETED_COVERAGE_STATES:
             completed += count
     displayed_completed = min(completed, total)
-    percent = round((displayed_completed / total) * 100) if total else 0
+    percent = int((displayed_completed / total) * 100) if total else 0
     return ProgressMetrics(
         displayed_completed, total, percent, superseded, pending + stale, pending, stale
     )
@@ -565,20 +565,33 @@ def derive_finalize_gates(snapshot: RunSnapshot) -> tuple[FinalizeGate, ...]:
     triage_detail = (
         "waits for coverage"
         if review_state != "done"
-        else _count_detail(triage_count, "finding needs triage", "no findings need triage")
+        else _count_detail(
+            triage_count,
+            "finding needs triage",
+            "no findings need triage",
+            plural="findings need triage",
+        )
     )
     fix_state = "next" if triage_state != "done" else ("running" if fix_count else "done")
     fix_detail = (
         "no confirmed findings yet"
         if triage_state != "done"
-        else _count_detail(fix_count, "confirmed finding needs fix", "no confirmed findings")
+        else _count_detail(
+            fix_count,
+            "confirmed finding needs fix",
+            "no confirmed findings",
+            plural="confirmed findings need fix",
+        )
     )
     verify_state = "next" if fix_state != "done" else ("running" if verify_count else "done")
     verify_detail = (
         "no fixed-pending findings yet"
         if fix_state != "done"
         else _count_detail(
-            verify_count, "fixed-pending finding needs verification", "no fixes need verification"
+            verify_count,
+            "fixed-pending finding needs verification",
+            "no fixes need verification",
+            plural="fixed-pending findings need verification",
         )
     )
     prior_done = all(
@@ -915,11 +928,12 @@ def _progress_bar(completed: int, total: int) -> str:
     return "[" + "█" * filled + "░" * (_BAR_WIDTH - filled) + "]"
 
 
-def _count_detail(count: int, singular: str, zero: str) -> str:
+def _count_detail(count: int, singular: str, zero: str, *, plural: str | None = None) -> str:
     if count == 0:
         return zero
-    suffix = "" if count == 1 else "s"
-    return f"{count} {singular}{suffix}"
+    if count == 1:
+        return f"{count} {singular}"
+    return f"{count} {plural}" if plural is not None else f"{count} {singular}s"
 
 
 def _count_value(value: object) -> int:
