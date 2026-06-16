@@ -472,38 +472,6 @@ The README Design section SHALL reflect the current implemented capabilities: in
 
 ### Requirement: Verify-fixes command SHALL re-review fixed findings explicitly
 
-`review-gauntlet verify-fixes` SHALL provide a dedicated post-fix verification command for findings in `fixed_pending_verification`. The command SHALL execute at most one verification run, SHALL use the existing review adapter verdict contract, SHALL only target fixed-pending findings selected by optional filters, and SHALL keep findings that cannot be evaluated visible rather than treating them as verified. When a fixed-pending finding path is successfully evaluated, the command SHALL refresh file freshness for all review cells on that targeted path without selecting unrelated pending or stale cells.
-
-#### Scenario: Verify fixes verifies absent findings
-
-**Given**: an active session with a finding in `fixed_pending_verification`
-**And**: the finding's path maps to a current review cell
-**And**: the verification adapter returns no comment with the finding's fingerprint
-**When**: the developer runs `review-gauntlet verify-fixes --format json`
-**Then**: the command executes a verification run for the relevant current review cell
-**And**: the finding transitions to `fixed_verified`
-**And**: stdout contains parseable JSON listing the finding ID in `fixed_verified_ids`
-**And**: the command exits `0`
-
-#### Scenario: Verify fixes reopens redetected findings
-
-**Given**: an active session with a finding in `fixed_pending_verification`
-**And**: the finding's path maps to a current review cell
-**And**: the verification adapter returns a comment that normalizes to the same finding fingerprint
-**When**: the developer runs `review-gauntlet verify-fixes --format json`
-**Then**: the finding transitions to `reopened`
-**And**: the finding does not transition to `fixed_verified` in the same run
-**And**: stdout contains parseable JSON listing the finding ID in `reopened_ids`
-**And**: the command exits `1`
-
-#### Scenario: Verify fixes targets only fixed-pending findings
-
-**Given**: an active session with pending review cells and findings in `confirmed`, `reopened`, `fixed_pending_verification`, and terminal states
-**When**: the developer runs `review-gauntlet verify-fixes --format json`
-**Then**: adapter execution is limited to current cells needed by `fixed_pending_verification` findings
-**And**: unrelated pending or stale review cells are not selected merely to advance coverage
-**And**: non-fixed-pending findings are not mutated
-
 #### Scenario: Verify fixes refreshes targeted path sibling freshness
 
 **Given**: an active session with multiple review cells for a path that has a finding in `fixed_pending_verification`
@@ -514,38 +482,6 @@ The README Design section SHALL reflect the current implemented capabilities: in
 **And**: unselected sibling cells on that same path are not marked `stale` solely because the targeted path changed
 **And**: unselected sibling cells on that same path are not promoted to `pending` solely because the targeted path was evaluated
 **And**: unrelated pending or stale cells on other paths are not selected merely to refresh freshness
-
-#### Scenario: Verify fixes supports focused finding and path filters
-
-**Given**: an active session with multiple findings in `fixed_pending_verification` across multiple repository paths
-**When**: the developer runs `review-gauntlet verify-fixes --finding RGF-0001 --path src/app.py --format json`
-**Then**: only fixed-pending findings matching the requested finding ID and repository path filter are targeted
-**And**: repeated `--finding` values match any listed finding ID
-**And**: repeated `--path` values match any listed safe repository path or prefix
-
-#### Scenario: Verify fixes rejects unsafe path filters before execution
-
-**Given**: an active session with fixed-pending findings
-**When**: the developer runs `review-gauntlet verify-fixes --path ../src`
-**Then**: the command fails with a usage error
-**And**: no adapter command is executed
-**And**: no run or finding event is written
-
-#### Scenario: Verify fixes no-op does not refresh evidence
-
-**Given**: an active session with matching fixed-pending findings
-**When**: the developer runs `review-gauntlet verify-fixes --budget 0 --format json`
-**Then**: no verification run is created
-**And**: no finding state is modified
-**And**: stdout reports the targeted finding IDs as still requiring verification
-
-#### Scenario: Verify fixes reports unverifiable findings
-
-**Given**: an active session with a fixed-pending finding whose path cannot be successfully evaluated
-**When**: the developer runs `review-gauntlet verify-fixes --format json`
-**Then**: the finding remains `fixed_pending_verification`
-**And**: stdout contains parseable JSON listing the finding ID in `unverifiable_ids`
-**And**: the command exits `1`
 
 ### Requirement: CLI SHALL expose package version without repository state
 
@@ -622,63 +558,12 @@ The README Design section SHALL reflect the current implemented capabilities: in
 
 ### Requirement: Ready command SHALL emit the next skill-directed prompt
 
-`review-gauntlet ready` SHALL inspect the active review session and emit at most one short prompt for the next externally-orchestrated review task. The command SHALL NOT mutate review session state, finding state, review cell state, checkpoint files, or git state. JSON output SHALL contain only a `prompt` key whose value is a string or `null`; text output SHALL print only the prompt body or `no ready task`.
-
-#### Scenario: Ready emits prompt-only JSON for untriaged findings
-
-**Given**: an active review session with one or more untriaged findings
-**When**: the developer runs `review-gauntlet ready --format json`
-**Then**: stdout contains parseable JSON with exactly the key `prompt`
-**And**: `prompt` is a non-empty string that begins with `Use the review-gauntlet task execution skill.`
-**And**: the prompt directs the agent to triage untriaged findings
-**And**: the prompt states a stop condition for when no untriaged findings remain
-
-#### Scenario: Ready emits text prompt without metadata labels
-
-**Given**: an active review session with ready work
-**When**: the developer runs `review-gauntlet ready --format text`
-**Then**: stdout contains the selected prompt body
-**And**: stdout does not include task IDs, claim instructions, queue metadata, or JSON wrapper fields
-
-#### Scenario: Ready emits no prompt when no ready work exists
-
-**Given**: an active review session with no actionable ready prompt
-**When**: the developer runs `review-gauntlet ready --format json`
-**Then**: stdout contains parseable JSON equal to `{"prompt": null}`
-**And**: the command exits successfully
-
 #### Scenario: Ready prompt priority is deterministic
 
 **Given**: an active review session with multiple kinds of incomplete work
 **When**: the developer runs `review-gauntlet ready --format json`
 **Then**: the selected prompt corresponds to the first available category in this order: pending review cells, reopened findings, untriaged findings, confirmed findings, fixed-pending verification findings, stale review cells, finalize
 **And**: finding prompts remain reachable after review-cell coverage is complete.
-
-#### Scenario: Ready leaves status output unchanged
-
-**Given**: an active review session
-**When**: the developer runs `review-gauntlet status --format json`
-**Then**: the status output schema remains the existing status schema
-**And**: no `prompt` field is added to status output
-
-#### Scenario: Ready is read-only
-
-**Given**: an active review session with findings, review cells, runs, events, and no latest checkpoint generated by this command
-**When**: the developer runs `review-gauntlet ready --format json`
-**Then**: no review run is created
-**And**: no review cell state is changed
-**And**: no finding state is changed
-**And**: no finding event is written
-**And**: no checkpoint file is written
-**And**: no git mutation is performed
-
-#### Scenario: Finalize prompt instructs commit before finalization
-
-**Given**: an active review session whose review coverage and live finding dependencies are resolved enough for finalization work to be the next task
-**When**: the developer runs `review-gauntlet ready --format json`
-**Then**: `prompt` is a non-empty string that begins with `Use the review-gauntlet task execution skill.`
-**And**: the prompt directs the agent to finalize the review-gauntlet session
-**And**: the prompt instructs the agent to commit intended git changes before finalizing
 
 ### Requirement: Review configuration SHALL support XDG global fallback
 
