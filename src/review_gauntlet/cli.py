@@ -1926,8 +1926,8 @@ def _run_session_command_step(
                 "error": RUN_INTERRUPTED_ERROR,
             },
         )
-    stdout_thread.join(timeout=1.0)
-    stderr_thread.join(timeout=1.0)
+    stdout_thread.join()
+    stderr_thread.join()
     with output_lock:
         stdout = "".join(stdout_lines)
         stderr = "".join(stderr_lines)
@@ -2018,7 +2018,7 @@ def _expand_session_template(value: str, variables: dict[str, str]) -> str:
                 f"template variable {{{name}}} is not available for run; supported variables: "
                 + ", ".join(f"{{{item}}}" for item in sorted(_SESSION_TEMPLATE_VARIABLES))
             )
-        return variables[name]
+        return variables[name].replace("\x00", "")
 
     expanded = TEMPLATE_PATTERN.sub(replace, protected)
     return expanded.replace(placeholder + "OPEN", "{").replace(placeholder + "CLOSE", "}")
@@ -2068,6 +2068,7 @@ def _emit_ready(prompt: str | None, output_format: str) -> None:
 
 
 def _cmd_mark(args: argparse.Namespace, store: SessionStore) -> None:
+    store.active_session_id()
     metadata_states = {"accepted-risk", "waived"}
     if args.until and args.state not in metadata_states:
         raise ValueError("mark --until is only valid for waived or accepted-risk findings")
