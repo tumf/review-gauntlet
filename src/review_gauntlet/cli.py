@@ -1321,38 +1321,49 @@ def _reconcile_cells(store: SessionStore, root: Path, target: TargetSpec) -> Non
 
 READY_PROMPT_PREFIX = "Use the review-gauntlet task execution skill."
 
-_READY_PROMPTS = {
-    "reopened": (
-        f"{READY_PROMPT_PREFIX} Re-triage reopened findings; stop when no reopened findings remain."
-    ),
-    "untriaged": (
-        f"{READY_PROMPT_PREFIX} Triage untriaged findings; stop when no untriaged findings remain."
-    ),
-    "confirmed": (
-        f"{READY_PROMPT_PREFIX} Fix the next confirmed finding; stop when confirmed "
-        "findings are resolved or require re-triage."
-    ),
-    "fixed_pending_verification": (
-        f"{READY_PROMPT_PREFIX} Verify fixed-pending findings; stop when no fixed-pending "
-        "verification findings remain."
-    ),
-    "stale_review_cell": (
-        f"{READY_PROMPT_PREFIX} Review stale review cells; stop when no stale review cells remain."
-    ),
-    "target_digest_drift": (
-        f"{READY_PROMPT_PREFIX} Review target changes because the target digest changed; "
-        "stop when the review run covers the current target digest."
-    ),
-    "pending_review_cell": (
-        f"{READY_PROMPT_PREFIX} Review pending review cells; stop when no pending review "
-        "cells remain."
-    ),
-    "finalize": (
-        f"{READY_PROMPT_PREFIX} Commit intended git changes before finalizing, then "
-        "finalize the review-gauntlet session; stop when the session is finalized or a "
-        "blocker remains."
-    ),
+_FINALIZE_READY_PROMPT = (
+    f"{READY_PROMPT_PREFIX} Commit intended git changes before finalizing, then finalize the "
+    "review-gauntlet session; stop when the session is finalized or a blocker remains."
+)
+
+_ACTIONABLE_FINDING_STATES = (
+    FindingState.REOPENED,
+    FindingState.UNTRIAGED,
+    FindingState.CONFIRMED,
+    FindingState.FIXED_PENDING_VERIFICATION,
+)
+
+_READY_REASON_LABELS = {
+    "pending_review_cell": "pending review cells need coverage",
+    "stale_review_cell": "stale review cells need refreshed coverage",
+    FindingState.REOPENED.value: "reopened findings need re-triage",
+    FindingState.UNTRIAGED.value: "untriaged findings need triage",
+    FindingState.CONFIRMED.value: "confirmed findings need fixing or re-triage",
+    FindingState.FIXED_PENDING_VERIFICATION.value: "fixed-pending findings need verification",
 }
+
+
+@dataclass(frozen=True)
+class _ReadyReviewCell:
+    cell_id: str
+    file_path: str
+    state: str
+    rule_id: str
+    slice_id: str
+    content_digest: str
+
+
+@dataclass(frozen=True)
+class _ReadyFinding:
+    finding_id: str
+    file_path: str
+    state: str
+    rule_id: str
+    content: str
+    latest_cell_id: str | None
+    start_line: int
+    end_line: int
+    imprecise: bool
 
 
 def _ready_prompt(store: SessionStore, root: Path) -> str | None:
@@ -1368,21 +1379,230 @@ def _ready_prompt(store: SessionStore, root: Path) -> str | None:
     finalize_reasons = _finalize_reasons(
         effective_cell_counts, finding_counts, store, session_id, root, allow_non_review_dirty=False
     )
+    review_cells = _ready_review_cells(store, session_id, root)
+    findings = _ready_findings(store, session_id)
     if effective_cell_counts.get(CellState.PENDING.value, 0):
-        return _READY_PROMPTS["pending_review_cell"]
-    if finding_counts.get(FindingState.REOPENED.value, 0):
-        return _READY_PROMPTS["reopened"]
-    if finding_counts.get(FindingState.UNTRIAGED.value, 0):
-        return _READY_PROMPTS["untriaged"]
-    if finding_counts.get(FindingState.CONFIRMED.value, 0):
-        return _READY_PROMPTS["confirmed"]
-    if finding_counts.get(FindingState.FIXED_PENDING_VERIFICATION.value, 0):
-        return _READY_PROMPTS["fixed_pending_verification"]
+        return _review_cell_ready_prompt(
+            reason="pending_review_cell",
+            review_cells=review_cells,
+            findings=findings,
+            state=CellState.PENDING,
+        )
+    for state in _ACTIONABLE_FINDING_STATES:
+        if finding_counts.get(state.value, 0):
+            return _finding_ready_prompt(state, review_cells, findings)
     if effective_cell_counts.get(CellState.STALE.value, 0):
-        return _READY_PROMPTS["stale_review_cell"]
+        return _review_cell_ready_prompt(
+            reason="stale_review_cell",
+            review_cells=review_cells,
+            findings=findings,
+            state=CellState.STALE,
+        )
     if not finalize_reasons or _finalize_blockers_are_commit_resolvable(finalize_reasons):
-        return _READY_PROMPTS["finalize"]
+        return _FINALIZE_READY_PROMPT
     return None
+
+
+def _review_cell_ready_prompt(
+    *,
+    reason: str,
+    review_cells: tuple[_ReadyReviewCell, ...],
+    findings: tuple[_ReadyFinding, ...],
+    state: CellState,
+) -> str:
+    target_cells = tuple(cell for cell in review_cells if cell.state == state.value)
+    target_file = _first_file_path_from_cells(target_cells)
+    return _build_file_scoped_ready_prompt(
+        reason=reason,
+        file_path=target_file,
+        review_cells=tuple(cell for cell in review_cells if cell.file_path == target_file),
+        findings=tuple(finding for finding in findings if finding.file_path == target_file),
+    )
+
+
+def _finding_ready_prompt(
+    state: FindingState,
+    review_cells: tuple[_ReadyReviewCell, ...],
+    findings: tuple[_ReadyFinding, ...],
+) -> str:
+    target_findings = tuple(finding for finding in findings if finding.state == state.value)
+    target_file = _first_file_path_from_findings(target_findings)
+    return _build_file_scoped_ready_prompt(
+        reason=state.value,
+        file_path=target_file,
+        review_cells=tuple(cell for cell in review_cells if cell.file_path == target_file),
+        findings=tuple(finding for finding in findings if finding.file_path == target_file),
+    )
+
+
+def _first_file_path_from_cells(cells: tuple[_ReadyReviewCell, ...]) -> str:
+    if not cells:
+        raise RuntimeError("ready prompt requested review cells but none were actionable")
+    return min(cell.file_path for cell in cells)
+
+
+def _first_file_path_from_findings(findings: tuple[_ReadyFinding, ...]) -> str:
+    if not findings:
+        raise RuntimeError("ready prompt requested findings but none were actionable")
+    return min(finding.file_path for finding in findings)
+
+
+def _build_file_scoped_ready_prompt(
+    *,
+    reason: str,
+    file_path: str,
+    review_cells: tuple[_ReadyReviewCell, ...],
+    findings: tuple[_ReadyFinding, ...],
+) -> str:
+    lines = [
+        READY_PROMPT_PREFIX,
+        "",
+        "## Target file",
+        f"file_path: {file_path}",
+        f"reason: {_READY_REASON_LABELS[reason]}",
+        "Scope: work only on this file_path. Other files are out of scope for this agent run.",
+        "You may inspect related files for context, but do not triage, fix, or mark other files.",
+        "",
+        "## Required workflow for this file",
+        "1. triage: inspect the review cells and findings listed below for this file.",
+        "2. fix if needed: make only the changes needed for confirmed issues in this file.",
+        "3. mark: record the result with review-gauntlet commands for the listed IDs.",
+        "",
+        "## Completion condition",
+        "Stop when this target file has no pending/stale cells and no actionable "
+        "findings listed below.",
+        "Do not continue into another file in this invocation.",
+        "",
+        "## Review cells for this file",
+        *_ready_review_cell_lines(review_cells),
+        "",
+        "## Findings for this file",
+        *_ready_finding_lines(findings),
+    ]
+    return "\n".join(lines)
+
+
+def _ready_review_cell_lines(cells: tuple[_ReadyReviewCell, ...]) -> list[str]:
+    if not cells:
+        return ["- none"]
+    return [
+        "- "
+        f"cell_id: {cell.cell_id}; state: {cell.state}; rule_id: {cell.rule_id}; "
+        f"slice_id: {cell.slice_id}; content_digest: {cell.content_digest}"
+        for cell in sorted(cells, key=lambda cell: (cell.state, cell.rule_id, cell.cell_id))
+    ]
+
+
+def _ready_finding_lines(findings: tuple[_ReadyFinding, ...]) -> list[str]:
+    actionable = tuple(
+        finding
+        for finding in findings
+        if FindingState(finding.state) not in _terminal_finding_states()
+    )
+    if not actionable:
+        return ["- none"]
+    return [
+        "- "
+        f"finding_id: {finding.finding_id}; state: {finding.state}; rule_id: {finding.rule_id}; "
+        f"latest_cell_id: {finding.latest_cell_id or 'none'}; "
+        f"line_range: {_line_range_text(finding)}; content: {_summarize_text(finding.content)}"
+        for finding in sorted(actionable, key=lambda finding: (finding.state, finding.finding_id))
+    ]
+
+
+def _line_range_text(finding: _ReadyFinding) -> str:
+    if finding.imprecise or finding.start_line < 1 or finding.end_line < finding.start_line:
+        return "imprecise"
+    return f"{finding.start_line}-{finding.end_line}"
+
+
+def _ready_review_cells(
+    store: SessionStore, session_id: str, root: Path
+) -> tuple[_ReadyReviewCell, ...]:
+    metadata = store.session_metadata(session_id)
+    target = TargetSpec.model_validate(metadata["target"])
+    current_cells = {
+        cell.id: cell
+        for cell in cells_from_plan(_build_target_plan(root, target), file_digests(root))
+    }
+    fixed_pending_paths = store.fixed_pending_paths(session_id)
+    rows = {str(row["cell_id"]): row for row in store.list_cells(session_id)}
+    ready_cells: list[_ReadyReviewCell] = []
+    for cell_id, current_cell in current_cells.items():
+        row = rows.get(cell_id)
+        state = CellState.PENDING.value
+        if row is not None:
+            state = str(row["state"])
+            if (
+                row["content_digest"] != current_cell.content_digest
+                and current_cell.file_path not in fixed_pending_paths
+            ):
+                state = CellState.STALE.value
+        ready_cells.append(
+            _ReadyReviewCell(
+                cell_id=cell_id,
+                file_path=current_cell.file_path,
+                state=state,
+                rule_id=current_cell.rule_id,
+                slice_id=current_cell.slice_id,
+                content_digest=current_cell.content_digest,
+            )
+        )
+    return tuple(sorted(ready_cells, key=lambda cell: (cell.file_path, cell.rule_id, cell.cell_id)))
+
+
+def _ready_findings(store: SessionStore, session_id: str) -> tuple[_ReadyFinding, ...]:
+    with store.connect() as conn:
+        rows = conn.execute(
+            """
+            select
+              f.finding_id,
+              f.path,
+              f.state,
+              f.rule_id,
+              f.content,
+              coalesce(o.cell_id, '') as latest_cell_id,
+              coalesce(o.start_line, 0) as start_line,
+              coalesce(o.end_line, 0) as end_line,
+              coalesce(o.imprecise, 1) as imprecise
+            from findings f
+            left join (
+              select fo.*
+              from finding_occurrences fo
+              join (
+                select finding_id, max(occurrence_id) as occurrence_id
+                from finding_occurrences
+                group by finding_id
+              ) latest
+                on latest.finding_id = fo.finding_id
+               and latest.occurrence_id = fo.occurrence_id
+            ) o on o.finding_id = f.finding_id
+            where f.session_id = ?
+            """,
+            (session_id,),
+        ).fetchall()
+    findings = [
+        _ReadyFinding(
+            finding_id=str(row["finding_id"]),
+            file_path=str(row["path"]),
+            state=str(row["state"]),
+            rule_id=str(row["rule_id"]),
+            content=str(row["content"]),
+            latest_cell_id=str(row["latest_cell_id"]) or None,
+            start_line=int(row["start_line"]),
+            end_line=int(row["end_line"]),
+            imprecise=bool(row["imprecise"]),
+        )
+        for row in rows
+    ]
+    return tuple(sorted(findings, key=lambda finding: (finding.file_path, finding.finding_id)))
+
+
+def _summarize_text(value: str, *, limit: int = 120) -> str:
+    text = " ".join(value.split())
+    if len(text) <= limit:
+        return text
+    return text[: limit - 1] + "…"
 
 
 _TARGET_DIGEST_DRIFT_REASON = "target digest has changed since the last review run"

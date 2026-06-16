@@ -4,6 +4,7 @@ import json
 import threading
 from datetime import UTC, datetime, timedelta, tzinfo
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -355,7 +356,7 @@ def test_run_controller_attempts_checkpoint_commit_after_finalization(
     result = controller.run()
 
     assert calls == [(tmp_path, "RGS-test", (".review-gauntlet/checkpoints/latest/status.json",))]
-    cc = result["checkpoint_commit"]
+    cc = cast(dict[str, object], result["checkpoint_commit"])
     assert cc["checkpoint_commit_attempted"] is True
     assert cc["checkpoint_committed"] is True
     assert cc["checkpoint_commit"] == "abc123"
