@@ -1,0 +1,447 @@
+{
+  "checkpoint_id": "RGC-6b6b8d97dd28-RGS-61e90e599155",
+  "findings": [
+    {
+      "checkpoint_id": "RGC-6b6b8d97dd28-RGS-61e90e599155",
+      "content": "The `_finding_states` function bypasses the `SessionStore` abstraction and directly constructs and executes SQL queries against the database. This breaks the data-access encapsulation that the rest of the CLI maintains (using `store.connect()` inline instead of a dedicated store method). This makes the query harder to maintain and test, and couples the CLI layer to the database schema.",
+      "finding_id": "RGF-0609",
+      "fingerprint": "923490b13c57bb49196b83ad5740316f11ca8d32edb825bfa8a26c30c1186df8",
+      "latest_occurrence": {
+        "cell_id": "RGC-6cefdd41be393570",
+        "end_line": 1163,
+        "finding_id": "RGF-0609",
+        "imprecise": 0,
+        "occurrence_id": 609,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 221,
+        "start_line": 1156
+      },
+      "metadata": "{\"fingerprint\":\"923490b13c57bb49196b83ad5740316f11ca8d32edb825bfa8a26c30c1186df8\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"data-validation\",\"content\":\"The `_finding_states` function bypasses the `SessionStore` abstraction and directly constructs and executes SQL queries against the database. This breaks the data-access encapsulation that the rest of the CLI maintains (using `store.connect()` inline instead of a dedicated store method). This makes the query harder to maintain and test, and couples the CLI layer to the database schema.\",\"suggestion_code\":\"\",\"existing_code\":\"    placeholders = \\\",\\\".join(\\\"?\\\" for _ in finding_ids)\\n    query = (\\n        \\\"select finding_id, state from findings \\\"\\n        f\\\"where session_id = ? and finding_id in ({placeholders})\\\"\\n    )\\n    with store.connect() as conn:\\n        rows = conn.execute(query, (session_id, *sorted(finding_ids))).fetchall()\\n    return {str(row[\\\"finding_id\\\"]): FindingState(str(row[\\\"state\\\"])) for row in rows}\",\"start_line\":1156,\"end_line\":1163,\"thinking\":\"Multiple functions in this file (_finding_states, _ready_findings, _findings, _expired_terminal_decision_count, _finalize, _status) all reach through store.connect() to run raw SQL. This is the most concerning instance because it constructs a dynamic IN-clause. While the parameterization is correct (using ? placeholders), this pattern should ideally be encapsulated in the SessionStore class for consistency and maintainability.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-61e90e599155",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-6b6b8d97dd28-RGS-61e90e599155",
+      "content": "The `_cmd_mark` function does not call `store.active_session_id()` before operating, unlike every other session command handler (`_cmd_review`, `_cmd_verify_fixes`, `_status`, `_findings`, etc.). If no active session exists, the error will surface as an opaque failure from `store.mark_finding` rather than a clear 'no active session' message. This is an inconsistency that could produce confusing error messages.",
+      "finding_id": "RGF-0610",
+      "fingerprint": "6f8c18bf214ce01e45807c6d7d8033159a2c9d646cba0d2d8bd79a192488b3c4",
+      "latest_occurrence": {
+        "cell_id": "RGC-6cefdd41be393570",
+        "end_line": 2092,
+        "finding_id": "RGF-0610",
+        "imprecise": 0,
+        "occurrence_id": 610,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 221,
+        "start_line": 2070
+      },
+      "metadata": "{\"fingerprint\":\"6f8c18bf214ce01e45807c6d7d8033159a2c9d646cba0d2d8bd79a192488b3c4\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"data-validation\",\"content\":\"The `_cmd_mark` function does not call `store.active_session_id()` before operating, unlike every other session command handler (`_cmd_review`, `_cmd_verify_fixes`, `_status`, `_findings`, etc.). If no active session exists, the error will surface as an opaque failure from `store.mark_finding` rather than a clear 'no active session' message. This is an inconsistency that could produce confusing error messages.\",\"suggestion_code\":\"def _cmd_mark(args: argparse.Namespace, store: SessionStore) -> None:\\n    store.active_session_id()\\n    metadata_states = {\\\"accepted-risk\\\", \\\"waived\\\"}\\n    if args.until and args.state not in metadata_states:\\n        raise ValueError(\\\"mark --until is only valid for waived or accepted-risk findings\\\")\",\"existing_code\":\"def _cmd_mark(args: argparse.Namespace, store: SessionStore) -> None:\\n    metadata_states = {\\\"accepted-risk\\\", \\\"waived\\\"}\\n    if args.until and args.state not in metadata_states:\\n        raise ValueError(\\\"mark --until is only valid for waived or accepted-risk findings\\\")\",\"start_line\":2070,\"end_line\":2092,\"thinking\":\"Every other session-scoped command handler calls store.active_session_id() to verify an active session exists before proceeding. _cmd_mark skips this step. If mark_finding doesn't internally validate the session, this could lead to confusing errors or silent failures when no session is active.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-61e90e599155",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-6b6b8d97dd28-RGS-61e90e599155",
+      "content": "The `_expand_session_template` function uses a null-byte sentinel (`\\x00REVIEW_GAUNTLET_LITERAL_BRACE\\x00`) to protect escaped braces during template expansion. If the input `value` (sourced from config file fields like `adapter.command`, `adapter.args`, or `adapter.env`) ever contains this sentinel string, the replacement logic will corrupt the output silently. Consider using a more robust approach such as iterating character-by-character or using a regex that distinguishes `{{`/`}}` from `{name}` in a single pass.",
+      "finding_id": "RGF-0611",
+      "fingerprint": "63cdd1908f35fcbebb80eb1555e510691f5de180303ac59501398cb5632de3aa",
+      "latest_occurrence": {
+        "cell_id": "RGC-6cefdd41be393570",
+        "end_line": 2024,
+        "finding_id": "RGF-0611",
+        "imprecise": 0,
+        "occurrence_id": 611,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 221,
+        "start_line": 2010
+      },
+      "metadata": "{\"fingerprint\":\"63cdd1908f35fcbebb80eb1555e510691f5de180303ac59501398cb5632de3aa\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"data-validation\",\"content\":\"The `_expand_session_template` function uses a null-byte sentinel (`\\\\x00REVIEW_GAUNTLET_LITERAL_BRACE\\\\x00`) to protect escaped braces during template expansion. If the input `value` (sourced from config file fields like `adapter.command`, `adapter.args`, or `adapter.env`) ever contains this sentinel string, the replacement logic will corrupt the output silently. Consider using a more robust approach such as iterating character-by-character or using a regex that distinguishes `{{`/`}}` from `{name}` in a single pass.\",\"suggestion_code\":\"\",\"existing_code\":\"def _expand_session_template(value: str, variables: dict[str, str]) -> str:\\n    placeholder = \\\"\\\\x00REVIEW_GAUNTLET_LITERAL_BRACE\\\\x00\\\"\\n    protected = value.replace(\\\"{{\\\", placeholder + \\\"OPEN\\\").replace(\\\"}}\\\", placeholder + \\\"CLOSE\\\")\\n\\n    def replace(match: re.Match[str]) -> str:\\n        name = match.group(1)\\n        if name not in _SESSION_TEMPLATE_VARIABLES:\\n            raise ValueError(\\n                f\\\"template variable {{{name}}} is not available for run; supported variables: \\\"\\n                + \\\", \\\".join(f\\\"{{{item}}}\\\" for item in sorted(_SESSION_TEMPLATE_VARIABLES))\\n            )\\n        return variables[name]\\n\\n    expanded = TEMPLATE_PATTERN.sub(replace, protected)\\n    return expanded.replace(placeholder + \\\"OPEN\\\", \\\"{\\\").replace(placeholder + \\\"CLOSE\\\", \\\"}\\\")\",\"start_line\":2010,\"end_line\":2024,\"thinking\":\"Null-byte sentinels are a common trick but they rely on the assumption that the input never contains the sentinel. Config files are user-editable, so a contrived but possible config value containing \\\\x00 would silently break template expansion. The risk is low in practice but worth flagging for a data-validation review.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-61e90e599155",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-6b6b8d97dd28-RGS-61e90e599155",
+      "content": "The `_agent_output_tail` function interleaves stdout and stderr lines by alternating between the two streams (one stdout line, one stderr line, repeat). This produces an arbitrary ordering that does not reflect the actual temporal order of output. For the 'tail' use case this could mislead users or agents inspecting the activity log, making it appear that stdout and stderr events happened in an alternating pattern when they did not.",
+      "finding_id": "RGF-0612",
+      "fingerprint": "a5912473e1b12ca274eca24d26ae9a3cd965f279b8acb7bc7b31f8326a7ce2c7",
+      "latest_occurrence": {
+        "cell_id": "RGC-6cefdd41be393570",
+        "end_line": 2007,
+        "finding_id": "RGF-0612",
+        "imprecise": 0,
+        "occurrence_id": 612,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 221,
+        "start_line": 1993
+      },
+      "metadata": "{\"fingerprint\":\"a5912473e1b12ca274eca24d26ae9a3cd965f279b8acb7bc7b31f8326a7ce2c7\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"data-validation\",\"content\":\"The `_agent_output_tail` function interleaves stdout and stderr lines by alternating between the two streams (one stdout line, one stderr line, repeat). This produces an arbitrary ordering that does not reflect the actual temporal order of output. For the 'tail' use case this could mislead users or agents inspecting the activity log, making it appear that stdout and stderr events happened in an alternating pattern when they did not.\",\"suggestion_code\":\"\",\"existing_code\":\"    while i < len(stdout_lines) or j < len(stderr_lines):\\n        if i < len(stdout_lines):\\n            entries.append(AgentOutputEntry(\\\"stdout\\\", stdout_lines[i]))\\n            i += 1\\n        if j < len(stderr_lines):\\n            entries.append(AgentOutputEntry(\\\"stderr\\\", stderr_lines[j]))\\n            j += 1\\n    return tuple(entries[-limit:])\",\"start_line\":1993,\"end_line\":2007,\"thinking\":\"The interleaving strategy is a best-effort approximation since true temporal ordering is lost when reading from separate pipes. However, the current round-robin approach could be misleading. A simpler approach of appending all stdout then all stderr (or vice versa) would at least be honest about the lack of ordering information, though neither is perfect.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-61e90e599155",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-6b6b8d97dd28-RGS-61e90e599155",
+      "content": "Template expansion uses null-byte placeholders that could be injected through variable values. The `prompt` variable (which contains user-facing finding content from the database) is substituted into the protected string at line 2023, and then placeholder-to-brace reversal happens at line 2024. If a finding's content contained the literal placeholder string `\\x00REVIEW_GAUNTLET_LITERAL_BRACE\\x00OPEN`, it would be converted back to `{` in the final output, potentially corrupting the expanded command. Consider sanitizing variable values by stripping null bytes before substitution.",
+      "finding_id": "RGF-0613",
+      "fingerprint": "2a26b3fe6e9ea50f594b6ca8aacd37332ed923c7899bd64bd29f822bafebd5e2",
+      "latest_occurrence": {
+        "cell_id": "RGC-7d47131d23a5f0ce",
+        "end_line": 2024,
+        "finding_id": "RGF-0613",
+        "imprecise": 0,
+        "occurrence_id": 613,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 221,
+        "start_line": 2010
+      },
+      "metadata": "{\"fingerprint\":\"2a26b3fe6e9ea50f594b6ca8aacd37332ed923c7899bd64bd29f822bafebd5e2\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"test-evidence\",\"content\":\"Template expansion uses null-byte placeholders that could be injected through variable values. The `prompt` variable (which contains user-facing finding content from the database) is substituted into the protected string at line 2023, and then placeholder-to-brace reversal happens at line 2024. If a finding's content contained the literal placeholder string `\\\\x00REVIEW_GAUNTLET_LITERAL_BRACE\\\\x00OPEN`, it would be converted back to `{` in the final output, potentially corrupting the expanded command. Consider sanitizing variable values by stripping null bytes before substitution.\",\"suggestion_code\":\"def _expand_session_template(value: str, variables: dict[str, str]) -> str:\\n    placeholder = \\\"\\\\x00REVIEW_GAUNTLET_LITERAL_BRACE\\\\x00\\\"\\n    protected = value.replace(\\\"{{\\\", placeholder + \\\"OPEN\\\").replace(\\\"}}\\\", placeholder + \\\"CLOSE\\\")\\n\\n    def replace(match: re.Match[str]) -> str:\\n        name = match.group(1)\\n        if name not in _SESSION_TEMPLATE_VARIABLES:\\n            raise ValueError(\\n                f\\\"template variable {{{name}}} is not available for run; supported variables: \\\"\\n                + \\\", \\\".join(f\\\"{{{item}}}\\\" for item in sorted(_SESSION_TEMPLATE_VARIABLES))\\n            )\\n        return variables[name].replace(\\\"\\\\x00\\\", \\\"\\\")\\n\\n    expanded = TEMPLATE_PATTERN.sub(replace, protected)\\n    return expanded.replace(placeholder + \\\"OPEN\\\", \\\"{\\\").replace(placeholder + \\\"CLOSE\\\", \\\"}\\\")\",\"existing_code\":\"def _expand_session_template(value: str, variables: dict[str, str]) -> str:\\n    placeholder = \\\"\\\\x00REVIEW_GAUNTLET_LITERAL_BRACE\\\\x00\\\"\\n    protected = value.replace(\\\"{{\\\", placeholder + \\\"OPEN\\\").replace(\\\"}}\\\", placeholder + \\\"CLOSE\\\")\\n\\n    def replace(match: re.Match[str]) -> str:\\n        name = match.group(1)\\n        if name not in _SESSION_TEMPLATE_VARIABLES:\\n            raise ValueError(\\n                f\\\"template variable {{{name}}} is not available for run; supported variables: \\\"\\n                + \\\", \\\".join(f\\\"{{{item}}}\\\" for item in sorted(_SESSION_TEMPLATE_VARIABLES))\\n            )\\n        return variables[name]\\n\\n    expanded = TEMPLATE_PATTERN.sub(replace, protected)\\n    return expanded.replace(placeholder + \\\"OPEN\\\", \\\"{\\\").replace(placeholder + \\\"CLOSE\\\", \\\"}\\\")\",\"start_line\":2010,\"end_line\":2024,\"thinking\":\"The template expansion mechanism uses null-byte sentinels to protect literal braces. Variable values are substituted between the protect and unprotect steps. If a variable value (especially `prompt`, which contains DB-sourced finding content) contains the sentinel string, the unprotect step would incorrectly convert it to a brace character. Stripping null bytes from variable values before substitution eliminates this vector.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-61e90e599155",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-6b6b8d97dd28-RGS-61e90e599155",
+      "content": "`_finding_states` constructs and executes raw SQL directly in the CLI layer, bypassing the `SessionStore` abstraction that all other database access uses. This couples the CLI to the DB schema and makes it harder to test or refactor the store independently.",
+      "finding_id": "RGF-0614",
+      "fingerprint": "a146d058e37492f8ea38cae32975ac23a8b256a625bd23d0e6923bb4764c5f5e",
+      "latest_occurrence": {
+        "cell_id": "RGC-7d47131d23a5f0ce",
+        "end_line": 1163,
+        "finding_id": "RGF-0614",
+        "imprecise": 0,
+        "occurrence_id": 614,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 221,
+        "start_line": 1151
+      },
+      "metadata": "{\"fingerprint\":\"a146d058e37492f8ea38cae32975ac23a8b256a625bd23d0e6923bb4764c5f5e\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"test-evidence\",\"content\":\"`_finding_states` constructs and executes raw SQL directly in the CLI layer, bypassing the `SessionStore` abstraction that all other database access uses. This couples the CLI to the DB schema and makes it harder to test or refactor the store independently.\",\"suggestion_code\":\"\",\"existing_code\":\"def _finding_states(\\n    store: SessionStore, session_id: str, finding_ids: set[str]\\n) -> dict[str, FindingState]:\\n    if not finding_ids:\\n        return {}\\n    placeholders = \\\",\\\".join(\\\"?\\\" for _ in finding_ids)\\n    query = (\\n        \\\"select finding_id, state from findings \\\"\\n        f\\\"where session_id = ? and finding_id in ({placeholders})\\\"\\n    )\\n    with store.connect() as conn:\\n        rows = conn.execute(query, (session_id, *sorted(finding_ids))).fetchall()\\n    return {str(row[\\\"finding_id\\\"]): FindingState(str(row[\\\"state\\\"])) for row in rows}\",\"start_line\":1151,\"end_line\":1163,\"thinking\":\"Multiple places in cli.py use `store.connect()` to run raw SQL (lines 1161, 1380-1385, 1594-1621, 2102-2111, 2143-2167, 2343-2347, 2429-2453), but `_finding_states` is unique in that it builds a dynamic SQL query with f-string interpolation for the IN clause. While safe here (placeholders are literal '?' strings), this pattern is fragile and inconsistent with the store abstraction boundary. This query should be a method on SessionStore.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-61e90e599155",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-6b6b8d97dd28-RGS-61e90e599155",
+      "content": "After a successful `process.wait()`, both stream-reader threads are joined with a 1-second timeout. If either thread hasn't finished reading (e.g., large buffered output), the join silently returns without raising, and the subsequent `output_lock` block reads whatever was captured so far \u2014 silently truncating output. Consider joining without a timeout on the success path, or at least logging when a join times out.",
+      "finding_id": "RGF-0615",
+      "fingerprint": "5e4cc48d70fc2e81196ac5c3b5c905af471e2adb8137ae6df66a0ceaa96ebc0b",
+      "latest_occurrence": {
+        "cell_id": "RGC-7d47131d23a5f0ce",
+        "end_line": 1933,
+        "finding_id": "RGF-0615",
+        "imprecise": 0,
+        "occurrence_id": 615,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 221,
+        "start_line": 1929
+      },
+      "metadata": "{\"fingerprint\":\"5e4cc48d70fc2e81196ac5c3b5c905af471e2adb8137ae6df66a0ceaa96ebc0b\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"test-evidence\",\"content\":\"After a successful `process.wait()`, both stream-reader threads are joined with a 1-second timeout. If either thread hasn't finished reading (e.g., large buffered output), the join silently returns without raising, and the subsequent `output_lock` block reads whatever was captured so far \u2014 silently truncating output. Consider joining without a timeout on the success path, or at least logging when a join times out.\",\"suggestion_code\":\"    stdout_thread.join(timeout=5.0)\\n    stderr_thread.join(timeout=5.0)\\n    with output_lock:\\n        stdout = \\\"\\\".join(stdout_lines)\\n        stderr = \\\"\\\".join(stderr_lines)\",\"existing_code\":\"    stdout_thread.join(timeout=1.0)\\n    stderr_thread.join(timeout=1.0)\\n    with output_lock:\\n        stdout = \\\"\\\".join(stdout_lines)\\n        stderr = \\\"\\\".join(stderr_lines)\",\"start_line\":1929,\"end_line\":1933,\"thinking\":\"On the normal (non-timeout, non-interrupt) path, the process has already exited so pipes should drain quickly. But 1 second may not be enough for very large output buffers. Since this is the happy path where we want complete output, a longer timeout (or no timeout) would be more robust. The timeout paths at lines 1889-1890 and 1913-1914 are fine with short timeouts since the process was killed.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-61e90e599155",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-6b6b8d97dd28-RGS-61e90e599155",
+      "content": "Using `args._tui_rendered = True` to pass control-flow state through an argparse Namespace private attribute is fragile. This couples `_cmd_run` (which sets it) to `_run_session_command` (which reads it via `getattr`). A clearer approach would be to return a result tuple or a dataclass that carries both the result dict and the rendered flag.",
+      "finding_id": "RGF-0616",
+      "fingerprint": "f3dd5a4413669ec481b7ef671e5d60858785cde884fb2d21cdb0ffa46aee8812",
+      "latest_occurrence": {
+        "cell_id": "RGC-7d47131d23a5f0ce",
+        "end_line": 1774,
+        "finding_id": "RGF-0616",
+        "imprecise": 0,
+        "occurrence_id": 616,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 221,
+        "start_line": 1774
+      },
+      "metadata": "{\"fingerprint\":\"f3dd5a4413669ec481b7ef671e5d60858785cde884fb2d21cdb0ffa46aee8812\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"test-evidence\",\"content\":\"Using `args._tui_rendered = True` to pass control-flow state through an argparse Namespace private attribute is fragile. This couples `_cmd_run` (which sets it) to `_run_session_command` (which reads it via `getattr`). A clearer approach would be to return a result tuple or a dataclass that carries both the result dict and the rendered flag.\",\"suggestion_code\":\"\",\"existing_code\":\"                args._tui_rendered = True\",\"start_line\":1774,\"end_line\":1774,\"thinking\":\"The TUI rendering flag is set inside _cmd_run by mutating the args namespace, then read back in _run_session_command at line 777. This is an implicit side channel that makes the control flow hard to follow. A more explicit approach would be to return a named tuple or dataclass from _cmd_run that includes both the result and whether the TUI already rendered it.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-61e90e599155",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-6b6b8d97dd28-RGS-61e90e599155",
+      "content": "The `_finding_states` function bypasses the `SessionStore` abstraction by directly constructing and executing raw SQL via `store.connect()`. Every other data access pattern in this file goes through `SessionStore` methods. This breaks encapsulation \u2014 if the schema changes, this function will silently break while store methods get updated. Move this query into a `SessionStore` method to keep the data access layer consistent.",
+      "finding_id": "RGF-0617",
+      "fingerprint": "8a42867ca9c8971712bfe562deb9a70eb6460419be3715be87a98d06bc55b958",
+      "latest_occurrence": {
+        "cell_id": "RGC-98d51e4d6441e1d7",
+        "end_line": 1163,
+        "finding_id": "RGF-0617",
+        "imprecise": 0,
+        "occurrence_id": 617,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 221,
+        "start_line": 1151
+      },
+      "metadata": "{\"fingerprint\":\"8a42867ca9c8971712bfe562deb9a70eb6460419be3715be87a98d06bc55b958\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"cli-contract\",\"content\":\"The `_finding_states` function bypasses the `SessionStore` abstraction by directly constructing and executing raw SQL via `store.connect()`. Every other data access pattern in this file goes through `SessionStore` methods. This breaks encapsulation \u2014 if the schema changes, this function will silently break while store methods get updated. Move this query into a `SessionStore` method to keep the data access layer consistent.\",\"suggestion_code\":\"\",\"existing_code\":\"def _finding_states(\\n    store: SessionStore, session_id: str, finding_ids: set[str]\\n) -> dict[str, FindingState]:\\n    if not finding_ids:\\n        return {}\\n    placeholders = \\\",\\\".join(\\\"?\\\" for _ in finding_ids)\\n    query = (\\n        \\\"select finding_id, state from findings \\\"\\n        f\\\"where session_id = ? and finding_id in ({placeholders})\\\"\\n    )\\n    with store.connect() as conn:\\n        rows = conn.execute(query, (session_id, *sorted(finding_ids))).fetchall()\\n    return {str(row[\\\"finding_id\\\"]): FindingState(str(row[\\\"state\\\"])) for row in rows}\",\"start_line\":1151,\"end_line\":1163,\"thinking\":\"This function constructs raw SQL with dynamic placeholder generation and accesses the database directly through store.connect(). While the parameterized query avoids SQL injection, it breaks the layering convention used everywhere else in this file where SessionStore methods encapsulate queries. This is a maintainability concern \u2014 schema changes or store refactors won't automatically propagate here.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "cli-contract",
+      "session_id": "RGS-61e90e599155",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-6b6b8d97dd28-RGS-61e90e599155",
+      "content": "`progress.cell_start(cell)` is emitted for every cell before entering the `as_completed` loop. With `max_workers` set well below the cell count, most cells are only queued \u2014 not actually running \u2014 when `cell_start` fires. This makes progress reporting misleading: a consumer sees N 'start' events instantly, then a long pause. Consider moving `cell_start` to just before `future.result()` in the `as_completed` loop, or adding a separate `cell_queued` event to distinguish queued from running.",
+      "finding_id": "RGF-0618",
+      "fingerprint": "ef4ced17ef66c838881d43385f2a7ff7e8d96a3d34812ea88916eab520285a49",
+      "latest_occurrence": {
+        "cell_id": "RGC-98d51e4d6441e1d7",
+        "end_line": 1244,
+        "finding_id": "RGF-0618",
+        "imprecise": 0,
+        "occurrence_id": 618,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 221,
+        "start_line": 1241
+      },
+      "metadata": "{\"fingerprint\":\"ef4ced17ef66c838881d43385f2a7ff7e8d96a3d34812ea88916eab520285a49\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"cli-contract\",\"content\":\"`progress.cell_start(cell)` is emitted for every cell before entering the `as_completed` loop. With `max_workers` set well below the cell count, most cells are only queued \u2014 not actually running \u2014 when `cell_start` fires. This makes progress reporting misleading: a consumer sees N 'start' events instantly, then a long pause. Consider moving `cell_start` to just before `future.result()` in the `as_completed` loop, or adding a separate `cell_queued` event to distinguish queued from running.\",\"suggestion_code\":\"        for cell in cells:\\n            futures[executor.submit(adapter.review, cell)] = cell\\n        for future in as_completed(futures):\\n            cell = futures[future]\\n            progress.cell_start(cell)\",\"existing_code\":\"        for cell in cells:\\n            progress.cell_start(cell)\\n            futures[executor.submit(adapter.review, cell)] = cell\",\"start_line\":1241,\"end_line\":1244,\"thinking\":\"When concurrency is 8 and there are 50 cells, all 50 emit cell_start immediately, but only 8 are actually running. The remaining 42 are queued in the ThreadPoolExecutor. This creates a misleading burst of 'start' events followed by silence. The suggestion moves cell_start to just before processing the result, which is more honest about when work completes, though the ideal fix would track actual thread start vs queued.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "cli-contract",
+      "session_id": "RGS-61e90e599155",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-6b6b8d97dd28-RGS-61e90e599155",
+      "content": "After a timeout kills the subprocess, `stdout_thread.join(timeout=1.0)` can return without the thread having finished \u2014 `join()` with a timeout does not raise if the deadline expires. The code then reads `stdout_lines`/`stderr_lines` under the lock, but the reader thread may still be appending to those lists after the lock is released. The same pattern appears at lines 1913-1914 and 1929-1930. Check `thread.is_alive()` after the join and log a warning, or use a sentinel/Event to ensure the reader has fully stopped before consuming the buffers.",
+      "finding_id": "RGF-0619",
+      "fingerprint": "8d618a6a671c6e4b21558c8825bb5b536ea1acef9549f4bdd973da2148c4cab3",
+      "latest_occurrence": {
+        "cell_id": "RGC-98d51e4d6441e1d7",
+        "end_line": 1890,
+        "finding_id": "RGF-0619",
+        "imprecise": 0,
+        "occurrence_id": 619,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 221,
+        "start_line": 1889
+      },
+      "metadata": "{\"fingerprint\":\"8d618a6a671c6e4b21558c8825bb5b536ea1acef9549f4bdd973da2148c4cab3\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"cli-contract\",\"content\":\"After a timeout kills the subprocess, `stdout_thread.join(timeout=1.0)` can return without the thread having finished \u2014 `join()` with a timeout does not raise if the deadline expires. The code then reads `stdout_lines`/`stderr_lines` under the lock, but the reader thread may still be appending to those lists after the lock is released. The same pattern appears at lines 1913-1914 and 1929-1930. Check `thread.is_alive()` after the join and log a warning, or use a sentinel/Event to ensure the reader has fully stopped before consuming the buffers.\",\"suggestion_code\":\"\",\"existing_code\":\"        stdout_thread.join(timeout=1.0)\\n        stderr_thread.join(timeout=1.0)\",\"start_line\":1889,\"end_line\":1890,\"thinking\":\"When subprocess.Popen is killed after a timeout, the pipe readers may still be processing buffered data. join(timeout=1.0) returns silently even if the thread hasn't finished. The subsequent read of stdout_lines/stderr_lines under output_lock is a snapshot, but after the lock is released and the result is constructed, the reader thread could still mutate the list. In practice the pipe is usually drained quickly after kill, but this is a latent race condition.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "cli-contract",
+      "session_id": "RGS-61e90e599155",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-6b6b8d97dd28-RGS-61e90e599155",
+      "content": "The result-processing loop (iterate cells, check outcome, normalize comments, upsert findings, refresh digest, mark reviewed) is nearly identical between `_cmd_review` (lines 937-963) and `_cmd_verify_fixes` (lines 1054-1080). The only difference is the `stale_to_pending` argument to `refresh_file_digest`. Extracting a shared helper would eliminate ~25 duplicated lines and ensure future changes (e.g., new post-review bookkeeping) apply consistently to both paths.",
+      "finding_id": "RGF-0620",
+      "fingerprint": "0a917c4842c2c8468c931761cd13b28285f0fabf7ec61884f1a48f912d205c64",
+      "latest_occurrence": {
+        "cell_id": "RGC-98d51e4d6441e1d7",
+        "end_line": 963,
+        "finding_id": "RGF-0620",
+        "imprecise": 0,
+        "occurrence_id": 620,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 221,
+        "start_line": 937
+      },
+      "metadata": "{\"fingerprint\":\"0a917c4842c2c8468c931761cd13b28285f0fabf7ec61884f1a48f912d205c64\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"cli-contract\",\"content\":\"The result-processing loop (iterate cells, check outcome, normalize comments, upsert findings, refresh digest, mark reviewed) is nearly identical between `_cmd_review` (lines 937-963) and `_cmd_verify_fixes` (lines 1054-1080). The only difference is the `stale_to_pending` argument to `refresh_file_digest`. Extracting a shared helper would eliminate ~25 duplicated lines and ensure future changes (e.g., new post-review bookkeeping) apply consistently to both paths.\",\"suggestion_code\":\"\",\"existing_code\":\"\",\"start_line\":937,\"end_line\":963,\"thinking\":\"The two blocks differ only in one boolean flag passed to refresh_file_digest. This duplication is a maintenance hazard \u2014 any bug fix or feature addition to one block must be manually replicated in the other, and forgetting to do so is a common source of subtle inconsistencies.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "cli-contract",
+      "session_id": "RGS-61e90e599155",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-6b6b8d97dd28-RGS-61e90e599155",
+      "content": "Mutating the argparse Namespace with a private `_tui_rendered` attribute (`args._tui_rendered = True`) to communicate state back to the caller is fragile. The consumer at line 777 uses `getattr(args, '_tui_rendered', False)` which silently defaults to False if the attribute name drifts. Consider returning a structured result from `_cmd_run` that includes a `tui_rendered` flag, or passing a mutable context object with a defined interface.",
+      "finding_id": "RGF-0621",
+      "fingerprint": "594be0feccab3c6915b08c39a96c79bcb05fc7573303bcd9ed5e83932e402636",
+      "latest_occurrence": {
+        "cell_id": "RGC-98d51e4d6441e1d7",
+        "end_line": 1774,
+        "finding_id": "RGF-0621",
+        "imprecise": 0,
+        "occurrence_id": 621,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 221,
+        "start_line": 1774
+      },
+      "metadata": "{\"fingerprint\":\"594be0feccab3c6915b08c39a96c79bcb05fc7573303bcd9ed5e83932e402636\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"cli-contract\",\"content\":\"Mutating the argparse Namespace with a private `_tui_rendered` attribute (`args._tui_rendered = True`) to communicate state back to the caller is fragile. The consumer at line 777 uses `getattr(args, '_tui_rendered', False)` which silently defaults to False if the attribute name drifts. Consider returning a structured result from `_cmd_run` that includes a `tui_rendered` flag, or passing a mutable context object with a defined interface.\",\"suggestion_code\":\"\",\"existing_code\":\"                args._tui_rendered = True\",\"start_line\":1774,\"end_line\":1774,\"thinking\":\"Using private attributes on argparse.Namespace as a side-channel for control flow is an anti-pattern. It's invisible to type checkers, undiscoverable, and will break silently if the attribute name is misspelled on either side. A named return field or a small context dataclass would make this coupling explicit.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "cli-contract",
+      "session_id": "RGS-61e90e599155",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-6b6b8d97dd28-RGS-61e90e599155",
+      "content": "The `_cmd_mark` function does not validate that `args.finding_id` corresponds to an existing finding before calling `store.mark_finding`. If the finding does not exist, the behavior depends entirely on the store implementation \u2014 it could silently succeed (updating zero rows), raise an opaque database error, or create orphaned state. A pre-check or explicit error from `mark_finding` when the finding is absent would give the user a clear, actionable error message.",
+      "finding_id": "RGF-0622",
+      "fingerprint": "adb5a3e0c93a7d0024bb2757b81c9f528d10eea8fae886123e8cb8d46ad0bdd9",
+      "latest_occurrence": {
+        "cell_id": "RGC-6cefdd41be393570",
+        "end_line": 2093,
+        "finding_id": "RGF-0622",
+        "imprecise": 0,
+        "occurrence_id": 622,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 222,
+        "start_line": 2070
+      },
+      "metadata": "{\"fingerprint\":\"adb5a3e0c93a7d0024bb2757b81c9f528d10eea8fae886123e8cb8d46ad0bdd9\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"data-validation\",\"content\":\"The `_cmd_mark` function does not validate that `args.finding_id` corresponds to an existing finding before calling `store.mark_finding`. If the finding does not exist, the behavior depends entirely on the store implementation \u2014 it could silently succeed (updating zero rows), raise an opaque database error, or create orphaned state. A pre-check or explicit error from `mark_finding` when the finding is absent would give the user a clear, actionable error message.\",\"suggestion_code\":\"    try:\\n        store.mark_finding(args.finding_id, mapping[args.state], args.reason, metadata)\\n    except LookupError as exc:\\n        fail(str(exc), code=1)\",\"existing_code\":\"    store.mark_finding(args.finding_id, mapping[args.state], args.reason, metadata)\",\"start_line\":2070,\"end_line\":2093,\"thinking\":\"The finding_id comes directly from CLI user input (args.finding_id) and is passed to store.mark_finding without any existence check. If the store's mark_finding does not raise on a missing finding, the user gets silent success for a no-op. If it does raise, the exception type and message may not be user-friendly. Either way, explicit validation at the CLI boundary would improve the experience.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-61e90e599155",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-6b6b8d97dd28-RGS-61e90e599155",
+      "content": "The `_findings` function returns `dict(row)` directly from the database query result (line 2171), exposing raw database column names and values \u2014 including internal fields like `session_id`, `fingerprint`, and `metadata` \u2014 in the CLI output without sanitization or projection. This leaks internal schema details to the user-facing output and makes the output contract fragile: any schema migration changes what users see. Consider projecting to a defined set of output fields.",
+      "finding_id": "RGF-0623",
+      "fingerprint": "899053bd0dba3510912378dd21041cba4d31f1f68ff4bd3977543b7eac06191a",
+      "latest_occurrence": {
+        "cell_id": "RGC-6cefdd41be393570",
+        "end_line": 2186,
+        "finding_id": "RGF-0623",
+        "imprecise": 0,
+        "occurrence_id": 623,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 222,
+        "start_line": 2143
+      },
+      "metadata": "{\"fingerprint\":\"899053bd0dba3510912378dd21041cba4d31f1f68ff4bd3977543b7eac06191a\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"data-validation\",\"content\":\"The `_findings` function returns `dict(row)` directly from the database query result (line 2171), exposing raw database column names and values \u2014 including internal fields like `session_id`, `fingerprint`, and `metadata` \u2014 in the CLI output without sanitization or projection. This leaks internal schema details to the user-facing output and makes the output contract fragile: any schema migration changes what users see. Consider projecting to a defined set of output fields.\",\"suggestion_code\":\"    _FINDING_OUTPUT_KEYS = (\\n        \\\"finding_id\\\", \\\"path\\\", \\\"state\\\", \\\"rule_id\\\", \\\"content\\\",\\n        \\\"start_line\\\", \\\"end_line\\\", \\\"imprecise\\\", \\\"reason\\\",\\n    )\\n    findings = sorted(\\n        (\\n            {k: v for k, v in dict(row).items() if k in _FINDING_OUTPUT_KEYS}\\n            for row in rows\\n            if (include_all or row[\\\"state\\\"] not in terminal)\\n            and (not requested_states or row[\\\"state\\\"] in requested_states)\\n            and _matches_finding_path_filters(str(row[\\\"path\\\"]), normalized_path_filters)\\n        ),\\n        key=_finding_sort_key,\\n    )\",\"existing_code\":\"    findings = sorted(\\n        (\\n            dict(row)\\n            for row in rows\\n            if (include_all or row[\\\"state\\\"] not in terminal)\\n            and (not requested_states or row[\\\"state\\\"] in requested_states)\\n            and _matches_finding_path_filters(str(row[\\\"path\\\"]), normalized_path_filters)\\n        ),\\n        key=_finding_sort_key,\\n    )\",\"start_line\":2143,\"end_line\":2186,\"thinking\":\"The SELECT query uses `f.*` which pulls all columns from the findings table. dict(row) then exposes every column \u2014 including internal ones like session_id, fingerprint, metadata \u2014 to the JSON/text output. This is a data-leakage concern and makes the output contract implicitly coupled to the DB schema.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-61e90e599155",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-6b6b8d97dd28-RGS-61e90e599155",
+      "content": "The `worktree_path` value from session metadata is used to construct a filesystem path without validating it is a relative path first. While `is_relative_to` is checked on line 2306, a malicious or corrupted `worktree_path` that is absolute (e.g., `/tmp/evil`) would still pass `is_relative_to(root)` if it happens to be under root. More critically, `root / str(git_meta[\"worktree_path\"])` when `worktree_path` is absolute silently discards `root` (Python's `Path.__truediv__` ignores the left side when the right is absolute), making the `is_relative_to` check the only guard. Consider explicitly rejecting absolute `worktree_path` values.",
+      "finding_id": "RGF-0624",
+      "fingerprint": "e7d08ed6a6eec65d5729ca363820c2912a03dc55c816ae45a75358d4cde361bc",
+      "latest_occurrence": {
+        "cell_id": "RGC-6cefdd41be393570",
+        "end_line": 2306,
+        "finding_id": "RGF-0624",
+        "imprecise": 0,
+        "occurrence_id": 624,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 222,
+        "start_line": 2304
+      },
+      "metadata": "{\"fingerprint\":\"e7d08ed6a6eec65d5729ca363820c2912a03dc55c816ae45a75358d4cde361bc\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"data-validation\",\"content\":\"The `worktree_path` value from session metadata is used to construct a filesystem path without validating it is a relative path first. While `is_relative_to` is checked on line 2306, a malicious or corrupted `worktree_path` that is absolute (e.g., `/tmp/evil`) would still pass `is_relative_to(root)` if it happens to be under root. More critically, `root / str(git_meta[\\\"worktree_path\\\"])` when `worktree_path` is absolute silently discards `root` (Python's `Path.__truediv__` ignores the left side when the right is absolute), making the `is_relative_to` check the only guard. Consider explicitly rejecting absolute `worktree_path` values.\",\"suggestion_code\":\"        git_meta = cast(dict[str, object], metadata[\\\"git_worktree\\\"])\\n        worktree_path_str = str(git_meta[\\\"worktree_path\\\"])\\n        if os.path.isabs(worktree_path_str):\\n            status[\\\"can_finalize\\\"] = False\\n            status[\\\"finalize_blockers\\\"] = [\\n                f\\\"worktree_path must be relative: {worktree_path_str}\\\"\\n            ]\\n            status[\\\"next_required_action\\\"] = \\\"resolve_finalize_blockers\\\"\\n            return status\\n        session_worktree = (root / worktree_path_str).resolve()\\n        if not session_worktree.is_relative_to(root.resolve()):\",\"existing_code\":\"        git_meta = cast(dict[str, object], metadata[\\\"git_worktree\\\"])\\n        session_worktree = (root / str(git_meta[\\\"worktree_path\\\"])).resolve()\\n        if not session_worktree.is_relative_to(root.resolve()):\",\"start_line\":2304,\"end_line\":2306,\"thinking\":\"Path(root / absolute_path) in Python silently drops root and uses only absolute_path. If worktree_path were set to an absolute path (through metadata corruption or tampering), the code would operate on an arbitrary filesystem location. The is_relative_to check partially mitigates this, but explicitly rejecting absolute paths is a stronger defense-in-depth measure for a value loaded from stored session metadata.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-61e90e599155",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-6b6b8d97dd28-RGS-61e90e599155",
+      "content": "Duplicated review-result processing logic between `_cmd_review` and `_cmd_verify_fixes` makes it easy for a bug fix in one path to be missed in the other. Both functions iterate `selected_cells`, call `_review_cell_outcome`, process comments via `normalize_ocr_comment`, call `store.upsert_finding`, `store.refresh_file_digest`, and `store.mark_cell_reviewed` in the same pattern. Extract the shared cell-result processing into a helper to ensure both paths stay in sync and can be tested through a single unit.",
+      "finding_id": "RGF-0625",
+      "fingerprint": "f25a7276c099c02a6695c8bc3b403ac5b661f93be9fa39806cd0f791e8f70827",
+      "latest_occurrence": {
+        "cell_id": "RGC-7d47131d23a5f0ce",
+        "end_line": 983,
+        "finding_id": "RGF-0625",
+        "imprecise": 0,
+        "occurrence_id": 625,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 222,
+        "start_line": 937
+      },
+      "metadata": "{\"fingerprint\":\"f25a7276c099c02a6695c8bc3b403ac5b661f93be9fa39806cd0f791e8f70827\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"test-evidence\",\"content\":\"Duplicated review-result processing logic between `_cmd_review` and `_cmd_verify_fixes` makes it easy for a bug fix in one path to be missed in the other. Both functions iterate `selected_cells`, call `_review_cell_outcome`, process comments via `normalize_ocr_comment`, call `store.upsert_finding`, `store.refresh_file_digest`, and `store.mark_cell_reviewed` in the same pattern. Extract the shared cell-result processing into a helper to ensure both paths stay in sync and can be tested through a single unit.\",\"suggestion_code\":\"\",\"existing_code\":\"    reviewed = 0\\n    finding_ids: list[str] = []\\n    seen_fingerprints: set[str] = set()\\n    evaluated_paths: set[str] = set()\\n    first_failure: tuple[ReviewCell, ReviewAdapterError] | None = None\\n    for selected in selected_cells:\\n        outcome = _review_cell_outcome(results, selected)\\n        if isinstance(outcome, ReviewAdapterError):\\n            if first_failure is None:\\n                first_failure = (selected, outcome)\\n            continue\\n        evaluated_paths.add(selected.file_path)\\n        for comment in outcome.comments:\\n            finding = normalize_ocr_comment(\\n                comment,\\n                repository_id=str(root.resolve()),\\n                base_target=json.dumps(metadata[\\\"target\\\"], sort_keys=True),\\n                rule_id=selected.rule_id,\\n                ruleset_digest=ruleset.digest,\\n            )\\n            seen_fingerprints.add(finding.fingerprint)\\n            finding_ids.append(store.upsert_finding(session_id, run_id, selected.id, finding))\\n        store.refresh_file_digest(\\n            session_id, selected.file_path, selected.content_digest, stale_to_pending=True\\n        )\\n        store.mark_cell_reviewed(session_id, selected)\\n        reviewed += 1\",\"start_line\":937,\"end_line\":983,\"thinking\":\"Lines 937-983 and 1054-1080 contain nearly identical logic for processing review cell results. The only differences are the `stale_to_pending` argument to `refresh_file_digest` (True vs False) and the post-processing after the loop. This duplication means a correctness fix in one path might not be applied to the other. A shared helper would make it testable in one place and prevent drift.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-61e90e599155",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-6b6b8d97dd28-RGS-61e90e599155",
+      "content": "The thread joins after normal subprocess completion use a 5-second timeout (lines 1929-1930). If stdout/stderr output exceeds what can be read in 5 seconds, the captured output is silently truncated \u2014 the join returns, and the code proceeds with whatever was read so far. This is especially problematic for large adapter outputs. Consider joining without a timeout for the normal (non-timeout, non-interrupt) path, or at minimum logging when a join times out so test evidence can detect truncation.",
+      "finding_id": "RGF-0626",
+      "fingerprint": "0f51b4c3cf169cc2b54f02267f42e734572764d32f2d57882de7775fba2ce603",
+      "latest_occurrence": {
+        "cell_id": "RGC-7d47131d23a5f0ce",
+        "end_line": 1930,
+        "finding_id": "RGF-0626",
+        "imprecise": 0,
+        "occurrence_id": 626,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 222,
+        "start_line": 1929
+      },
+      "metadata": "{\"fingerprint\":\"0f51b4c3cf169cc2b54f02267f42e734572764d32f2d57882de7775fba2ce603\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"test-evidence\",\"content\":\"The thread joins after normal subprocess completion use a 5-second timeout (lines 1929-1930). If stdout/stderr output exceeds what can be read in 5 seconds, the captured output is silently truncated \u2014 the join returns, and the code proceeds with whatever was read so far. This is especially problematic for large adapter outputs. Consider joining without a timeout for the normal (non-timeout, non-interrupt) path, or at minimum logging when a join times out so test evidence can detect truncation.\",\"suggestion_code\":\"    stdout_thread.join()\\n    stderr_thread.join()\",\"existing_code\":\"    stdout_thread.join(timeout=5.0)\\n    stderr_thread.join(timeout=5.0)\",\"start_line\":1929,\"end_line\":1930,\"thinking\":\"After the subprocess exits normally (process.wait() returned), the pipes are already closed on the subprocess side, so the reader threads will reach EOF and exit. The 5-second timeout is unnecessary and could cause silent data loss for large outputs. In the timeout and interrupt paths, bounded joins make sense because the subprocess was killed and we want to move on. But in the normal path, the threads will finish promptly once the pipe is drained.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-61e90e599155",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-6b6b8d97dd28-RGS-61e90e599155",
+      "content": "`_expired_terminal_decision_count` issues one query per finding to fetch the latest event metadata (N+1 pattern). With many waived/accepted-risk findings this becomes a performance bottleneck that is hard to surface in fast-running unit tests. Combine into a single query joining `findings` with `finding_events` to fetch all relevant metadata at once.",
+      "finding_id": "RGF-0627",
+      "fingerprint": "29bf30c77113bfe156339aceef68357dffc0d1b85fb3104da391142a76cd556d",
+      "latest_occurrence": {
+        "cell_id": "RGC-7d47131d23a5f0ce",
+        "end_line": 2455,
+        "finding_id": "RGF-0627",
+        "imprecise": 0,
+        "occurrence_id": 627,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 222,
+        "start_line": 2427
+      },
+      "metadata": "{\"fingerprint\":\"29bf30c77113bfe156339aceef68357dffc0d1b85fb3104da391142a76cd556d\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"test-evidence\",\"content\":\"`_expired_terminal_decision_count` issues one query per finding to fetch the latest event metadata (N+1 pattern). With many waived/accepted-risk findings this becomes a performance bottleneck that is hard to surface in fast-running unit tests. Combine into a single query joining `findings` with `finding_events` to fetch all relevant metadata at once.\",\"suggestion_code\":\"def _expired_terminal_decision_count(store: SessionStore, session_id: str) -> int:\\n    today = datetime.now(UTC).date()\\n    with store.connect() as conn:\\n        rows = conn.execute(\\n            \\\"\\\"\\\"\\n            select f.finding_id, f.state, e.metadata\\n            from findings f\\n            left join (\\n              select fe.*\\n              from finding_events fe\\n              join (\\n                select finding_id, to_state, max(event_id) as event_id\\n                from finding_events\\n                group by finding_id, to_state\\n              ) latest\\n                on latest.finding_id = fe.finding_id\\n               and latest.event_id = fe.event_id\\n            ) e on e.finding_id = f.finding_id and e.to_state = f.state\\n            where f.session_id = ? and f.state in ('waived', 'accepted_risk')\\n            \\\"\\\"\\\",\\n            (session_id,),\\n        ).fetchall()\\n        expired = 0\\n        for row in rows:\\n            if (\\n                row[\\\"metadata\\\"] is not None\\n                and _is_expired(str(row[\\\"metadata\\\"]), today)\\n            ):\\n                expired += 1\\n    return expired\",\"existing_code\":\"def _expired_terminal_decision_count(store: SessionStore, session_id: str) -> int:\\n    today = datetime.now(UTC).date()\\n    with store.connect() as conn:\\n        rows = conn.execute(\\n            \\\"\\\"\\\"\\n            select finding_id, state\\n            from findings\\n            where session_id = ? and state in ('waived', 'accepted_risk')\\n            \\\"\\\"\\\",\\n            (session_id,),\\n        ).fetchall()\\n        expired = 0\\n        for row in rows:\\n            event = conn.execute(\\n                \\\"\\\"\\\"\\n                select metadata from finding_events\\n                where finding_id = ? and to_state = ?\\n                order by event_id desc\\n                limit 1\\n                \\\"\\\"\\\",\\n                (row[\\\"finding_id\\\"], row[\\\"state\\\"]),\\n            ).fetchone()\",\"start_line\":2427,\"end_line\":2455,\"thinking\":\"The current implementation issues N+1 queries \u2014 one to list findings, then one per finding to get the latest event. This can be combined into a single query with a self-join on finding_events, matching the pattern already used elsewhere in the file (e.g., _ready_findings at line 1606-1617). The single-query version is both faster and easier to write deterministic tests for.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-61e90e599155",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-6b6b8d97dd28-RGS-61e90e599155",
+      "content": "The null-byte sanitization added to `_expand_session_template` (`.replace(\"\\x00\", \"\")`) has no corresponding unit test. The existing tests in `test_cli_helpers.py` cover basic substitution, literal braces, mixed templates, and unknown variables, but none exercise a variable value containing `\\x00`. A test should verify that null bytes injected via template variable values (e.g., a prompt containing `\\x00`) are stripped from the expanded result, confirming the security hardening works as intended.",
+      "finding_id": "RGF-0628",
+      "fingerprint": "38bd451ad22a95532b7f1eb9bb95fcca82055ab318d952319d73be96a57ce42a",
+      "latest_occurrence": {
+        "cell_id": "RGC-7d47131d23a5f0ce",
+        "end_line": 2021,
+        "finding_id": "RGF-0628",
+        "imprecise": 0,
+        "occurrence_id": 628,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 223,
+        "start_line": 2021
+      },
+      "metadata": "{\"fingerprint\":\"38bd451ad22a95532b7f1eb9bb95fcca82055ab318d952319d73be96a57ce42a\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"test-evidence\",\"content\":\"The null-byte sanitization added to `_expand_session_template` (`.replace(\\\"\\\\x00\\\", \\\"\\\")`) has no corresponding unit test. The existing tests in `test_cli_helpers.py` cover basic substitution, literal braces, mixed templates, and unknown variables, but none exercise a variable value containing `\\\\x00`. A test should verify that null bytes injected via template variable values (e.g., a prompt containing `\\\\x00`) are stripped from the expanded result, confirming the security hardening works as intended.\",\"suggestion_code\":\"        return variables[name].replace(\\\"\\\\x00\\\", \\\"\\\")\\n\\n# Add test in tests/test_cli_helpers.py:\\n# def test_expand_session_template_strips_null_bytes() -> None:\\n#     result = _expand_session_template(\\n#         \\\"{prompt}\\\", {\\\"repo_root\\\": \\\"\\\", \\\"state_dir\\\": \\\"\\\", \\\"prompt\\\": \\\"hello\\\\x00world\\\"}\\n#     )\\n#     assert result == \\\"helloworld\\\"\",\"existing_code\":\"        return variables[name].replace(\\\"\\\\x00\\\", \\\"\\\")\",\"start_line\":2021,\"end_line\":2021,\"thinking\":\"The diff adds `.replace('\\\\x00', '')` to sanitize null bytes from template variable values. This is a security-relevant change (null-byte injection can truncate strings in C-backed libraries or cause path traversal). The four existing `_expand_session_template` tests in test_cli_helpers.py do not test any variable value containing \\\\x00, so the new behavior is untested.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-61e90e599155",
+      "state": "waived"
+    },
+    {
+      "checkpoint_id": "RGC-6b6b8d97dd28-RGS-61e90e599155",
+      "content": "The thread join timeout removal (from `join(timeout=1.0)` to `join()`) on the normal-completion path has no dedicated test exercising the behavioral change. The existing test_cli_run.py tests cover interrupt/timeout scenarios but not the normal-exit thread-join behavior. While this change is arguably safer (it prevents data loss from truncated output), a test demonstrating that stdout/stderr are fully captured even when the subprocess produces output slowly after exit would document the intended contract.",
+      "finding_id": "RGF-0629",
+      "fingerprint": "3c2f980362657699fedc8a36138c9f9dfdc1d4f2fa9d9c307d42286730c55871",
+      "latest_occurrence": {
+        "cell_id": "RGC-7d47131d23a5f0ce",
+        "end_line": 1930,
+        "finding_id": "RGF-0629",
+        "imprecise": 0,
+        "occurrence_id": 629,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 223,
+        "start_line": 1929
+      },
+      "metadata": "{\"fingerprint\":\"3c2f980362657699fedc8a36138c9f9dfdc1d4f2fa9d9c307d42286730c55871\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"test-evidence\",\"content\":\"The thread join timeout removal (from `join(timeout=1.0)` to `join()`) on the normal-completion path has no dedicated test exercising the behavioral change. The existing test_cli_run.py tests cover interrupt/timeout scenarios but not the normal-exit thread-join behavior. While this change is arguably safer (it prevents data loss from truncated output), a test demonstrating that stdout/stderr are fully captured even when the subprocess produces output slowly after exit would document the intended contract.\",\"suggestion_code\":\"    stdout_thread.join()\\n    stderr_thread.join()\",\"existing_code\":\"    stdout_thread.join()\\n    stderr_thread.join()\",\"start_line\":1929,\"end_line\":1930,\"thinking\":\"The diff removes timeout=1.0 from stdout_thread.join() and stderr_thread.join() on the normal (non-timeout, non-interrupt) path. This means the main thread will now wait indefinitely for output threads to complete. The change is low-risk since the subprocess has already exited and pipes are closed, but there is no test that specifically validates the thread-join behavior on normal completion. The existing tests in test_cli_run.py test interrupt handling but not the steady-state join semantics. This is a minor test-evidence gap.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-61e90e599155",
+      "state": "waived"
+    }
+  ],
+  "schema_version": 1
+}

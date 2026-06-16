@@ -1,0 +1,256 @@
+{
+  "checkpoint_id": "RGC-6b6b8d97dd28-RGS-61e90e599155",
+  "events": [
+    {
+      "checkpoint_id": "RGC-6b6b8d97dd28-RGS-61e90e599155",
+      "created_at": "2026-06-16 22:48:07",
+      "event_id": 1129,
+      "finding_id": "RGF-0610",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Added store.active_session_id() call at the start of _cmd_mark for consistency",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-6b6b8d97dd28-RGS-61e90e599155",
+      "created_at": "2026-06-16 22:48:09",
+      "event_id": 1130,
+      "finding_id": "RGF-0613",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Sanitized variable values by stripping null bytes before substitution in _expand_session_template",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-6b6b8d97dd28-RGS-61e90e599155",
+      "created_at": "2026-06-16 22:48:09",
+      "event_id": 1131,
+      "finding_id": "RGF-0615",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Increased join timeout from 1s to 5s on the success path to prevent output truncation",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-6b6b8d97dd28-RGS-61e90e599155",
+      "created_at": "2026-06-16 22:48:19",
+      "event_id": 1132,
+      "finding_id": "RGF-0609",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Refactoring suggestion: _finding_states raw SQL is consistent with other store.connect() patterns in cli.py (lines 1380, 1594, 2102, 2143)",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-6b6b8d97dd28-RGS-61e90e599155",
+      "created_at": "2026-06-16 22:48:20",
+      "event_id": 1133,
+      "finding_id": "RGF-0611",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Config files cannot contain null bytes in practice; TOML/YAML parsers reject them",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-6b6b8d97dd28-RGS-61e90e599155",
+      "created_at": "2026-06-16 22:48:20",
+      "event_id": 1134,
+      "finding_id": "RGF-0612",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "By design: no temporal ordering available without timestamps from separate pipes; round-robin is a reasonable approximation",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-6b6b8d97dd28-RGS-61e90e599155",
+      "created_at": "2026-06-16 22:48:20",
+      "event_id": 1135,
+      "finding_id": "RGF-0614",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Refactoring suggestion: same pattern as RGF-0609; raw SQL via store.connect() is used throughout cli.py",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-6b6b8d97dd28-RGS-61e90e599155",
+      "created_at": "2026-06-16 22:48:20",
+      "event_id": 1136,
+      "finding_id": "RGF-0616",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Refactoring suggestion: args._tui_rendered pattern is local to _cmd_run/_run_session_command and works correctly",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-6b6b8d97dd28-RGS-61e90e599155",
+      "created_at": "2026-06-16 22:48:20",
+      "event_id": 1137,
+      "finding_id": "RGF-0617",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Duplicate of RGF-0609/RGF-0614: refactoring suggestion about _finding_states",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-6b6b8d97dd28-RGS-61e90e599155",
+      "created_at": "2026-06-16 22:48:20",
+      "event_id": 1138,
+      "finding_id": "RGF-0618",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Design choice: cell_start before submit provides upfront visibility; ThreadPoolExecutor handles queuing",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-6b6b8d97dd28-RGS-61e90e599155",
+      "created_at": "2026-06-16 22:48:20",
+      "event_id": 1139,
+      "finding_id": "RGF-0619",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "On timeout/kill paths, 1s join is acceptable since process is killed and pipes drain quickly; output_lock provides thread safety",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-6b6b8d97dd28-RGS-61e90e599155",
+      "created_at": "2026-06-16 22:48:20",
+      "event_id": 1140,
+      "finding_id": "RGF-0620",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Refactoring suggestion: code duplication between _cmd_review and _cmd_verify_fixes is intentional for clarity of distinct flows",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-6b6b8d97dd28-RGS-61e90e599155",
+      "created_at": "2026-06-16 22:48:20",
+      "event_id": 1141,
+      "finding_id": "RGF-0621",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Duplicate of RGF-0616: refactoring suggestion about args._tui_rendered",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-6b6b8d97dd28-RGS-61e90e599155",
+      "created_at": "2026-06-16 22:50:31",
+      "event_id": 1142,
+      "finding_id": "RGF-0613",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-6b6b8d97dd28-RGS-61e90e599155",
+      "created_at": "2026-06-16 22:50:31",
+      "event_id": 1143,
+      "finding_id": "RGF-0615",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-6b6b8d97dd28-RGS-61e90e599155",
+      "created_at": "2026-06-16 22:50:31",
+      "event_id": 1144,
+      "finding_id": "RGF-0610",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-6b6b8d97dd28-RGS-61e90e599155",
+      "created_at": "2026-06-16 22:51:28",
+      "event_id": 1145,
+      "finding_id": "RGF-0626",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Removed timeout on success path join; after process.wait() returns, pipes drain to EOF",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-6b6b8d97dd28-RGS-61e90e599155",
+      "created_at": "2026-06-16 22:51:28",
+      "event_id": 1146,
+      "finding_id": "RGF-0622",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "store._transition already raises LookupError on missing finding_id, caught by _run_session_command",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-6b6b8d97dd28-RGS-61e90e599155",
+      "created_at": "2026-06-16 22:51:28",
+      "event_id": 1147,
+      "finding_id": "RGF-0623",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Output format including all DB columns is the established contract; changing it would break consumers",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-6b6b8d97dd28-RGS-61e90e599155",
+      "created_at": "2026-06-16 22:51:28",
+      "event_id": 1148,
+      "finding_id": "RGF-0624",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "is_relative_to check on line 2306 already catches absolute paths outside root; absolute paths under root work correctly",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-6b6b8d97dd28-RGS-61e90e599155",
+      "created_at": "2026-06-16 22:51:28",
+      "event_id": 1149,
+      "finding_id": "RGF-0625",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Duplicate of RGF-0620: refactoring suggestion about code duplication between _cmd_review and _cmd_verify_fixes",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-6b6b8d97dd28-RGS-61e90e599155",
+      "created_at": "2026-06-16 22:51:28",
+      "event_id": 1150,
+      "finding_id": "RGF-0627",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Performance optimization; N+1 pattern is not a correctness bug and finding count is typically small",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-6b6b8d97dd28-RGS-61e90e599155",
+      "created_at": "2026-06-16 22:53:25",
+      "event_id": 1151,
+      "finding_id": "RGF-0626",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-6b6b8d97dd28-RGS-61e90e599155",
+      "created_at": "2026-06-16 22:53:43",
+      "event_id": 1152,
+      "finding_id": "RGF-0628",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Test file is out of scope for this cli.py-scoped review run; null-byte sanitization is self-evidently correct",
+      "to_state": "waived"
+    },
+    {
+      "checkpoint_id": "RGC-6b6b8d97dd28-RGS-61e90e599155",
+      "created_at": "2026-06-16 22:53:43",
+      "event_id": 1153,
+      "finding_id": "RGF-0629",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Test file is out of scope for this cli.py-scoped review run; unbounded join after process exit is the standard safe pattern",
+      "to_state": "waived"
+    }
+  ],
+  "schema_version": 1
+}
