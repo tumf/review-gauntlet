@@ -832,7 +832,14 @@ def _cmd_init(args: argparse.Namespace, root: Path, store: SessionStore) -> None
         "ruleset_digest": ruleset.digest,
         "target_digest": target_digest(root),
     }
-    output: dict[str, object] = {"session_id": session_id, "cell_count": len(cells), "run_count": 0}
+    output: dict[str, object] = {
+        "session_id": session_id,
+        "session_state": "active",
+        "cell_count": len(cells),
+        "run_count": 0,
+        "run_state": "none",
+        "next_command": "review-gauntlet review",
+    }
     if bool(getattr(args, "git_worktree", False)):
         git_metadata = create_session_worktree(root, session_id)
         git_metadata_dict = git_metadata.as_dict()

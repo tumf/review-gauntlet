@@ -67,6 +67,21 @@ def _run_count(tmp_path: Path) -> int:
         return int(conn.execute("select count(*) from runs").fetchone()[0])
 
 
+def _active_session_id(tmp_path: Path) -> str:
+    data = json.loads(
+        (tmp_path / ".review-gauntlet" / "active-session.json").read_text(encoding="utf-8")
+    )
+    return str(data["session_id"])
+
+
+def _run_count_for_session(tmp_path: Path, session_id: str) -> int:
+    with sqlite3.connect(tmp_path / ".review-gauntlet" / "ledger.sqlite") as conn:
+        row = conn.execute(
+            "select count(*) from runs where session_id = ?", (session_id,)
+        ).fetchone()
+    return int(row[0])
+
+
 def _finding_state(tmp_path: Path) -> str:
     with sqlite3.connect(tmp_path / ".review-gauntlet" / "ledger.sqlite") as conn:
         return str(conn.execute("select state from findings").fetchone()[0])
@@ -128,6 +143,53 @@ def test_review_default_concurrency_is_eight() -> None:
     args = build_parser().parse_args(["review", "."])
 
     assert args.concurrency == 8
+
+
+def test_init_creates_active_session_without_run(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "README.md").write_text("# docs\n", encoding="utf-8")
+
+    main(["init", str(tmp_path), "--worktree", "--format", "json"])
+
+    data = json.loads(capsys.readouterr().out)
+    session_id = _active_session_id(tmp_path)
+    assert data["session_id"] == session_id
+    assert data["session_state"] == "active"
+    assert data["run_state"] == "none"
+    assert data["next_command"] == "review-gauntlet review"
+    assert data["run_count"] == 0
+    assert data["cell_count"] > 0
+    assert (tmp_path / ".review-gauntlet" / "active-session.json").is_file()
+    assert _run_count_for_session(tmp_path, session_id) == 0
+
+
+def test_init_text_output_distinguishes_session_from_run(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "README.md").write_text("# docs\n", encoding="utf-8")
+
+    main(["init", str(tmp_path), "--worktree"])
+
+    output = capsys.readouterr().out
+    assert "session_state: active" in output
+    assert "run_state: none" in output
+    assert "run_count: 0" in output
+    assert "next_command: review-gauntlet review" in output
+
+
+def test_review_creates_first_run_after_init(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_session(tmp_path, capsys)
+    assert _run_count(tmp_path) == 0
+    fixture = _fixture(tmp_path, _cell_for_path(tmp_path, "README.md"))
+
+    main(["review", str(tmp_path), "--fixture", str(fixture), "--format", "json"])
+
+    data = json.loads(capsys.readouterr().out)
+    assert data["run_count"] == 1
+    assert _run_count(tmp_path) == 1
 
 
 def test_review_rejects_invalid_concurrency_before_adapter_work(
