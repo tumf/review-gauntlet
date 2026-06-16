@@ -151,6 +151,21 @@ print('agent finished')
     assert not (tmp_path / ".review-gauntlet" / "active-session.json").exists()
 
 
+def test_run_does_not_mask_primary_exception_with_none_result(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def fake_cmd_run(_args: object, _root: Path, _store: object) -> None:
+        return None
+
+    monkeypatch.setattr("review_gauntlet.cli._cmd_run", fake_cmd_run)
+
+    with pytest.raises(RuntimeError) as exc_info:
+        main(["run", str(tmp_path), "--format", "json"])
+
+    assert "run command did not return a result dictionary" in str(exc_info.value)
+    assert "not subscriptable" not in str(exc_info.value)
+
+
 def test_run_json_emits_checkpoint_commit_metadata(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

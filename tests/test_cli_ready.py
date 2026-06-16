@@ -2,9 +2,11 @@ import json
 import sqlite3
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 
+import review_gauntlet.cli as cli
 from review_gauntlet.cli import main
 from review_gauntlet.findings import FindingState
 from review_gauntlet.review_cells import CellState
@@ -168,6 +170,23 @@ def test_ready_actionable_prompt_returns_success_without_system_exit(
     prompt = data["prompt"]
     assert isinstance(prompt, str)
     _assert_skill_directed_short_prompt(prompt, "pending review cells need coverage")
+
+
+def test_ready_skips_empty_finding_bucket_without_traceback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_session(tmp_path, capsys)
+    _set_all_cells(tmp_path, CellState.REVIEWED)
+    _insert_finding(tmp_path, FindingState.CONFIRMED, 1)
+
+    def empty_ready_findings(_store: object, _session_id: str) -> tuple[Any, ...]:
+        return ()
+
+    monkeypatch.setattr(cli, "_ready_findings", empty_ready_findings)
+
+    result = _ready_json_exits(tmp_path, capsys, expected_code=1)
+
+    assert result == {"prompt": None}
 
 
 def test_ready_priority_order_is_deterministic(
