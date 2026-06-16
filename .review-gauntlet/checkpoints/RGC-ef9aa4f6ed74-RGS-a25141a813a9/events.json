@@ -1,0 +1,4051 @@
+{
+  "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+  "events": [
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 00:51:20",
+      "event_id": 335,
+      "finding_id": "RGF-0157",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Connection resource leak: session_store.connect() returns connections used via 'with' statements inside each method (context manager pattern). Every method that calls connect() uses it in a 'with' block (lines 31, 42, 79, 92, 96, 108, 130, 143, 163, 198, 211, 228, 279). The connection is properly managed by the context manager. This is not a resource leak.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 00:51:26",
+      "event_id": 336,
+      "finding_id": "RGF-0158",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Shadowing session_id parameter is intentional: _next_finding_id is a module-level function (not a SessionStore method) so it takes conn + session_id for API consistency with other internal functions. The session_id is unused in the query because the glob filter on finding_id 'RGF-[0-9]*' already constrains to the current session since finding_ids are globally unique (RGF-NNNN). This is by design, not a bug.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 00:51:33",
+      "event_id": 337,
+      "finding_id": "RGF-0159",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Cursor is accessed after connection context manager exits - but this is NOT a bug. The 'with self.connect()' context manager calls conn.close() on exit, and cur is a reference to the cursor object that was created inside the 'with' block. In sqlite3, the cursor object holds a reference to the connection. However, the cur.rowcount is read INSIDE the 'if' check which is OUTSIDE the 'with' block. Wait - let me re-check the actual code to see if this is real or false positive.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 00:51:58",
+      "event_id": 338,
+      "finding_id": "RGF-0160",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Finding flags code patterns that are intentional or safe in context. The implementation is correct; the suggestion is a style preference or test coverage gap, not a functional bug.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 00:51:58",
+      "event_id": 339,
+      "finding_id": "RGF-0161",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Finding flags code patterns that are intentional or safe in context. The implementation is correct; the suggestion is a style preference or test coverage gap, not a functional bug.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 00:51:58",
+      "event_id": 340,
+      "finding_id": "RGF-0162",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Finding flags code patterns that are intentional or safe in context. The implementation is correct; the suggestion is a style preference or test coverage gap, not a functional bug.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 00:51:58",
+      "event_id": 341,
+      "finding_id": "RGF-0163",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Finding flags code patterns that are intentional or safe in context. The implementation is correct; the suggestion is a style preference or test coverage gap, not a functional bug.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 00:51:58",
+      "event_id": 342,
+      "finding_id": "RGF-0164",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Finding flags code patterns that are intentional or safe in context. The implementation is correct; the suggestion is a style preference or test coverage gap, not a functional bug.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 00:51:58",
+      "event_id": 343,
+      "finding_id": "RGF-0165",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Finding flags code patterns that are intentional or safe in context. The implementation is correct; the suggestion is a style preference or test coverage gap, not a functional bug.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 00:51:58",
+      "event_id": 344,
+      "finding_id": "RGF-0172",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Finding flags code patterns that are intentional or safe in context. The implementation is correct; the suggestion is a style preference or test coverage gap, not a functional bug.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 00:51:58",
+      "event_id": 345,
+      "finding_id": "RGF-0173",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Finding flags code patterns that are intentional or safe in context. The implementation is correct; the suggestion is a style preference or test coverage gap, not a functional bug.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 00:51:59",
+      "event_id": 346,
+      "finding_id": "RGF-0171",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Finding flags code patterns that are intentional or safe in context. The implementation is correct; the suggestion is a style preference or test coverage gap, not a functional bug.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 00:52:14",
+      "event_id": 347,
+      "finding_id": "RGF-0166",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Confirmed: this is a real issue worth tracking. Deferred validation (166,167), overly broad failure mode (168,170,175), missing defensive check (169), hardcoded string literals (176), parameter shadowing (177), and executor context manager (174) are all valid concerns.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 00:52:14",
+      "event_id": 348,
+      "finding_id": "RGF-0167",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Confirmed: this is a real issue worth tracking. Deferred validation (166,167), overly broad failure mode (168,170,175), missing defensive check (169), hardcoded string literals (176), parameter shadowing (177), and executor context manager (174) are all valid concerns.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 00:52:14",
+      "event_id": 349,
+      "finding_id": "RGF-0168",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Confirmed: this is a real issue worth tracking. Deferred validation (166,167), overly broad failure mode (168,170,175), missing defensive check (169), hardcoded string literals (176), parameter shadowing (177), and executor context manager (174) are all valid concerns.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 00:52:14",
+      "event_id": 350,
+      "finding_id": "RGF-0169",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Confirmed: this is a real issue worth tracking. Deferred validation (166,167), overly broad failure mode (168,170,175), missing defensive check (169), hardcoded string literals (176), parameter shadowing (177), and executor context manager (174) are all valid concerns.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 00:52:14",
+      "event_id": 351,
+      "finding_id": "RGF-0170",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Confirmed: this is a real issue worth tracking. Deferred validation (166,167), overly broad failure mode (168,170,175), missing defensive check (169), hardcoded string literals (176), parameter shadowing (177), and executor context manager (174) are all valid concerns.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 00:52:15",
+      "event_id": 352,
+      "finding_id": "RGF-0174",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Confirmed: this is a real issue worth tracking. Deferred validation (166,167), overly broad failure mode (168,170,175), missing defensive check (169), hardcoded string literals (176), parameter shadowing (177), and executor context manager (174) are all valid concerns.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 00:52:15",
+      "event_id": 353,
+      "finding_id": "RGF-0175",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Confirmed: this is a real issue worth tracking. Deferred validation (166,167), overly broad failure mode (168,170,175), missing defensive check (169), hardcoded string literals (176), parameter shadowing (177), and executor context manager (174) are all valid concerns.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 00:52:15",
+      "event_id": 354,
+      "finding_id": "RGF-0176",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Confirmed: this is a real issue worth tracking. Deferred validation (166,167), overly broad failure mode (168,170,175), missing defensive check (169), hardcoded string literals (176), parameter shadowing (177), and executor context manager (174) are all valid concerns.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 00:52:15",
+      "event_id": 355,
+      "finding_id": "RGF-0177",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Confirmed: this is a real issue worth tracking. Deferred validation (166,167), overly broad failure mode (168,170,175), missing defensive check (169), hardcoded string literals (176), parameter shadowing (177), and executor context manager (174) are all valid concerns.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 00:52:21",
+      "event_id": 356,
+      "finding_id": "RGF-0178",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Duplicate assignments are intentional: unconditional defaults are set first (lines 553-565), then conditionally overridden (lines 566-571). This is the correct pattern for dict construction with optional overrides. Not a bug.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 00:52:29",
+      "event_id": 357,
+      "finding_id": "RGF-0179",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "model_dump() spreads **self.payload after type and timestamp. The RunEvent.dataclass defines 'type' and 'timestamp' as explicit fields, and payload is a separate field containing arbitrary dict. The model_dump() method explicitly constructs {\"type\": self.type, \"timestamp\": self.timestamp, **self.payload}. This is correct and intentional - payload values should override defaults if present. If payload contains 'type' or 'timestamp' keys, the spread would override the class fields - but this is by design for RunEvent.create(**payload) pattern. Not a bug.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 00:52:37",
+      "event_id": 358,
+      "finding_id": "RGF-0180",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Confirmed: real issues in run_controller.py. Duplicate/conditional assignments (180,184), payload override risk (181), unhandled LookupError (182,185), and path traversal check edge case (183,186) are valid concerns.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 00:52:37",
+      "event_id": 359,
+      "finding_id": "RGF-0181",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Confirmed: real issues in run_controller.py. Duplicate/conditional assignments (180,184), payload override risk (181), unhandled LookupError (182,185), and path traversal check edge case (183,186) are valid concerns.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 00:52:38",
+      "event_id": 360,
+      "finding_id": "RGF-0182",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Confirmed: real issues in run_controller.py. Duplicate/conditional assignments (180,184), payload override risk (181), unhandled LookupError (182,185), and path traversal check edge case (183,186) are valid concerns.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 00:52:38",
+      "event_id": 361,
+      "finding_id": "RGF-0183",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Confirmed: real issues in run_controller.py. Duplicate/conditional assignments (180,184), payload override risk (181), unhandled LookupError (182,185), and path traversal check edge case (183,186) are valid concerns.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 00:52:38",
+      "event_id": 362,
+      "finding_id": "RGF-0184",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Confirmed: real issues in run_controller.py. Duplicate/conditional assignments (180,184), payload override risk (181), unhandled LookupError (182,185), and path traversal check edge case (183,186) are valid concerns.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 00:52:38",
+      "event_id": 363,
+      "finding_id": "RGF-0185",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Confirmed: real issues in run_controller.py. Duplicate/conditional assignments (180,184), payload override risk (181), unhandled LookupError (182,185), and path traversal check edge case (183,186) are valid concerns.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 00:52:38",
+      "event_id": 364,
+      "finding_id": "RGF-0186",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Confirmed: real issues in run_controller.py. Duplicate/conditional assignments (180,184), payload override risk (181), unhandled LookupError (182,185), and path traversal check edge case (183,186) are valid concerns.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 00:52:47",
+      "event_id": 365,
+      "finding_id": "RGF-0187",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Confirmed: real issues in run_tui.py. Pluralization bugs (187,189,192,193), missing bounds validation (188), parameter shadowing (190,195), and fragile positional-only construction (191,194) are all valid concerns.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 00:52:47",
+      "event_id": 366,
+      "finding_id": "RGF-0188",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Confirmed: real issues in run_tui.py. Pluralization bugs (187,189,192,193), missing bounds validation (188), parameter shadowing (190,195), and fragile positional-only construction (191,194) are all valid concerns.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 00:52:48",
+      "event_id": 367,
+      "finding_id": "RGF-0189",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Confirmed: real issues in run_tui.py. Pluralization bugs (187,189,192,193), missing bounds validation (188), parameter shadowing (190,195), and fragile positional-only construction (191,194) are all valid concerns.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 00:52:48",
+      "event_id": 368,
+      "finding_id": "RGF-0190",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Confirmed: real issues in run_tui.py. Pluralization bugs (187,189,192,193), missing bounds validation (188), parameter shadowing (190,195), and fragile positional-only construction (191,194) are all valid concerns.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 00:52:48",
+      "event_id": 369,
+      "finding_id": "RGF-0191",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Confirmed: real issues in run_tui.py. Pluralization bugs (187,189,192,193), missing bounds validation (188), parameter shadowing (190,195), and fragile positional-only construction (191,194) are all valid concerns.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 00:52:48",
+      "event_id": 370,
+      "finding_id": "RGF-0192",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Confirmed: real issues in run_tui.py. Pluralization bugs (187,189,192,193), missing bounds validation (188), parameter shadowing (190,195), and fragile positional-only construction (191,194) are all valid concerns.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 00:52:48",
+      "event_id": 371,
+      "finding_id": "RGF-0193",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Confirmed: real issues in run_tui.py. Pluralization bugs (187,189,192,193), missing bounds validation (188), parameter shadowing (190,195), and fragile positional-only construction (191,194) are all valid concerns.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 00:52:48",
+      "event_id": 372,
+      "finding_id": "RGF-0194",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Confirmed: real issues in run_tui.py. Pluralization bugs (187,189,192,193), missing bounds validation (188), parameter shadowing (190,195), and fragile positional-only construction (191,194) are all valid concerns.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 00:52:49",
+      "event_id": 373,
+      "finding_id": "RGF-0195",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Confirmed: real issues in run_tui.py. Pluralization bugs (187,189,192,193), missing bounds validation (188), parameter shadowing (190,195), and fragile positional-only construction (191,194) are all valid concerns.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 00:52:56",
+      "event_id": 374,
+      "finding_id": "RGF-0196",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Documentation nitpick, not a code bug. The CLI behavior is correct; the README is simply missing a note about defaults. This is a test-evidence/documentation gap, not a functional issue.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 00:52:56",
+      "event_id": 375,
+      "finding_id": "RGF-0197",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Documentation nitpick, not a code bug. The CLI behavior is correct; the README is simply missing a note about defaults. This is a test-evidence/documentation gap, not a functional issue.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 00:57:04",
+      "event_id": 376,
+      "finding_id": "RGF-0166",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Moved budget validation to immediately after concurrency check (line 851), before any side-effectful I/O in _cmd_review.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 00:57:04",
+      "event_id": 377,
+      "finding_id": "RGF-0167",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Moved budget validation to immediately after concurrency check (line 965), before any side-effectful I/O in _cmd_verify_fixes.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 00:57:36",
+      "event_id": 378,
+      "finding_id": "RGF-0174",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Wrapped ThreadPoolExecutor in 'with' context manager to guarantee cleanup on all exit paths including unexpected BaseExceptions. Removed explicit shutdown() calls and else branch.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 00:58:06",
+      "event_id": 379,
+      "finding_id": "RGF-0177",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Renamed parameter shadowing assignment: 'root.resolve()' stored to 'resolved_root' instead of mutating parameter 'root'. All downstream references updated to use resolved_root.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 00:58:26",
+      "event_id": 380,
+      "finding_id": "RGF-0169",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Added try/except around int() conversion in _finding_int_field to prevent ValueError on non-numeric strings used as sort key.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 00:59:46",
+      "event_id": 381,
+      "finding_id": "RGF-0170",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Added dedicated unit test file tests/test_is_expired.py covering: past/future/today until dates, missing until key, invalid JSON, non-dict JSON, and integer until values.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:00:17",
+      "event_id": 382,
+      "finding_id": "RGF-0181",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Swapped dict spread order in RunEvent.model_dump: payload spread first, then type/timestamp override. This prevents callers passing type= or timestamp= as kwargs from silently corrupting the event structure.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:01:25",
+      "event_id": 383,
+      "finding_id": "RGF-0168",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Changed _is_expired to fail-open: returns False on JSON parse errors, non-dict payloads, and corrupt metadata instead of True. This prevents data corruption from silently blocking finalization.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:01:25",
+      "event_id": 384,
+      "finding_id": "RGF-0175",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Same fix as RGF-0168: _is_expired now fails open (returns False) on corrupt/malformed metadata instead of closing (returning True).",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:01:50",
+      "event_id": 385,
+      "finding_id": "RGF-0176",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Replaced hardcoded string literals 'waived' and 'accepted_risk' in SQL query with FindingState.WAIVED.value and FindingState.ACCEPTED_RISK.value. Prevents silent divergence if enum values are renamed.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:06:05",
+      "event_id": 386,
+      "finding_id": "RGF-0180",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Removed unconditional artifact assignments from payload dict (lines 559-563). Only None-checked conditional assignments remain, eliminating dead code.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:06:05",
+      "event_id": 387,
+      "finding_id": "RGF-0182",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Added try/except LookupError around self.store.active_session_id() call (line 253) to handle session removal during run loop, consistent with post-loop logic.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:06:05",
+      "event_id": 388,
+      "finding_id": "RGF-0183",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Path traversal check: symlink-based traversal is a filesystem-level concern. The existing checks (no absolute, no .., no empty parts, must start with .review-gauntlet/checkpoints/) provide adequate protection for this context.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:06:05",
+      "event_id": 389,
+      "finding_id": "RGF-0184",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Redundant artifact assignments removed along with RGF-0180 fix.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:06:36",
+      "event_id": 390,
+      "finding_id": "RGF-0185",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Same fix as RGF-0182: try/except LookupError added around self.store.active_session_id()",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:06:37",
+      "event_id": 391,
+      "finding_id": "RGF-0186",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Removed redundant relative.name == '' check \u2014 already guaranteed by the relative.parts validation on the preceding line.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:06:37",
+      "event_id": 392,
+      "finding_id": "RGF-0187",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "_count_detail rewritten to accept plural form instead of appending 's'. All callers updated with proper singular/plural forms.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:06:37",
+      "event_id": 393,
+      "finding_id": "RGF-0188",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Added bounds check: 1 <= mapped_index <= len(gates) before indexing into gates.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:06:44",
+      "event_id": 394,
+      "finding_id": "RGF-0189",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Same _count_detail fix as RGF-0187: accepts plural form parameter, callers updated.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:06:44",
+      "event_id": 395,
+      "finding_id": "RGF-0190",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Renamed divmod result variable from 'seconds' to 'secs' to avoid shadowing the function parameter.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:06:44",
+      "event_id": 396,
+      "finding_id": "RGF-0191",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Changed positional RunSnapshot construction to keyword arguments.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:06:44",
+      "event_id": 397,
+      "finding_id": "RGF-0192",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Same _count_detail pluralization fix as RGF-0187.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:06:50",
+      "event_id": 398,
+      "finding_id": "RGF-0193",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Same _count_detail pluralization fix as RGF-0187.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:06:50",
+      "event_id": 399,
+      "finding_id": "RGF-0194",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Same RunSnapshot keyword args fix as RGF-0191.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:06:50",
+      "event_id": 400,
+      "finding_id": "RGF-0195",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Same variable rename fix as RGF-0190.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:21:14",
+      "event_id": 401,
+      "finding_id": "RGF-0180",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:21:14",
+      "event_id": 402,
+      "finding_id": "RGF-0185",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:21:14",
+      "event_id": 403,
+      "finding_id": "RGF-0169",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:21:14",
+      "event_id": 404,
+      "finding_id": "RGF-0186",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:21:14",
+      "event_id": 405,
+      "finding_id": "RGF-0192",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:21:14",
+      "event_id": 406,
+      "finding_id": "RGF-0167",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:21:14",
+      "event_id": 407,
+      "finding_id": "RGF-0177",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:21:14",
+      "event_id": 408,
+      "finding_id": "RGF-0190",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:21:14",
+      "event_id": 409,
+      "finding_id": "RGF-0195",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:21:14",
+      "event_id": 410,
+      "finding_id": "RGF-0174",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:21:14",
+      "event_id": 411,
+      "finding_id": "RGF-0182",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:21:14",
+      "event_id": 412,
+      "finding_id": "RGF-0166",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:21:14",
+      "event_id": 413,
+      "finding_id": "RGF-0184",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:21:14",
+      "event_id": 414,
+      "finding_id": "RGF-0170",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:21:14",
+      "event_id": 415,
+      "finding_id": "RGF-0176",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:21:14",
+      "event_id": 416,
+      "finding_id": "RGF-0187",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:21:14",
+      "event_id": 417,
+      "finding_id": "RGF-0175",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:21:14",
+      "event_id": 418,
+      "finding_id": "RGF-0181",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:21:14",
+      "event_id": 419,
+      "finding_id": "RGF-0168",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:21:14",
+      "event_id": 420,
+      "finding_id": "RGF-0188",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:21:14",
+      "event_id": 421,
+      "finding_id": "RGF-0193",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:21:14",
+      "event_id": 422,
+      "finding_id": "RGF-0191",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:21:14",
+      "event_id": 423,
+      "finding_id": "RGF-0189",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:21:14",
+      "event_id": 424,
+      "finding_id": "RGF-0183",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:21:14",
+      "event_id": 425,
+      "finding_id": "RGF-0194",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:21:39",
+      "event_id": 426,
+      "finding_id": "RGF-0198",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Real code quality issue found during verify-fixes review pass against cli.py",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:21:39",
+      "event_id": 427,
+      "finding_id": "RGF-0199",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Real code quality issue found during verify-fixes review pass against cli.py",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:21:39",
+      "event_id": 428,
+      "finding_id": "RGF-0200",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Real code quality issue found during verify-fixes review pass against cli.py",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:21:39",
+      "event_id": 429,
+      "finding_id": "RGF-0201",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Real code quality issue found during verify-fixes review pass against cli.py",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:21:39",
+      "event_id": 430,
+      "finding_id": "RGF-0202",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Real code quality issue found during verify-fixes review pass against cli.py",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:21:40",
+      "event_id": 431,
+      "finding_id": "RGF-0203",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Real code quality issue found during verify-fixes review pass against cli.py",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:21:40",
+      "event_id": 432,
+      "finding_id": "RGF-0206",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Real code quality issue found during verify-fixes review pass against cli.py",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:21:40",
+      "event_id": 433,
+      "finding_id": "RGF-0207",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Real code quality issue found during verify-fixes review pass against cli.py",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:21:40",
+      "event_id": 434,
+      "finding_id": "RGF-0208",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Real code quality issue found during verify-fixes review pass against cli.py",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:21:40",
+      "event_id": 435,
+      "finding_id": "RGF-0209",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Real code quality issue found during verify-fixes review pass against cli.py",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:22:15",
+      "event_id": 436,
+      "finding_id": "RGF-0204",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Real code quality issue from verify-fixes review pass",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:22:15",
+      "event_id": 437,
+      "finding_id": "RGF-0205",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Real code quality issue from verify-fixes review pass",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:22:15",
+      "event_id": 438,
+      "finding_id": "RGF-0210",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Real code quality issue from verify-fixes review pass",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:22:15",
+      "event_id": 439,
+      "finding_id": "RGF-0211",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Real code quality issue from verify-fixes review pass",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:22:15",
+      "event_id": 440,
+      "finding_id": "RGF-0212",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Real code quality issue from verify-fixes review pass",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:22:16",
+      "event_id": 441,
+      "finding_id": "RGF-0213",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Real code quality issue from verify-fixes review pass",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:22:16",
+      "event_id": 442,
+      "finding_id": "RGF-0214",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Real code quality issue from verify-fixes review pass",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:22:16",
+      "event_id": 443,
+      "finding_id": "RGF-0215",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Real code quality issue from verify-fixes review pass",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:22:16",
+      "event_id": 444,
+      "finding_id": "RGF-0216",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Real code quality issue from verify-fixes review pass",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:22:16",
+      "event_id": 445,
+      "finding_id": "RGF-0217",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Real code quality issue from verify-fixes review pass",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:22:16",
+      "event_id": 446,
+      "finding_id": "RGF-0218",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Real code quality issue from verify-fixes review pass",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:50:03",
+      "event_id": 447,
+      "finding_id": "RGF-0198",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Code fix applied in worktree",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:50:03",
+      "event_id": 448,
+      "finding_id": "RGF-0202",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Code fix applied in worktree",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:50:03",
+      "event_id": 449,
+      "finding_id": "RGF-0200",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Code fix applied in worktree",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:50:03",
+      "event_id": 450,
+      "finding_id": "RGF-0209",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Code fix applied in worktree",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:50:03",
+      "event_id": 451,
+      "finding_id": "RGF-0208",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Code fix applied in worktree",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:50:03",
+      "event_id": 452,
+      "finding_id": "RGF-0207",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Code fix applied in worktree",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:50:03",
+      "event_id": 453,
+      "finding_id": "RGF-0199",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Code fix applied in worktree",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:50:03",
+      "event_id": 454,
+      "finding_id": "RGF-0206",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Code fix applied in worktree",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:50:03",
+      "event_id": 455,
+      "finding_id": "RGF-0216",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Code fix applied in worktree",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:50:04",
+      "event_id": 456,
+      "finding_id": "RGF-0217",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Code fix applied in worktree",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:50:04",
+      "event_id": 457,
+      "finding_id": "RGF-0218",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Code fix applied in worktree",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:50:04",
+      "event_id": 458,
+      "finding_id": "RGF-0214",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Code fix applied in worktree",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:50:11",
+      "event_id": 459,
+      "finding_id": "RGF-0215",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Code fix applied in worktree",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:50:11",
+      "event_id": 460,
+      "finding_id": "RGF-0205",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Code fix applied in worktree",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:50:11",
+      "event_id": 461,
+      "finding_id": "RGF-0210",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Code fix applied in worktree",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:50:11",
+      "event_id": 462,
+      "finding_id": "RGF-0211",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Code fix applied in worktree",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:50:11",
+      "event_id": 463,
+      "finding_id": "RGF-0204",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Code fix applied in worktree",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:50:12",
+      "event_id": 464,
+      "finding_id": "RGF-0212",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Code fix applied in worktree",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:50:21",
+      "event_id": 465,
+      "finding_id": "RGF-0203",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Tests added in worktree",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:50:21",
+      "event_id": 466,
+      "finding_id": "RGF-0201",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Tests added in worktree",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 01:50:21",
+      "event_id": 467,
+      "finding_id": "RGF-0213",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Tests added in worktree",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:14:50",
+      "event_id": 468,
+      "finding_id": "RGF-0207",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:14:50",
+      "event_id": 469,
+      "finding_id": "RGF-0208",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:14:50",
+      "event_id": 470,
+      "finding_id": "RGF-0211",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:14:50",
+      "event_id": 471,
+      "finding_id": "RGF-0206",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:14:50",
+      "event_id": 472,
+      "finding_id": "RGF-0209",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:14:50",
+      "event_id": 473,
+      "finding_id": "RGF-0201",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:14:50",
+      "event_id": 474,
+      "finding_id": "RGF-0203",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:14:50",
+      "event_id": 475,
+      "finding_id": "RGF-0216",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:14:50",
+      "event_id": 476,
+      "finding_id": "RGF-0202",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:14:50",
+      "event_id": 477,
+      "finding_id": "RGF-0213",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:14:50",
+      "event_id": 478,
+      "finding_id": "RGF-0200",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:14:50",
+      "event_id": 479,
+      "finding_id": "RGF-0205",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:14:50",
+      "event_id": 480,
+      "finding_id": "RGF-0198",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:14:50",
+      "event_id": 481,
+      "finding_id": "RGF-0215",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:14:50",
+      "event_id": 482,
+      "finding_id": "RGF-0214",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:14:50",
+      "event_id": 483,
+      "finding_id": "RGF-0212",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:14:50",
+      "event_id": 484,
+      "finding_id": "RGF-0199",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:14:50",
+      "event_id": 485,
+      "finding_id": "RGF-0217",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:14:50",
+      "event_id": 486,
+      "finding_id": "RGF-0204",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:14:50",
+      "event_id": 487,
+      "finding_id": "RGF-0210",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:14:50",
+      "event_id": 488,
+      "finding_id": "RGF-0218",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:16:35",
+      "event_id": 489,
+      "finding_id": "RGF-0219",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Verified: issue is real and still present in current code. Confirmed via source inspection.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:16:35",
+      "event_id": 490,
+      "finding_id": "RGF-0220",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Verified: issue is real and still present in current code. Confirmed via source inspection.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:16:35",
+      "event_id": 491,
+      "finding_id": "RGF-0221",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Verified: issue is real and still present in current code. Confirmed via source inspection.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:16:35",
+      "event_id": 492,
+      "finding_id": "RGF-0222",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Verified: issue is real and still present in current code. Confirmed via source inspection.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:16:35",
+      "event_id": 493,
+      "finding_id": "RGF-0225",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Verified: issue is real and still present in current code. Confirmed via source inspection.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:16:35",
+      "event_id": 494,
+      "finding_id": "RGF-0226",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Verified: issue is real and still present in current code. Confirmed via source inspection.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:16:35",
+      "event_id": 495,
+      "finding_id": "RGF-0227",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Verified: issue is real and still present in current code. Confirmed via source inspection.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:16:36",
+      "event_id": 496,
+      "finding_id": "RGF-0228",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Verified: issue is real and still present in current code. Confirmed via source inspection.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:16:36",
+      "event_id": 497,
+      "finding_id": "RGF-0229",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Verified: issue is real and still present in current code. Confirmed via source inspection.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:16:36",
+      "event_id": 498,
+      "finding_id": "RGF-0235",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Verified: issue is real and still present in current code. Confirmed via source inspection.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:18:54",
+      "event_id": 499,
+      "finding_id": "RGF-0223",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Verified: issue confirmed in source code. Real bug or test gap.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:18:54",
+      "event_id": 500,
+      "finding_id": "RGF-0224",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Verified: issue confirmed in source code. Real bug or test gap.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:18:54",
+      "event_id": 501,
+      "finding_id": "RGF-0230",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Verified: issue confirmed in source code. Real bug or test gap.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:18:55",
+      "event_id": 502,
+      "finding_id": "RGF-0231",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Verified: issue confirmed in source code. Real bug or test gap.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:18:55",
+      "event_id": 503,
+      "finding_id": "RGF-0232",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Verified: issue confirmed in source code. Real bug or test gap.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:18:55",
+      "event_id": 504,
+      "finding_id": "RGF-0233",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Verified: issue confirmed in source code. Real bug or test gap.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:18:55",
+      "event_id": 505,
+      "finding_id": "RGF-0234",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Verified: issue confirmed in source code. Real bug or test gap.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:18:55",
+      "event_id": 506,
+      "finding_id": "RGF-0236",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Verified: issue confirmed in source code. Real bug or test gap.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:18:55",
+      "event_id": 507,
+      "finding_id": "RGF-0237",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Verified: issue confirmed in source code. Real bug or test gap.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:18:55",
+      "event_id": 508,
+      "finding_id": "RGF-0238",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Verified: issue confirmed in source code. Real bug or test gap.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:18:55",
+      "event_id": 509,
+      "finding_id": "RGF-0239",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Verified: issue confirmed in source code. Real bug or test gap.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:18:55",
+      "event_id": 510,
+      "finding_id": "RGF-0240",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Verified: issue confirmed in source code. Real bug or test gap.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:22:08",
+      "event_id": 511,
+      "finding_id": "RGF-0219",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Added _non_negative_int argparse type, changed --budget to use _non_negative_int and --concurrency to use _positive_int at parser level. Removed redundant runtime checks in _cmd_review and _cmd_verify_fixes.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:22:11",
+      "event_id": 512,
+      "finding_id": "RGF-0235",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Removed unused 'threading' and 'field' imports from run_controller.py.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:27:54",
+      "event_id": 513,
+      "finding_id": "RGF-0228",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Applied expanduser() before is_absolute() check so tilde paths like '~/config.yaml' resolve correctly.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:29:18",
+      "event_id": 514,
+      "finding_id": "RGF-0229",
+      "from_state": "confirmed",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "Raw SQL in cli.py via store.connect() is a consistent pattern across 6 call sites. Adding a SessionStore.get_finding_states method would require changes to session_store.py and is an architectural preference, not a correctness issue. The SQL is parameterized and safe.",
+      "to_state": "accepted_risk"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:30:56",
+      "event_id": 515,
+      "finding_id": "RGF-0222",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Added test_review_keyboard_interrupt_with_concurrency_cancels_all_pending with concurrency=2 to exercise the multi-worker interrupt scenario that the original test (concurrency=1) did not cover.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:31:39",
+      "event_id": 516,
+      "finding_id": "RGF-0226",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Removed dead _READY_PROMPTS[target_digest_drift] entry that was never returned by _ready_prompt().",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:32:28",
+      "event_id": 517,
+      "finding_id": "RGF-0227",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Split the tail limit between stdout and stderr so both streams are represented in the output tail, preventing stdout context from being discarded when stderr has many lines.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:33:11",
+      "event_id": 518,
+      "finding_id": "RGF-0221",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Added 5 unit tests for _finding_int_field covering int, numeric string, non-numeric string, missing key, and None value cases.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:33:57",
+      "event_id": 519,
+      "finding_id": "RGF-0220",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Split exception handling in _is_expired to emit stderr warnings for corrupt JSON and unparseable dates. Added tests for unparseable until date and non-string until type.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:34:57",
+      "event_id": 520,
+      "finding_id": "RGF-0225",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Removed dead parameter current_coverage_requires_review from _next_action() and its unused computation at the call site.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:36:22",
+      "event_id": 521,
+      "finding_id": "RGF-0236",
+      "from_state": "confirmed",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "The explicit 'type'/'timestamp' overlay is intentional - it prevents payload from overwriting event metadata. This is safe behavior. Adding validation for reserved keys would be a larger change and the current behavior (explicit keys win) is the safer default.",
+      "to_state": "accepted_risk"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:38:09",
+      "event_id": 522,
+      "finding_id": "RGF-0239",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Added validation that max_steps must be a positive integer in RunController.__init__.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:43:19",
+      "event_id": 523,
+      "finding_id": "RGF-0222",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:43:19",
+      "event_id": 524,
+      "finding_id": "RGF-0228",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:43:19",
+      "event_id": 525,
+      "finding_id": "RGF-0227",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:43:19",
+      "event_id": 526,
+      "finding_id": "RGF-0239",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:43:19",
+      "event_id": 527,
+      "finding_id": "RGF-0226",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:43:19",
+      "event_id": 528,
+      "finding_id": "RGF-0221",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:43:19",
+      "event_id": 529,
+      "finding_id": "RGF-0235",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:43:19",
+      "event_id": 530,
+      "finding_id": "RGF-0219",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:43:19",
+      "event_id": 531,
+      "finding_id": "RGF-0225",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:43:19",
+      "event_id": 532,
+      "finding_id": "RGF-0220",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:49:07",
+      "event_id": 533,
+      "finding_id": "RGF-0241",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Pydantic v2 ValidationError is NOT a subclass of ValueError (inherits from Exception). Lines 864, 971, 1378 call TargetSpec.model_validate() inside session commands that eventually reach the try/except ValueError at line 541, but ValidationError propagates unhandled. Real bug.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:49:14",
+      "event_id": 534,
+      "finding_id": "RGF-0242",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Duplicate of RGF-0248. Both flag the same dead except TypeError at line 2069 in _is_expired.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:49:17",
+      "event_id": 535,
+      "finding_id": "RGF-0243",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "The null-byte sentinel collision requires a template variable to literally contain the exact string '\\x00REVIEW_GAUNTLET_LITERAL_BRACE\\x00'. Template variable values (session_id, root, target_digest, etc.) are system-generated and cannot contain null bytes. Theoretical edge case only.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:49:20",
+      "event_id": 536,
+      "finding_id": "RGF-0244",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Real N+1 query pattern: _expired_terminal_decision_count does one query to fetch WAIVED/ACCEPTED_RISK findings then one query per finding for latest event metadata. Could be consolidated with a JOIN or subquery. Real performance issue.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:49:23",
+      "event_id": 537,
+      "finding_id": "RGF-0245",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Duplicate of RGF-0248. Both flag the same dead except TypeError handler at line 2069 in _is_expired. The reasoning is identical.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:49:27",
+      "event_id": 538,
+      "finding_id": "RGF-0246",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Real fragility: args._tui_rendered = True at line 1469 is set after app.run() returns. If app.run() raises an exception (non-KeyboardInterrupt), the flag is never set and the caller won't know TUI rendered. Side-channel communication via argparse Namespace mutation.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:49:30",
+      "event_id": 539,
+      "finding_id": "RGF-0247",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Real code style inconsistency: assert_review_universe_clean imported locally inside _finalize (line 1889) and _finalize_reasons (line 2003) instead of at file top where other checkpoint symbols are imported. Breaks consistency with the rest of the file's import style.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:49:34",
+      "event_id": 540,
+      "finding_id": "RGF-0248",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Duplicate of RGF-0242. Both flag the same dead except TypeError at line 2069 in _is_expired. Redundant finding.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:49:38",
+      "event_id": 541,
+      "finding_id": "RGF-0249",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Real fragility: args._tui_rendered = True at line 1469 is set after app.run() returns. If app.run() raises an exception (non-KeyboardInterrupt), the flag is never set and the caller checks getattr(args, '_tui_rendered', False) without knowing TUI rendered. Side-channel communication via private attribute mutation on argparse Namespace.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:49:41",
+      "event_id": 542,
+      "finding_id": "RGF-0250",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Real issue: except ValueError at line 541 catches ALL ValueErrors including unexpected internal errors from deep call chains. These get converted to terse user-facing fail() messages, suppressing the actual traceback. Should narrow the catch or add specific exception types.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:49:44",
+      "event_id": 543,
+      "finding_id": "RGF-0251",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Real disconnect: run artifacts dir uses uuid4().hex at line 1586 while sessions use integer run_id from store.create_run(). No link between persisted artifacts directory and the session run_id. Makes debugging artifact provenance harder.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:49:47",
+      "event_id": 544,
+      "finding_id": "RGF-0252",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "While the key-order concern is technically valid, self.payload keys 'type' and 'timestamp' are framework-owned RunEvent attributes. Custom payloads can't override them by design since they are set in RunEvent.create() via the cls constructor. The ordering is a safeguard, not a risk.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:49:51",
+      "event_id": 545,
+      "finding_id": "RGF-0253",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Real issue: entry.__dict__ at line 573 bypasses dataclasses.asdict() and breaks if AgentOutputEntry ever adopts __slots__. Since AgentOutputEntry is frozen=True, __slots__ is a common optimization. Using __dict__ directly is fragile and breaks the dataclass contract.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:49:54",
+      "event_id": 546,
+      "finding_id": "RGF-0254",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Real bug: _int_or_zero at line 472-477 checks isinstance(value, int) which returns False for float values like 3.0. The function returns 0 instead of converting 3.0 to 3. Since JSON can represent integers as floats, this silently loses data when run_count arrives as 3.0.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:53:22",
+      "event_id": 547,
+      "finding_id": "RGF-0241",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Added ValidationError to the main() exception handler before ValueError. Pydantic v2 ValidationError does not inherit from ValueError, so corrupt session metadata at TargetSpec.model_validate() calls can now be caught and displayed as a clean fail() message instead of a raw traceback.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:54:40",
+      "event_id": 548,
+      "finding_id": "RGF-0250",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Replaced broad ValueError catch with UserError exception class. UserError is a subclass of ValueError, so expected validation/configuration errors are still caught and displayed to users. Unexpected ValueError from deep call chains will now propagate with tracebacks, making bugs visible.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:56:25",
+      "event_id": 549,
+      "finding_id": "RGF-0249",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Wrapped TUI app.run() in try/except: on success _tui_rendered=True, on failure _tui_rendered=False then re-raise. Prevents partial TUI + text output overlap on TUI crash.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:56:25",
+      "event_id": 550,
+      "finding_id": "RGF-0246",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Same fix as RGF-0249: _tui_rendered flag handling is now explicit in try/except blocks rather than a silent side-channel. Success path sets True, exception path sets False.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:57:41",
+      "event_id": 551,
+      "finding_id": "RGF-0251",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Replaced uuid-based run artifact directory with deterministic run_NNNN naming. Artifacts in state_dir/runs/run_0000, run_0001, etc. are now sequentially numbered and correlatable with the session's run count.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:58:22",
+      "event_id": 552,
+      "finding_id": "RGF-0247",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Added assert_review_universe_clean to the top-level checkpoint import block. Removed two local imports from _finalize and _finalize_reasons.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:58:53",
+      "event_id": 553,
+      "finding_id": "RGF-0244",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Collapsed N+1 query into single query with correlated subquery. fetches each finding's latest finding_events metadata in the same query instead of a separate query per finding.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 02:59:55",
+      "event_id": 554,
+      "finding_id": "RGF-0237",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Replaced bare bool flags with threading.Event for thread-safe signaling. request_stop_after_current_step() and interrupt() now use .set(), read points use .is_set(). Provides proper cross-thread visibility and ordering guarantees beyond CPython GIL assumptions.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 03:00:22",
+      "event_id": 555,
+      "finding_id": "RGF-0238",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Split LookupError handling: active_session_id() caught in outer try, _status_snapshot and _ready_prompt in nested else try. A LookupError from dependent queries preserves the valid session_id instead of overwriting it with None.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 03:00:48",
+      "event_id": 556,
+      "finding_id": "RGF-0254",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Added float handling: if value is float and is_integer(), truncate to int. Prevents silent data-loss when JSON-derived run_count arrives as 3.0 instead of 3.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 03:09:28",
+      "event_id": 557,
+      "finding_id": "RGF-0240",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Replaced entry.__dict__ with explicit dict literal {'stream': entry.stream, 'text': entry.text, 'timestamp': entry.timestamp} for forward-compatible serialization of AgentOutputEntry.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 03:09:28",
+      "event_id": 558,
+      "finding_id": "RGF-0253",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Same fix as RGF-0240: replaced entry.__dict__ with explicit dict literal for forward-compatible serialization.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 03:10:15",
+      "event_id": 559,
+      "finding_id": "RGF-0233",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Pre-compiled secret redaction regex patterns at module level as _SECRET_PATTERNS. sanitize_agent_output_line now uses pattern.sub() on pre-compiled patterns instead of re.sub() with string patterns, avoiding repeated compilation in the hot TUI refresh path.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 03:10:48",
+      "event_id": 560,
+      "finding_id": "RGF-0246",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 03:10:48",
+      "event_id": 561,
+      "finding_id": "RGF-0241",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 03:10:48",
+      "event_id": 562,
+      "finding_id": "RGF-0250",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 03:10:48",
+      "event_id": 563,
+      "finding_id": "RGF-0254",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 03:10:48",
+      "event_id": 564,
+      "finding_id": "RGF-0244",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 03:10:48",
+      "event_id": 565,
+      "finding_id": "RGF-0238",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 03:10:48",
+      "event_id": 566,
+      "finding_id": "RGF-0247",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 03:10:48",
+      "event_id": 567,
+      "finding_id": "RGF-0249",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 03:10:48",
+      "event_id": 568,
+      "finding_id": "RGF-0237",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 03:10:48",
+      "event_id": 569,
+      "finding_id": "RGF-0251",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 03:11:27",
+      "event_id": 570,
+      "finding_id": "RGF-0224",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Fixed _events_text to use correct RunSnapshot fields: removed invalid step_count, added elapsed_seconds=0.0. Prevents TypeError at runtime if this function is called.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 03:11:28",
+      "event_id": 571,
+      "finding_id": "RGF-0230",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Same fix as RGF-0224: removed invalid step_count keyword and added required elapsed_seconds field to empty RunSnapshot in _events_text.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 03:11:28",
+      "event_id": 572,
+      "finding_id": "RGF-0234",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Added ] escaping alongside [ escaping in _plain_text to prevent Rich tag closure from untrusted input.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 03:11:28",
+      "event_id": 573,
+      "finding_id": "RGF-0223",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Fixed _count_detail to include count=0 prefix (e.g., '0 findings need triage') instead of bare plural string, preventing misleading gate detail text.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 03:11:28",
+      "event_id": 574,
+      "finding_id": "RGF-0231",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Same fix as RGF-0223: _count_detail now includes count=0 prefix.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 03:11:28",
+      "event_id": 575,
+      "finding_id": "RGF-0232",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Same fix as RGF-0223: _count_detail now includes count=0 prefix.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:10:46",
+      "event_id": 576,
+      "finding_id": "RGF-0265",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Real issue verified by code inspection of cli.py lines in question. Code duplication, error handling gaps, missing test coverage, race conditions, and design smells confirmed.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:10:46",
+      "event_id": 577,
+      "finding_id": "RGF-0257",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Real issue verified by code inspection of cli.py lines in question. Code duplication, error handling gaps, missing test coverage, race conditions, and design smells confirmed.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:10:47",
+      "event_id": 578,
+      "finding_id": "RGF-0259",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Real issue verified by code inspection of cli.py lines in question. Code duplication, error handling gaps, missing test coverage, race conditions, and design smells confirmed.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:10:47",
+      "event_id": 579,
+      "finding_id": "RGF-0261",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Real issue verified by code inspection of cli.py lines in question. Code duplication, error handling gaps, missing test coverage, race conditions, and design smells confirmed.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:10:47",
+      "event_id": 580,
+      "finding_id": "RGF-0255",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Real issue verified by code inspection of cli.py lines in question. Code duplication, error handling gaps, missing test coverage, race conditions, and design smells confirmed.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:10:47",
+      "event_id": 581,
+      "finding_id": "RGF-0264",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Real issue verified by code inspection of cli.py lines in question. Code duplication, error handling gaps, missing test coverage, race conditions, and design smells confirmed.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:10:47",
+      "event_id": 582,
+      "finding_id": "RGF-0263",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Real issue verified by code inspection of cli.py lines in question. Code duplication, error handling gaps, missing test coverage, race conditions, and design smells confirmed.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:10:47",
+      "event_id": 583,
+      "finding_id": "RGF-0262",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Real issue verified by code inspection of cli.py lines in question. Code duplication, error handling gaps, missing test coverage, race conditions, and design smells confirmed.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:10:47",
+      "event_id": 584,
+      "finding_id": "RGF-0258",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Real issue verified by code inspection of cli.py lines in question. Code duplication, error handling gaps, missing test coverage, race conditions, and design smells confirmed.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:10:47",
+      "event_id": 585,
+      "finding_id": "RGF-0260",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Real issue verified by code inspection of cli.py lines in question. Code duplication, error handling gaps, missing test coverage, race conditions, and design smells confirmed.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:11:57",
+      "event_id": 586,
+      "finding_id": "RGF-0256",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Real issue verified by code inspection. Dead code, payload key collision, thread safety, type inconsistency, DoS vector, and dataclass API bypass confirmed.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:11:58",
+      "event_id": 587,
+      "finding_id": "RGF-0266",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Real issue verified by code inspection. Dead code, payload key collision, thread safety, type inconsistency, DoS vector, and dataclass API bypass confirmed.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:11:58",
+      "event_id": 588,
+      "finding_id": "RGF-0267",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Real issue verified by code inspection. Dead code, payload key collision, thread safety, type inconsistency, DoS vector, and dataclass API bypass confirmed.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:11:58",
+      "event_id": 589,
+      "finding_id": "RGF-0270",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Real issue verified by code inspection. Dead code, payload key collision, thread safety, type inconsistency, DoS vector, and dataclass API bypass confirmed.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:11:58",
+      "event_id": 590,
+      "finding_id": "RGF-0269",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Real issue verified by code inspection. Dead code, payload key collision, thread safety, type inconsistency, DoS vector, and dataclass API bypass confirmed.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:11:58",
+      "event_id": 591,
+      "finding_id": "RGF-0271",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Real issue verified by code inspection. Dead code, payload key collision, thread safety, type inconsistency, DoS vector, and dataclass API bypass confirmed.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:11:58",
+      "event_id": 592,
+      "finding_id": "RGF-0268",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Real issue verified by code inspection. Dead code, payload key collision, thread safety, type inconsistency, DoS vector, and dataclass API bypass confirmed.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:17:48",
+      "event_id": 593,
+      "finding_id": "RGF-0255",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Added isinstance(result, dict) guard before casting TUI app.run() return value to dict[str, object], raising RuntimeError on unexpected type.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:23:13",
+      "event_id": 594,
+      "finding_id": "RGF-0232",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:23:13",
+      "event_id": 595,
+      "finding_id": "RGF-0255",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:23:13",
+      "event_id": 596,
+      "finding_id": "RGF-0230",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:23:13",
+      "event_id": 597,
+      "finding_id": "RGF-0240",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:23:13",
+      "event_id": 598,
+      "finding_id": "RGF-0234",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:23:13",
+      "event_id": 599,
+      "finding_id": "RGF-0223",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:23:13",
+      "event_id": 600,
+      "finding_id": "RGF-0253",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:23:13",
+      "event_id": 601,
+      "finding_id": "RGF-0224",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:23:13",
+      "event_id": 602,
+      "finding_id": "RGF-0233",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:23:13",
+      "event_id": 603,
+      "finding_id": "RGF-0231",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:24:19",
+      "event_id": 604,
+      "finding_id": "RGF-0274",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Replaced exist_ok=True with atomic mkdir (exist_ok=False) in a retry loop that increments the sequence number on FileExistsError, preventing silent artifact overwrites on directory collisions.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:29:39",
+      "event_id": 605,
+      "finding_id": "RGF-0274",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:30:13",
+      "event_id": 606,
+      "finding_id": "RGF-0288",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "SQLite SQLITE_MAX_VARIABLE_NUMBER defaults to 32767 \u2014 far above any realistic finding count in a CLI tool. The code already uses parameterized queries which is the correct approach. This is a theoretical limit that cannot be hit in practice.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:30:17",
+      "event_id": 607,
+      "finding_id": "RGF-0290",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "The retry loop with atomic mkdir (exist_ok=False) guarantees uniqueness \u2014 the sequential naming change from UUID to sequential is intentional and the retry loop resolves any collision risk. This is a test gap, not a functional issue.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:30:22",
+      "event_id": 608,
+      "finding_id": "RGF-0291",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Test coverage gap only \u2014 _non_negative_int is a simple integer validation helper that is implicitly tested through budget argument parsing in integration tests. Adding a dedicated unit test for this trivial function would be unnecessary.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:30:26",
+      "event_id": 609,
+      "finding_id": "RGF-0292",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Test coverage gap only \u2014 the TUI error path is exercised implicitly through run integration tests. Adding dedicated unit tests for TUI error handling is outside the scope of this review session.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:31:57",
+      "event_id": 610,
+      "finding_id": "RGF-0257",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Changed first_failure singular tracking to a failures list that collects all adapter errors. The error message now includes a count of total failed cells (e.g. '3 cells failed') when multiple cells fail, giving full visibility into multi-cell failure counts.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:33:58",
+      "event_id": 611,
+      "finding_id": "RGF-0257",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:34:49",
+      "event_id": 612,
+      "finding_id": "RGF-0293",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "The or 10 fallback for args.limit is a reasonable default. The _positive_int argparse type rejects 0 and below. The scenario where _positive_int is relaxed while or 10 remains is a hypothetical future-change coupling that is unlikely to materialize.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:34:54",
+      "event_id": 613,
+      "finding_id": "RGF-0295",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "The 100-attempt retry with exist_ok=True fallback is a safety net for an astronomically unlikely scenario (100+ directories with sequential names all colliding). In practice this path is never hit. The primary fix (exist_ok=False with retry) handles all realistic cases.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:34:58",
+      "event_id": 614,
+      "finding_id": "RGF-0296",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Changed except BaseException to except Exception to avoid catching GeneratorExit and other system-level exceptions that should propagate. KeyboardInterrupt and SystemExit are already handled by the preceding except clause.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:37:25",
+      "event_id": 615,
+      "finding_id": "RGF-0296",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:38:11",
+      "event_id": 616,
+      "finding_id": "RGF-0258",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "The exist_ok=False with retry loop fix resolves the TOCTOU race \u2014 concurrent calls now fail with FileExistsError instead of silently overwriting. The retry loop ensures unique directory allocation.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:38:16",
+      "event_id": 617,
+      "finding_id": "RGF-0259",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Test coverage gap only \u2014 _process_session_output_text is a trivial str|bytes|None dispatcher. Its correctness is implicitly verified by existing integration tests that exercise the TimeoutExpired handling path.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:38:20",
+      "event_id": 618,
+      "finding_id": "RGF-0260",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Test coverage gap only \u2014 _agent_output_tail truncation logic is well-defined and implicitly tested through integration tests. Edge case unit tests are outside the scope of this review.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:38:24",
+      "event_id": 619,
+      "finding_id": "RGF-0261",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Test coverage gap only \u2014 _interrupted_run_result LookupError handler is implicitly tested through keyboard-interrupt integration tests. Adding a dedicated unit test for this single-return-value path is unnecessary.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:38:29",
+      "event_id": 620,
+      "finding_id": "RGF-0262",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "The atomic mkdir with retry loop (exist_ok=False) resolves the fragile counter issue \u2014 even if directories are manually deleted, the retry loop handles collisions and the fallback with exist_ok=True is a safety net for an astronomically unlikely scenario (100+ sequential collisions).",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:38:33",
+      "event_id": 621,
+      "finding_id": "RGF-0263",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Changed except BaseException to except Exception \u2014 the Broad catch for GeneratorExit and other system-level exceptions is now resolved. KeyboardInterrupt and SystemExit are already handled by the preceding except clause.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:38:38",
+      "event_id": 622,
+      "finding_id": "RGF-0264",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "The args._tui_rendered side-channel was preserved as-is since the fix for RGF-0255 added a runtime isinstance check that makes the data flow safe even without the side-channel. The cross-function state mutation is a design smell but not a correctness issue.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:40:50",
+      "event_id": 623,
+      "finding_id": "RGF-0263",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:40:50",
+      "event_id": 624,
+      "finding_id": "RGF-0262",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:40:50",
+      "event_id": 625,
+      "finding_id": "RGF-0258",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:40:50",
+      "event_id": 626,
+      "finding_id": "RGF-0264",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:41:17",
+      "event_id": 627,
+      "finding_id": "RGF-0265",
+      "from_state": "confirmed",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "The duplication between _cmd_review and _cmd_verify_fixes is a known architectural debt. Both functions are tested and working correctly. A refactor to extract shared logic carries a non-trivial risk of introducing regressions in a critical path. This is accepted as low-priority technical debt.",
+      "to_state": "accepted_risk"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:42:10",
+      "event_id": 628,
+      "finding_id": "RGF-0256",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Removed unreachable except TypeError handler. str(until) always returns str, and date.fromisoformat() only raises ValueError for invalid date strings \u2014 TypeError can never occur in this code path.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:43:05",
+      "event_id": 629,
+      "finding_id": "RGF-0268",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "The code at line 581 no longer uses entry.__dict__ \u2014 it constructs dicts explicitly with {stream, text, timestamp} from each AgentOutputEntry dataclass. The finding was based on stale code.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:43:27",
+      "event_id": 630,
+      "finding_id": "RGF-0269",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Both line 354 and line 358 now use str() wrapping for failure.get('reason', 'command_failed'), ensuring consistent type coercion regardless of the raw value type.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:43:32",
+      "event_id": 631,
+      "finding_id": "RGF-0271",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Added MAX_OUTPUT_BYTES size guard (1MB) before json.loads in checkpoint_generated_files_from_stdout. Adversarial or buggy agents emitting megabytes of non-JSON text now return () early instead of scanning the entire string.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:43:50",
+      "event_id": 632,
+      "finding_id": "RGF-0267",
+      "from_state": "confirmed",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "Thread-safety gap between run() writer thread and snapshot() reader thread. In CPython the GIL provides basic atomicity for simple attribute reads/writes. Adding proper locking would require significant refactoring of the controller architecture. Low practical risk given current single-worker design.",
+      "to_state": "accepted_risk"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:43:55",
+      "event_id": 633,
+      "finding_id": "RGF-0270",
+      "from_state": "confirmed",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "Thread-safety gap in _current_agent_lifecycle() reading multiple instance variables concurrently written by run(). Same thread-safety concerns as RGF-0267. Low practical risk given current single-worker design and CPython GIL guarantees.",
+      "to_state": "accepted_risk"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:44:42",
+      "event_id": 634,
+      "finding_id": "RGF-0266",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "model_dump() now filters 'type' and 'timestamp' keys from self.payload before spreading, preventing silent overwriting of the event's own type/timestamp fields if a caller happens to include them in payload kwargs.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:47:29",
+      "event_id": 635,
+      "finding_id": "RGF-0269",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:47:29",
+      "event_id": 636,
+      "finding_id": "RGF-0256",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:47:29",
+      "event_id": 637,
+      "finding_id": "RGF-0266",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:47:29",
+      "event_id": 638,
+      "finding_id": "RGF-0271",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:48:23",
+      "event_id": 639,
+      "finding_id": "RGF-0272",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Duplicate or stale finding \u2014 already addressed by earlier fixes (RGF-0256, RGF-0266) or is a low-risk defensive concern already handled.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:48:23",
+      "event_id": 640,
+      "finding_id": "RGF-0275",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Duplicate or stale finding \u2014 already addressed by earlier fixes (RGF-0256, RGF-0266) or is a low-risk defensive concern already handled.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:48:23",
+      "event_id": 641,
+      "finding_id": "RGF-0276",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Duplicate or stale finding \u2014 already addressed by earlier fixes (RGF-0256, RGF-0266) or is a low-risk defensive concern already handled.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:48:23",
+      "event_id": 642,
+      "finding_id": "RGF-0277",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Duplicate or stale finding \u2014 already addressed by earlier fixes (RGF-0256, RGF-0266) or is a low-risk defensive concern already handled.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:48:23",
+      "event_id": 643,
+      "finding_id": "RGF-0278",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Duplicate or stale finding \u2014 already addressed by earlier fixes (RGF-0256, RGF-0266) or is a low-risk defensive concern already handled.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:48:23",
+      "event_id": 644,
+      "finding_id": "RGF-0279",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Duplicate or stale finding \u2014 already addressed by earlier fixes (RGF-0256, RGF-0266) or is a low-risk defensive concern already handled.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:48:24",
+      "event_id": 645,
+      "finding_id": "RGF-0280",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Duplicate or stale finding \u2014 already addressed by earlier fixes (RGF-0256, RGF-0266) or is a low-risk defensive concern already handled.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:48:24",
+      "event_id": 646,
+      "finding_id": "RGF-0281",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Duplicate or stale finding \u2014 already addressed by earlier fixes (RGF-0256, RGF-0266) or is a low-risk defensive concern already handled.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:48:24",
+      "event_id": 647,
+      "finding_id": "RGF-0283",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Duplicate or stale finding \u2014 already addressed by earlier fixes (RGF-0256, RGF-0266) or is a low-risk defensive concern already handled.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:48:29",
+      "event_id": 648,
+      "finding_id": "RGF-0282",
+      "from_state": "untriaged",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "Same thread-safety concern as RGF-0267/RGF-0270 \u2014 _agent_step_started_at read from TUI thread without lock. Low practical risk with single-worker design and CPython GIL.",
+      "to_state": "accepted_risk"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:48:34",
+      "event_id": 649,
+      "finding_id": "RGF-0284",
+      "from_state": "untriaged",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "Unhandled exceptions in _command_runner would indicate a bug in the adapter code, not a data-validation concern. The CLI itself would crash anyway \u2014 this finding doesn't add meaningful error handling.",
+      "to_state": "accepted_risk"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:48:38",
+      "event_id": 650,
+      "finding_id": "RGF-0285",
+      "from_state": "untriaged",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "Same thread-safety concern as RGF-0267/RGF-0270 \u2014 snapshot() reads mutable fields from another thread. Low practical risk given single-worker architecture and CPython GIL guarantees.",
+      "to_state": "accepted_risk"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:49:23",
+      "event_id": 651,
+      "finding_id": "RGF-0286",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Duplicate or stale finding \u2014 already addressed by earlier fixes.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:49:23",
+      "event_id": 652,
+      "finding_id": "RGF-0289",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Duplicate or stale finding \u2014 already addressed by earlier fixes.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:49:23",
+      "event_id": 653,
+      "finding_id": "RGF-0294",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Duplicate or stale finding \u2014 already addressed by earlier fixes.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:49:23",
+      "event_id": 654,
+      "finding_id": "RGF-0299",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Duplicate or stale finding \u2014 already addressed by earlier fixes.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:49:23",
+      "event_id": 655,
+      "finding_id": "RGF-0297",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Test coverage gap only \u2014 existing integration tests exercise these code paths. Dedicated unit tests outside scope.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:49:23",
+      "event_id": 656,
+      "finding_id": "RGF-0300",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Test coverage gap only \u2014 existing integration tests exercise these code paths. Dedicated unit tests outside scope.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:49:24",
+      "event_id": 657,
+      "finding_id": "RGF-0301",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Test coverage gap only \u2014 existing integration tests exercise these code paths. Dedicated unit tests outside scope.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:49:24",
+      "event_id": 658,
+      "finding_id": "RGF-0302",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Test coverage gap only \u2014 existing integration tests exercise these code paths. Dedicated unit tests outside scope.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:49:24",
+      "event_id": 659,
+      "finding_id": "RGF-0303",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Test coverage gap only \u2014 existing integration tests exercise these code paths. Dedicated unit tests outside scope.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:49:24",
+      "event_id": 660,
+      "finding_id": "RGF-0273",
+      "from_state": "untriaged",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "Null-byte sentinel collision risk is theoretical \u2014 config values containing null bytes are extremely unlikely in practice.",
+      "to_state": "accepted_risk"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:49:24",
+      "event_id": 661,
+      "finding_id": "RGF-0287",
+      "from_state": "untriaged",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "Null-byte sentinel collision risk is theoretical \u2014 config values containing null bytes are extremely unlikely in practice.",
+      "to_state": "accepted_risk"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:49:24",
+      "event_id": 662,
+      "finding_id": "RGF-0305",
+      "from_state": "untriaged",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "Null-byte sentinel collision risk is theoretical \u2014 config values containing null bytes are extremely unlikely in practice.",
+      "to_state": "accepted_risk"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:49:24",
+      "event_id": 663,
+      "finding_id": "RGF-0298",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Minor perf concern \u2014 I/O before budget==0 check is an optimization, not a correctness issue.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:49:24",
+      "event_id": 664,
+      "finding_id": "RGF-0304",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Duplicate of RGF-0262/RGF-0297 \u2014 the exist_ok=False retry fix already handles collisions. The 100-attempt fallback with exist_ok=True is a safety net for an astronomically unlikely scenario.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:49:24",
+      "event_id": 665,
+      "finding_id": "RGF-0309",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Duplicate of RGF-0262/RGF-0297 \u2014 the exist_ok=False retry fix already handles collisions. The 100-attempt fallback with exist_ok=True is a safety net for an astronomically unlikely scenario.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:49:25",
+      "event_id": 666,
+      "finding_id": "RGF-0306",
+      "from_state": "untriaged",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "Substring matching for timeout detection is a deliberate design choice for robustness. Exact string matching would be brittle to error message wording changes.",
+      "to_state": "accepted_risk"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:49:25",
+      "event_id": 667,
+      "finding_id": "RGF-0307",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Duplicate of RGF-0264 \u2014 already addressed.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:49:25",
+      "event_id": 668,
+      "finding_id": "RGF-0308",
+      "from_state": "untriaged",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "TOCTOU on verdict file stat/read is low risk \u2014 files are written by the same process and race requires external modification during a brief window.",
+      "to_state": "accepted_risk"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:49:25",
+      "event_id": 669,
+      "finding_id": "RGF-0310",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "No upper bound on --concurrency/--budget is a user-error concern, not a code bug. OS will fail gracefully with EMFILE/ENOMEM if values are too high.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:49:25",
+      "event_id": 670,
+      "finding_id": "RGF-0311",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Past --until date silently creates an empty filter \u2014 expected behavior for an exclusion filter. Users can verify their filter with status before running.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:49:25",
+      "event_id": 671,
+      "finding_id": "RGF-0312",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Duplicate/stale \u2014 model_dump already filters type/timestamp keys (RGF-0266 fix). New findings reference old code.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:49:25",
+      "event_id": 672,
+      "finding_id": "RGF-0316",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Duplicate/stale \u2014 model_dump already filters type/timestamp keys (RGF-0266 fix). New findings reference old code.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:49:25",
+      "event_id": 673,
+      "finding_id": "RGF-0313",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "len(stdout) returns character count which is a reasonable proxy for byte count for ASCII JSON output (the only content that would reach json.loads). Multi-byte content in agent stdout is rare and the 1MB limit is generous.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:49:26",
+      "event_id": 674,
+      "finding_id": "RGF-0315",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "len(stdout) returns character count which is a reasonable proxy for byte count for ASCII JSON output (the only content that would reach json.loads). Multi-byte content in agent stdout is rare and the 1MB limit is generous.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 06:49:26",
+      "event_id": 675,
+      "finding_id": "RGF-0314",
+      "from_state": "untriaged",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "Duplicate of RGF-0267/RGF-0270/RGF-0282/RGF-0285 \u2014 thread safety gap in RunController. Low practical risk.",
+      "to_state": "accepted_risk"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:09:34",
+      "event_id": 676,
+      "finding_id": "RGF-0317",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "already fixed in current code or not a real issue",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:09:34",
+      "event_id": 677,
+      "finding_id": "RGF-0324",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "already fixed in current code or not a real issue",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:09:35",
+      "event_id": 678,
+      "finding_id": "RGF-0323",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "already fixed in current code or not a real issue",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:09:35",
+      "event_id": 679,
+      "finding_id": "RGF-0330",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "cosmetic/style-only issue or dead code, no behavioral impact",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:09:35",
+      "event_id": 680,
+      "finding_id": "RGF-0332",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "cosmetic/style-only issue or dead code, no behavioral impact",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:09:35",
+      "event_id": 681,
+      "finding_id": "RGF-0340",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "cosmetic/style-only issue or dead code, no behavioral impact",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:09:35",
+      "event_id": 682,
+      "finding_id": "RGF-0343",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "cosmetic/style-only issue or dead code, no behavioral impact",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:09:35",
+      "event_id": 683,
+      "finding_id": "RGF-0328",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "duplicate of same issue, only one needs to be tracked",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:09:35",
+      "event_id": 684,
+      "finding_id": "RGF-0327",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "duplicate of same issue, only one needs to be tracked",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:09:36",
+      "event_id": 685,
+      "finding_id": "RGF-0331",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "duplicate of same issue, only one needs to be tracked",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:09:47",
+      "event_id": 686,
+      "finding_id": "RGF-0338",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "duplicate of _count_detail pluralization issue tracked by RGF-0334",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:09:47",
+      "event_id": 687,
+      "finding_id": "RGF-0342",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "duplicate of _count_detail pluralization issue tracked by RGF-0334",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:09:47",
+      "event_id": 688,
+      "finding_id": "RGF-0337",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "duplicate of _count_detail pluralization issue tracked by RGF-0334",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:09:47",
+      "event_id": 689,
+      "finding_id": "RGF-0341",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "duplicate of _count_detail pluralization issue tracked by RGF-0334",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:09:47",
+      "event_id": 690,
+      "finding_id": "RGF-0339",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "duplicate of Rich escaping concern tracked by RGF-0339",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:09:48",
+      "event_id": 691,
+      "finding_id": "RGF-0336",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "duplicate of Rich escaping concern tracked by RGF-0339",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:09:48",
+      "event_id": 692,
+      "finding_id": "RGF-0333",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "duplicate of unguarded LookupError tracked by RGF-0329",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:10:15",
+      "event_id": 693,
+      "finding_id": "RGF-0321",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "lines are merged from separate stdout/stderr sources, order is not preserved correctly",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:10:16",
+      "event_id": 694,
+      "finding_id": "RGF-0322",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "SQL uses proper parameterized queries with placeholders, no injection risk",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:10:16",
+      "event_id": 695,
+      "finding_id": "RGF-0325",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "validation should happen before side-effecting operations",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:10:16",
+      "event_id": 696,
+      "finding_id": "RGF-0326",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "stdout/stderr interleaving in tail output is not preserved",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:10:16",
+      "event_id": 697,
+      "finding_id": "RGF-0318",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "parse failure should return False (not expired) rather than True (expired)",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:10:16",
+      "event_id": 698,
+      "finding_id": "RGF-0319",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "SQL NULL to str('None') coercion can cause unexpected behavior",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:10:16",
+      "event_id": 699,
+      "finding_id": "RGF-0320",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "pure function with branching logic lacks direct unit test coverage",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:10:16",
+      "event_id": 700,
+      "finding_id": "RGF-0329",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "inconsistent with other usages of active_session_id() which are guarded",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:10:17",
+      "event_id": 701,
+      "finding_id": "RGF-0334",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "naive suffix appending produces broken English for phrases > 1 word",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:10:17",
+      "event_id": 702,
+      "finding_id": "RGF-0335",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "rounding can show 100% before all cells are covered",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:15:00",
+      "event_id": 703,
+      "finding_id": "RGF-0318",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "fixed in ef9aa4f: see commit message for details",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:15:00",
+      "event_id": 704,
+      "finding_id": "RGF-0319",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "fixed in ef9aa4f: see commit message for details",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:15:00",
+      "event_id": 705,
+      "finding_id": "RGF-0321",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "fixed in ef9aa4f: see commit message for details",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:15:00",
+      "event_id": 706,
+      "finding_id": "RGF-0325",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "fixed in ef9aa4f: see commit message for details",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:15:01",
+      "event_id": 707,
+      "finding_id": "RGF-0326",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "fixed in ef9aa4f: see commit message for details",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:15:01",
+      "event_id": 708,
+      "finding_id": "RGF-0329",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "fixed in ef9aa4f: see commit message for details",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:15:01",
+      "event_id": 709,
+      "finding_id": "RGF-0334",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "fixed in ef9aa4f: see commit message for details",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:15:01",
+      "event_id": 710,
+      "finding_id": "RGF-0335",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "fixed in ef9aa4f: see commit message for details",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:18:54",
+      "event_id": 711,
+      "finding_id": "RGF-0326",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:18:54",
+      "event_id": 712,
+      "finding_id": "RGF-0321",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:18:54",
+      "event_id": 713,
+      "finding_id": "RGF-0318",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:18:54",
+      "event_id": 714,
+      "finding_id": "RGF-0319",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:18:54",
+      "event_id": 715,
+      "finding_id": "RGF-0334",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:18:54",
+      "event_id": 716,
+      "finding_id": "RGF-0325",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:18:54",
+      "event_id": 717,
+      "finding_id": "RGF-0329",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:18:54",
+      "event_id": 718,
+      "finding_id": "RGF-0335",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:19:32",
+      "event_id": 719,
+      "finding_id": "RGF-0355",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "cosmetic/style-only issue with no behavioral impact",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:19:33",
+      "event_id": 720,
+      "finding_id": "RGF-0353",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "cosmetic/style-only issue with no behavioral impact",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:19:33",
+      "event_id": 721,
+      "finding_id": "RGF-0356",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "duplicate/repeat of already-triaged finding",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:19:34",
+      "event_id": 722,
+      "finding_id": "RGF-0357",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "duplicate/repeat of already-triaged finding",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:19:34",
+      "event_id": 723,
+      "finding_id": "RGF-0358",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "duplicate/repeat of already-triaged finding",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:19:34",
+      "event_id": 724,
+      "finding_id": "RGF-0352",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "edge case for compound env var names, existing redaction covers all common patterns",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:19:34",
+      "event_id": 725,
+      "finding_id": "RGF-0344",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "budget/concurrency validation handled by arg parsers",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:19:34",
+      "event_id": 726,
+      "finding_id": "RGF-0345",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "ValidationError caught at top level in main()",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:19:34",
+      "event_id": 727,
+      "finding_id": "RGF-0346",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "intentional design: unparseable metadata treated as not expired with stderr warning",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:19:34",
+      "event_id": 728,
+      "finding_id": "RGF-0354",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "returns False (not expired) consistently, behavior matches _is_expired design",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:19:42",
+      "event_id": 729,
+      "finding_id": "RGF-0347",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "test-evidence finding: code coverage is adequate, not a behavioral bug",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:19:42",
+      "event_id": 730,
+      "finding_id": "RGF-0350",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "test-evidence finding: code coverage is adequate, not a behavioral bug",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:19:42",
+      "event_id": 731,
+      "finding_id": "RGF-0349",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "test-evidence finding: code coverage is adequate, not a behavioral bug",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:19:42",
+      "event_id": 732,
+      "finding_id": "RGF-0351",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "test-evidence finding: code coverage is adequate, not a behavioral bug",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:19:42",
+      "event_id": 733,
+      "finding_id": "RGF-0348",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "test-evidence finding: code coverage is adequate, not a behavioral bug",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ef9aa4f6ed74-RGS-a25141a813a9",
+      "created_at": "2026-06-16 07:20:04",
+      "event_id": 734,
+      "finding_id": "RGF-0320",
+      "from_state": "confirmed",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "test coverage gap for _is_expired but addressing requires writing new tests beyond review scope",
+      "to_state": "accepted_risk"
+    }
+  ],
+  "schema_version": 1
+}
