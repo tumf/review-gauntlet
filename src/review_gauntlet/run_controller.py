@@ -430,6 +430,7 @@ class RunController:
                     reason=checkpoint_commit.reason,
                     commit=checkpoint_commit.commit,
                 )
+                self._mark_finalized()
                 self._emit("finalized", session_id=session_id)
                 return _run_result(
                     completed=True,
@@ -451,6 +452,7 @@ class RunController:
             self.refresh()
         session_id = self._active_session_id_or_none()
         if session_id is None:
+            self._mark_finalized()
             self._emit("finalized", session_id=None)
             return _run_result(
                 completed=True,
@@ -481,6 +483,13 @@ class RunController:
             session_id=session_id,
             generated_files=generated_files,
         )
+
+    def _mark_finalized(self) -> None:
+        self._agent_status = "finalized"
+        self._agent_lifecycle = AgentLifecycle(status="completed")
+        self._agent_step_started_at = None
+        self._agent_timeout_seconds = None
+        self._agent_output_progress = None
 
     def _emit(self, event_type: str, **payload: object) -> None:
         event = RunEvent.create(event_type, **payload)
