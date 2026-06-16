@@ -47,7 +47,12 @@ def test_finding_int_field_returns_zero_for_none_value() -> None:
 
 
 def test_finding_sort_key_extracts_tuple() -> None:
-    finding = {"path": "a.py", "start_line": 10, "end_line": 20, "finding_id": "F-1"}
+    finding: dict[str, object] = {
+        "path": "a.py",
+        "start_line": 10,
+        "end_line": 20,
+        "finding_id": "F-1",
+    }
     assert _finding_sort_key(finding) == ("a.py", 10, 20, "F-1")
 
 

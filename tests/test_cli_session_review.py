@@ -32,6 +32,14 @@ def _cell_for_path(tmp_path: Path, path: str) -> str:
     raise AssertionError(f"missing review cell for {path}")
 
 
+def _cell_ids_for_path(tmp_path: Path, path: str) -> list[str]:
+    return [
+        str(row["cell_id"])
+        for row in SessionStore(tmp_path).list_cells()
+        if row["file_path"] == path
+    ]
+
+
 def _fixture(tmp_path: Path, cell_id: str, content: str = "Missing auth") -> Path:
     fixture = tmp_path / ".review-gauntlet" / "fixtures" / "fixture.json"
     fixture.parent.mkdir(parents=True, exist_ok=True)
@@ -292,8 +300,14 @@ def test_ready_prioritizes_confirmed_findings_before_stale_review(
     main(["ready", str(tmp_path), "--format", "json"])
 
     data = json.loads(capsys.readouterr().out)
-    assert "Fix the next confirmed finding" in data["prompt"]
-    assert "Review stale review cells" not in data["prompt"]
+    prompt = data["prompt"]
+    assert "file_path: README.md" in prompt
+    assert "confirmed findings need fixing or re-triage" in prompt
+    assert "triage" in prompt
+    assert "fix if needed" in prompt
+    assert "mark" in prompt
+    assert finding_id in prompt
+    assert "stale review cells need refreshed coverage" not in prompt
 
 
 def test_ready_prioritizes_fixed_pending_verification_before_stale_review(
@@ -311,8 +325,14 @@ def test_ready_prioritizes_fixed_pending_verification_before_stale_review(
     main(["ready", str(tmp_path), "--format", "json"])
 
     data = json.loads(capsys.readouterr().out)
-    assert "Verify fixed-pending findings" in data["prompt"]
-    assert "Review stale review cells" not in data["prompt"]
+    prompt = data["prompt"]
+    assert "file_path: README.md" in prompt
+    assert "fixed-pending findings need verification" in prompt
+    assert "triage" in prompt
+    assert "fix if needed" in prompt
+    assert "mark" in prompt
+    assert finding_id in prompt
+    assert "stale review cells need refreshed coverage" not in prompt
 
 
 def test_pending_review_cells_remain_before_finding_work(
@@ -334,6 +354,82 @@ def test_pending_review_cells_remain_before_finding_work(
     assert status["coverage"]["pending"] >= 1
     assert status["finding_state_counts"]["confirmed"] == 1
     assert status["next_required_action"] == "run_review"
+
+
+def test_ready_emits_one_file_scoped_pending_task_with_workflow_and_cell_ids(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "app.py").write_text("print('ok')\n", encoding="utf-8")
+    _init_session(tmp_path, capsys)
+
+    main(["ready", str(tmp_path), "--format", "json"])
+
+    prompt = json.loads(capsys.readouterr().out)["prompt"]
+    assert "file_path: README.md" in prompt
+    assert "app.py" not in prompt
+    assert "Scope: work only on this file_path" in prompt
+    assert "Other files are out of scope" in prompt
+    assert "triage" in prompt
+    assert "fix if needed" in prompt
+    assert "mark" in prompt
+    assert "pending review cells need coverage" in prompt
+    for cell_id in _cell_ids_for_path(tmp_path, "README.md"):
+        assert cell_id in prompt
+
+
+def test_ready_prompt_includes_stable_review_cell_and_finding_ids_for_target_file(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_session(tmp_path, capsys)
+    cell_id = _cell_for_path(tmp_path, "README.md")
+    fixture = _fixture(tmp_path, cell_id)
+    main(["review", str(tmp_path), "--fixture", str(fixture), "--format", "json"])
+    capsys.readouterr()
+    finding_id = _finding_id(tmp_path)
+
+    main(["ready", str(tmp_path), "--format", "json"])
+
+    prompt = json.loads(capsys.readouterr().out)["prompt"]
+    assert "file_path: README.md" in prompt
+    assert f"finding_id: {finding_id}" in prompt
+    assert f"latest_cell_id: {cell_id}" in prompt
+    assert "line_range: 1-1" in prompt
+    assert "untriaged findings need triage" in prompt
+
+
+def test_run_passes_same_file_scoped_prompt_as_ready(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_session(tmp_path, capsys)
+    main(["ready", str(tmp_path), "--format", "json"])
+    ready_prompt = json.loads(capsys.readouterr().out)["prompt"]
+    prompt_path = tmp_path / "captured-prompt.txt"
+    script = (
+        "import pathlib, sys; "
+        f"pathlib.Path({str(prompt_path)!r}).write_text(sys.argv[1], encoding='utf-8')"
+    )
+    config = _command_config(tmp_path, script, name=".review-gauntlet/run-config.json")
+
+    with pytest.raises(SystemExit) as excinfo:
+        main(
+            [
+                "run",
+                str(tmp_path),
+                "--config",
+                str(config),
+                "--max-steps",
+                "1",
+                "--no-tui",
+                "--format",
+                "json",
+            ]
+        )
+
+    run_result = json.loads(capsys.readouterr().out)
+    assert excinfo.value.code == 1
+    assert run_result["reason"] == "max_steps_exhausted"
+    assert run_result["steps"][0]["prompt"] == ready_prompt
+    assert prompt_path.read_text(encoding="utf-8") == ready_prompt
 
 
 def test_fixed_finding_is_verified_when_relevant_path_is_reviewed(

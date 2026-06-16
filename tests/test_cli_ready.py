@@ -133,7 +133,7 @@ def _ledger_snapshot(root: Path) -> dict[str, object]:
 def _assert_skill_directed_short_prompt(prompt: str, expected_phrase: str) -> None:
     assert prompt.startswith(READY_PREFIX)
     assert expected_phrase in prompt
-    assert len(prompt) < 260
+    assert "file_path:" in prompt or "Commit intended git changes" in prompt
     lowered = prompt.lower()
     for forbidden in FORBIDDEN_PROMPT_TERMS:
         assert forbidden not in lowered
@@ -147,7 +147,7 @@ def test_ready_command_outputs_prompt_only_json_and_text(
     data = _ready_json(tmp_path, capsys)
     prompt = data["prompt"]
     assert prompt is not None
-    _assert_skill_directed_short_prompt(prompt, "Review pending review cells")
+    _assert_skill_directed_short_prompt(prompt, "pending review cells need coverage")
 
     main(["ready", str(tmp_path), "--format", "text"])
     text = capsys.readouterr().out.strip()
@@ -167,7 +167,7 @@ def test_ready_actionable_prompt_returns_success_without_system_exit(
     data = json.loads(capsys.readouterr().out)
     prompt = data["prompt"]
     assert isinstance(prompt, str)
-    _assert_skill_directed_short_prompt(prompt, "Review pending review cells")
+    _assert_skill_directed_short_prompt(prompt, "pending review cells need coverage")
 
 
 def test_ready_priority_order_is_deterministic(
@@ -183,25 +183,25 @@ def test_ready_priority_order_is_deterministic(
 
     prompt = _ready_json(tmp_path, capsys)["prompt"]
     assert prompt is not None
-    assert "Re-triage reopened findings" in prompt
+    assert "reopened findings need re-triage" in prompt
 
     _set_all_cells(tmp_path, CellState.PENDING)
-    assert "Review pending review cells" in _ready_prompt(tmp_path, capsys)
+    assert "pending review cells need coverage" in _ready_prompt(tmp_path, capsys)
 
     _set_all_cells(tmp_path, CellState.REVIEWED)
-    assert "Re-triage reopened findings" in _ready_prompt(tmp_path, capsys)
+    assert "reopened findings need re-triage" in _ready_prompt(tmp_path, capsys)
 
     with SessionStore(tmp_path).connect() as conn:
         conn.execute("delete from findings where state = ?", (FindingState.REOPENED.value,))
-    assert "Triage untriaged findings" in _ready_prompt(tmp_path, capsys)
+    assert "untriaged findings need triage" in _ready_prompt(tmp_path, capsys)
 
     with SessionStore(tmp_path).connect() as conn:
         conn.execute("delete from findings where state = ?", (FindingState.UNTRIAGED.value,))
-    assert "Fix the next confirmed finding" in _ready_prompt(tmp_path, capsys)
+    assert "confirmed findings need fixing or re-triage" in _ready_prompt(tmp_path, capsys)
 
     with SessionStore(tmp_path).connect() as conn:
         conn.execute("delete from findings where state = ?", (FindingState.CONFIRMED.value,))
-    assert "Verify fixed-pending findings" in _ready_prompt(tmp_path, capsys)
+    assert "fixed-pending findings need verification" in _ready_prompt(tmp_path, capsys)
 
     with SessionStore(tmp_path).connect() as conn:
         conn.execute(
@@ -241,7 +241,7 @@ def test_ready_prioritizes_pending_review_before_dirty_finalize_blocker(
     prompt = _ready_json(tmp_path, capsys)["prompt"]
 
     assert prompt is not None
-    _assert_skill_directed_short_prompt(prompt, "Review pending review cells")
+    _assert_skill_directed_short_prompt(prompt, "pending review cells need coverage")
     assert "Commit intended git changes before finalizing" not in prompt
 
 
@@ -418,7 +418,7 @@ def test_ready_keeps_stale_only_review_cells_reachable(
     prompt = _ready_json(tmp_path, capsys)["prompt"]
 
     assert prompt is not None
-    _assert_skill_directed_short_prompt(prompt, "Review stale review cells")
+    _assert_skill_directed_short_prompt(prompt, "stale review cells need refreshed coverage")
 
 
 def test_status_reports_reviewed_current_cell_as_stale_after_digest_change(
@@ -573,17 +573,17 @@ def test_ready_prompts_are_skill_directed_and_avoid_coordination_metadata(
     _init_session(tmp_path, capsys)
     prompt = _ready_json(tmp_path, capsys)["prompt"]
     assert prompt is not None
-    _assert_skill_directed_short_prompt(prompt, "Review pending review cells")
+    _assert_skill_directed_short_prompt(prompt, "pending review cells need coverage")
 
     _insert_finding(tmp_path, FindingState.UNTRIAGED, 1)
     prompt = _ready_json(tmp_path, capsys)["prompt"]
     assert prompt is not None
-    _assert_skill_directed_short_prompt(prompt, "Review pending review cells")
+    _assert_skill_directed_short_prompt(prompt, "pending review cells need coverage")
 
     _set_all_cells(tmp_path, CellState.REVIEWED)
     prompt = _ready_json(tmp_path, capsys)["prompt"]
     assert prompt is not None
-    _assert_skill_directed_short_prompt(prompt, "Triage untriaged findings")
+    _assert_skill_directed_short_prompt(prompt, "untriaged findings need triage")
 
 
 def test_ready_prompts_review_for_incomplete_coverage_before_confirmed_findings(
@@ -594,14 +594,14 @@ def test_ready_prompts_review_for_incomplete_coverage_before_confirmed_findings(
 
     pending_prompt = _ready_json(tmp_path, capsys)["prompt"]
     assert pending_prompt is not None
-    _assert_skill_directed_short_prompt(pending_prompt, "Review pending review cells")
-    assert "Fix the next confirmed finding" not in pending_prompt
+    _assert_skill_directed_short_prompt(pending_prompt, "pending review cells need coverage")
+    assert "confirmed findings need fixing or re-triage" not in pending_prompt
 
     _set_all_cells(tmp_path, CellState.STALE)
     stale_prompt = _ready_json(tmp_path, capsys)["prompt"]
     assert stale_prompt is not None
-    _assert_skill_directed_short_prompt(stale_prompt, "Fix the next confirmed finding")
-    assert "Review stale review cells" not in stale_prompt
+    _assert_skill_directed_short_prompt(stale_prompt, "confirmed findings need fixing or re-triage")
+    assert "stale review cells need refreshed coverage" not in stale_prompt
 
 
 def test_ready_prompts_review_for_incomplete_coverage_before_fixed_pending_findings(
@@ -612,14 +612,14 @@ def test_ready_prompts_review_for_incomplete_coverage_before_fixed_pending_findi
 
     pending_prompt = _ready_json(tmp_path, capsys)["prompt"]
     assert pending_prompt is not None
-    _assert_skill_directed_short_prompt(pending_prompt, "Review pending review cells")
-    assert "Verify fixed-pending findings" not in pending_prompt
+    _assert_skill_directed_short_prompt(pending_prompt, "pending review cells need coverage")
+    assert "fixed-pending findings need verification" not in pending_prompt
 
     _set_all_cells(tmp_path, CellState.STALE)
     stale_prompt = _ready_json(tmp_path, capsys)["prompt"]
     assert stale_prompt is not None
-    _assert_skill_directed_short_prompt(stale_prompt, "Verify fixed-pending findings")
-    assert "Review stale review cells" not in stale_prompt
+    _assert_skill_directed_short_prompt(stale_prompt, "fixed-pending findings need verification")
+    assert "stale review cells need refreshed coverage" not in stale_prompt
 
 
 def test_ready_prompts_verify_fixes_when_stale_cells_coexist_with_fixed_pending(
@@ -632,8 +632,8 @@ def test_ready_prompts_verify_fixes_when_stale_cells_coexist_with_fixed_pending(
     prompt = _ready_json(tmp_path, capsys)["prompt"]
 
     assert prompt is not None
-    _assert_skill_directed_short_prompt(prompt, "Verify fixed-pending findings")
-    assert "Review stale review cells" not in prompt
+    _assert_skill_directed_short_prompt(prompt, "fixed-pending findings need verification")
+    assert "stale review cells need refreshed coverage" not in prompt
 
 
 def test_ready_prompts_verify_fixes_when_only_whole_digest_drifted(
@@ -650,7 +650,7 @@ def test_ready_prompts_verify_fixes_when_only_whole_digest_drifted(
     prompt = _ready_json(tmp_path, capsys)["prompt"]
 
     assert prompt is not None
-    _assert_skill_directed_short_prompt(prompt, "Verify fixed-pending findings")
+    _assert_skill_directed_short_prompt(prompt, "fixed-pending findings need verification")
     assert "Review target changes" not in prompt
     assert "target digest" not in prompt.lower()
     assert _ledger_snapshot(tmp_path) == before

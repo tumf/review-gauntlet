@@ -111,7 +111,8 @@ def test_run_worktree_setup_returns_warning_on_timeout(
     _write_setup_script(tmp_path, "#!/bin/sh\nsleep 999\n")
     timeout_seconds = 3.0
 
-    def fake_run(*args, **kwargs):
+    def fake_run(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        del kwargs
         raise subprocess.TimeoutExpired(cmd=args[0], timeout=timeout_seconds)
 
     monkeypatch.setattr(subprocess, "run", fake_run)
@@ -131,7 +132,8 @@ def test_run_worktree_setup_returns_warning_on_oserror(
 ) -> None:
     _write_setup_script(tmp_path, "#!/bin/sh\necho ok\n")
 
-    def fake_run(*args, **kwargs):
+    def fake_run(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        del args, kwargs
         raise OSError("Permission denied")
 
     monkeypatch.setattr(subprocess, "run", fake_run)
