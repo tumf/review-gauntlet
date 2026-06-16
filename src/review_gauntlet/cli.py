@@ -1588,7 +1588,7 @@ def _ready_findings(store: SessionStore, session_id: str) -> tuple[_ReadyFinding
             state=str(row["state"]),
             rule_id=str(row["rule_id"]),
             content=str(row["content"]),
-            latest_cell_id=str(row["latest_cell_id"]) or None,
+            latest_cell_id=str(row["latest_cell_id"]) if row["latest_cell_id"] else None,
             start_line=int(row["start_line"]),
             end_line=int(row["end_line"]),
             imprecise=bool(row["imprecise"]),
