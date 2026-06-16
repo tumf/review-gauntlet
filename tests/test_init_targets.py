@@ -28,6 +28,15 @@ def _init_repo(root: Path) -> None:
     _git(root, "commit", "-m", "initial")
 
 
+def _add_tracked_setup_script(root: Path, contents: str) -> None:
+    setup = root / ".wt" / "setup"
+    setup.parent.mkdir(parents=True, exist_ok=True)
+    setup.write_text(contents, encoding="utf-8")
+    setup.chmod(0o755)
+    _git(root, "add", ".wt/setup")
+    _git(root, "commit", "-m", "add setup hook")
+
+
 def _cell_paths(root: Path) -> set[str]:
     return {str(row["file_path"]) for row in SessionStore(root).list_cells()}
 
@@ -85,6 +94,108 @@ def test_package_only_worktree_changes_create_no_review_cells(
 
     assert json.loads(capsys.readouterr().out)["cell_count"] == 0
     assert _cell_paths(tmp_path) == set()
+
+
+def test_init_git_worktree_runs_setup_and_persists_result(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_repo(tmp_path)
+    _add_tracked_setup_script(
+        tmp_path,
+        "#!/bin/sh\npwd > setup-cwd.txt\ntouch setup-sentinel.txt\n",
+    )
+
+    main(["init", str(tmp_path), "--all", "--git-worktree", "--format", "json"])
+
+    data = json.loads(capsys.readouterr().out)
+    git_worktree = data["git_worktree"]
+    session_worktree = tmp_path / git_worktree["worktree_path"]
+    setup = git_worktree["setup"]
+    assert setup["ran"] is True
+    assert setup["script_path"] == (session_worktree / ".wt" / "setup").as_posix()
+    assert setup["skipped_reason"] is None
+    assert setup["returncode"] == 0
+    assert setup["warning"] is None
+    assert (session_worktree / "setup-sentinel.txt").is_file()
+    assert (session_worktree / "setup-cwd.txt").read_text(encoding="utf-8").strip() == str(
+        session_worktree.resolve()
+    )
+    metadata = SessionStore(tmp_path).session_metadata(data["session_id"])
+    assert metadata["git_worktree"]["setup"] == setup
+
+
+def test_init_git_worktree_no_setup_skips_hook(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_repo(tmp_path)
+    _add_tracked_setup_script(tmp_path, "#!/bin/sh\ntouch setup-sentinel.txt\n")
+
+    main(["init", str(tmp_path), "--all", "--git-worktree", "--no-setup", "--format", "json"])
+
+    data = json.loads(capsys.readouterr().out)
+    git_worktree = data["git_worktree"]
+    session_worktree = tmp_path / git_worktree["worktree_path"]
+    setup = git_worktree["setup"]
+    assert setup["ran"] is False
+    assert setup["skipped_reason"] == "disabled"
+    assert setup["returncode"] is None
+    assert setup["warning"] is None
+    assert not (session_worktree / "setup-sentinel.txt").exists()
+
+
+def test_init_git_worktree_missing_setup_is_successful_noop(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_repo(tmp_path)
+
+    main(["init", str(tmp_path), "--all", "--git-worktree", "--format", "json"])
+
+    data = json.loads(capsys.readouterr().out)
+    setup = data["git_worktree"]["setup"]
+    assert setup["ran"] is False
+    assert setup["skipped_reason"] == "missing"
+    assert setup["returncode"] is None
+    assert setup["warning"] is None
+    assert (tmp_path / data["git_worktree"]["worktree_path"]).is_dir()
+
+
+def test_init_git_worktree_setup_failure_warns_and_preserves_worktree(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_repo(tmp_path)
+    _add_tracked_setup_script(
+        tmp_path,
+        "#!/bin/sh\necho setup failed >&2\ntouch setup-before-failure.txt\nexit 1\n",
+    )
+
+    main(["init", str(tmp_path), "--all", "--git-worktree", "--format", "json"])
+
+    data = json.loads(capsys.readouterr().out)
+    git_worktree = data["git_worktree"]
+    session_worktree = tmp_path / git_worktree["worktree_path"]
+    setup = git_worktree["setup"]
+    assert setup["ran"] is True
+    assert setup["returncode"] == 1
+    assert setup["warning"] is not None
+    assert "status 1" in setup["warning"]
+    assert "setup failed" in setup["warning"]
+    assert session_worktree.is_dir()
+    assert (session_worktree / "setup-before-failure.txt").is_file()
+    assert _git(tmp_path, "branch", "--list", git_worktree["session_branch"])
+    assert git_worktree["worktree_path"] in _git(tmp_path, "worktree", "list")
+
+
+def test_plain_init_does_not_emit_or_run_setup(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_repo(tmp_path)
+    _add_tracked_setup_script(tmp_path, "#!/bin/sh\ntouch setup-sentinel.txt\n")
+
+    main(["init", str(tmp_path), "--all", "--format", "json"])
+
+    data = json.loads(capsys.readouterr().out)
+    assert "git_worktree" not in data
+    assert not (tmp_path / "setup-sentinel.txt").exists()
 
 
 def test_branch_range_init_scopes_to_changed_files(

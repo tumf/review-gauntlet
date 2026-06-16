@@ -42,6 +42,7 @@ from review_gauntlet.git_worktree import (
     create_session_worktree,
     merge_preflight_blockers,
     merge_session_worktree,
+    run_worktree_setup,
 )
 from review_gauntlet.inventory import (
     UnsafeRepositoryPathError,
@@ -188,6 +189,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--git-worktree",
         action="store_true",
         help="Create an isolated Git linked worktree and session branch (default: false)",
+    )
+    init.add_argument(
+        "--no-setup",
+        action="store_true",
+        help="Skip running .wt/setup in a newly created Git linked worktree (default: false)",
     )
     init.add_argument("--commit")
     init.add_argument(
@@ -819,8 +825,15 @@ def _cmd_init(args: argparse.Namespace, root: Path, store: SessionStore) -> None
     output: dict[str, object] = {"session_id": session_id, "cell_count": len(cells), "run_count": 0}
     if bool(getattr(args, "git_worktree", False)):
         git_metadata = create_session_worktree(root, session_id)
-        metadata["git_worktree"] = git_metadata.as_dict()
-        output["git_worktree"] = git_metadata.as_dict()
+        git_metadata_dict = git_metadata.as_dict()
+        setup_result = run_worktree_setup(
+            (root / git_metadata.worktree_path).resolve(),
+            enabled=not bool(getattr(args, "no_setup", False)),
+            timeout_seconds=120,
+        )
+        git_metadata_dict["setup"] = setup_result.as_dict()
+        metadata["git_worktree"] = git_metadata_dict
+        output["git_worktree"] = git_metadata_dict
     store.create_session(metadata, cells)
     (store.state_dir / "rules.lock").write_text(ruleset.model_dump_json(indent=2), encoding="utf-8")
     _emit(output, args.format)
