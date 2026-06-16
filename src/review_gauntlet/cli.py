@@ -1229,6 +1229,7 @@ def review_cells_concurrently(
     max_workers = min(concurrency, len(cells), 64)
     executor = ThreadPoolExecutor(max_workers=max_workers)
     futures: dict[Future[ReviewAdapterResult], ReviewCell] = {}
+    interrupted = False
     try:
         for cell in cells:
             progress.cell_start(cell)
@@ -1249,15 +1250,15 @@ def review_cells_concurrently(
                 results[cell.id] = error
                 progress.cell_failure(cell, error)
     except KeyboardInterrupt:
+        interrupted = True
         cancel_adapter(adapter)
         for future, cell in futures.items():
             if not future.done():
                 future.cancel()
                 progress.cell_cancelled(cell)
-        executor.shutdown(wait=False, cancel_futures=True)
         raise
-    else:
-        executor.shutdown(wait=True, cancel_futures=False)
+    finally:
+        executor.shutdown(wait=not interrupted, cancel_futures=interrupted)
     return results
 
 
@@ -2023,6 +2024,13 @@ def _finalize(
     if merge:
         git_meta = cast(dict[str, object], metadata["git_worktree"])
         session_worktree = (root / str(git_meta["worktree_path"])).resolve()
+        if not session_worktree.is_relative_to(root.resolve()):
+            status["can_finalize"] = False
+            status["finalize_blockers"] = [
+                f"worktree_path escapes repository root: {git_meta['worktree_path']}"
+            ]
+            status["next_required_action"] = "resolve_finalize_blockers"
+            return status
         _copy_checkpoint_artifacts_to_session_worktree(root, session_worktree, checkpoint)
         _remove_base_checkpoint_artifacts_before_merge(root, checkpoint)
         merge_result = merge_session_worktree(
