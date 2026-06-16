@@ -1,0 +1,342 @@
+{
+  "checkpoint_id": "RGC-18e737c2fbcb-RGS-a77e434c3858",
+  "findings": [
+    {
+      "checkpoint_id": "RGC-18e737c2fbcb-RGS-a77e434c3858",
+      "content": "Race condition in checkpoint rollback: if `checkpoint_dir` was just moved to `backup_dir` but `tmp_dir.rename(checkpoint_dir)` fails, the except block checks `if checkpoint_dir.exists() and backup_dir.exists()` \u2014 but since the rename failed, `checkpoint_dir` does not exist, so the condition is False and the `backup_dir.rename(checkpoint_dir)` restore is skipped. The backup is then left orphaned and the original checkpoint directory is lost. The rollback should check `backup_dir.exists()` independently.",
+      "finding_id": "RGF-0571",
+      "fingerprint": "e43c8e9b13bfb783ebd39e786f72a1bafd4b4c8fa931b6fd5330debcdb72da8d",
+      "latest_occurrence": {
+        "cell_id": "RGC-8769b06915f1af11",
+        "end_line": 347,
+        "finding_id": "RGF-0571",
+        "imprecise": 0,
+        "occurrence_id": 571,
+        "path": "src/review_gauntlet/checkpoint.py",
+        "run_id": 215,
+        "start_line": 344
+      },
+      "metadata": "{\"fingerprint\":\"e43c8e9b13bfb783ebd39e786f72a1bafd4b4c8fa931b6fd5330debcdb72da8d\",\"path\":\"src/review_gauntlet/checkpoint.py\",\"rule_id\":\"data-validation\",\"content\":\"Race condition in checkpoint rollback: if `checkpoint_dir` was just moved to `backup_dir` but `tmp_dir.rename(checkpoint_dir)` fails, the except block checks `if checkpoint_dir.exists() and backup_dir.exists()` \u2014 but since the rename failed, `checkpoint_dir` does not exist, so the condition is False and the `backup_dir.rename(checkpoint_dir)` restore is skipped. The backup is then left orphaned and the original checkpoint directory is lost. The rollback should check `backup_dir.exists()` independently.\",\"suggestion_code\":\"        if checkpoint_dir.exists():\\n            shutil.rmtree(checkpoint_dir)\\n        if backup_dir.exists():\\n            backup_dir.rename(checkpoint_dir)\",\"existing_code\":\"        if checkpoint_dir.exists() and backup_dir.exists():\\n            shutil.rmtree(checkpoint_dir)\\n        if backup_dir.exists():\\n            backup_dir.rename(checkpoint_dir)\",\"start_line\":344,\"end_line\":347,\"thinking\":\"Lines 332-333: checkpoint_dir.rename(backup_dir) moves the old dir away, then tmp_dir.rename(checkpoint_dir) replaces it. If the second rename raises, we enter the except block. At that point checkpoint_dir does NOT exist (the first rename succeeded, the second failed). The guard `checkpoint_dir.exists() and backup_dir.exists()` is False, so backup_dir.rename(checkpoint_dir) at line 347 is never reached. The fix: split the guard so that rmtree only runs when checkpoint_dir exists (partial rename left something), and the backup restore runs whenever backup_dir exists.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/checkpoint.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-a77e434c3858",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-18e737c2fbcb-RGS-a77e434c3858",
+      "content": "The `metadata` column value is cast to `str()` before JSON parsing, which converts Python `None` (from a SQL NULL) to the string `\"None\"`, causing `json.loads` to raise `JSONDecodeError`. The fallback stores `metadata_raw = \"None\"` which is lossy \u2014 the event appears to have unparseable metadata rather than no metadata. Guard against NULL before parsing.",
+      "finding_id": "RGF-0572",
+      "fingerprint": "942de4f7ad31e5c26f170ea81dd10ab8bac0279fc102b7a7e5974ff643448546",
+      "latest_occurrence": {
+        "cell_id": "RGC-8769b06915f1af11",
+        "end_line": 421,
+        "finding_id": "RGF-0572",
+        "imprecise": 0,
+        "occurrence_id": 572,
+        "path": "src/review_gauntlet/checkpoint.py",
+        "run_id": 215,
+        "start_line": 416
+      },
+      "metadata": "{\"fingerprint\":\"942de4f7ad31e5c26f170ea81dd10ab8bac0279fc102b7a7e5974ff643448546\",\"path\":\"src/review_gauntlet/checkpoint.py\",\"rule_id\":\"data-validation\",\"content\":\"The `metadata` column value is cast to `str()` before JSON parsing, which converts Python `None` (from a SQL NULL) to the string `\\\"None\\\"`, causing `json.loads` to raise `JSONDecodeError`. The fallback stores `metadata_raw = \\\"None\\\"` which is lossy \u2014 the event appears to have unparseable metadata rather than no metadata. Guard against NULL before parsing.\",\"suggestion_code\":\"        raw_metadata = item.pop(\\\"metadata\\\")\\n        if raw_metadata is None:\\n            item[\\\"metadata\\\"] = None\\n        else:\\n            try:\\n                item[\\\"metadata\\\"] = json.loads(str(raw_metadata))\\n            except json.JSONDecodeError:\\n                item[\\\"metadata_raw\\\"] = str(raw_metadata)\",\"existing_code\":\"        metadata = str(item.pop(\\\"metadata\\\"))\\n        try:\\n            item[\\\"metadata\\\"] = json.loads(metadata)\\n        except json.JSONDecodeError:\\n            item[\\\"metadata_raw\\\"] = metadata\",\"start_line\":416,\"end_line\":421,\"thinking\":\"SQLite NULL maps to Python None. str(None) == 'None'. json.loads('None') raises JSONDecodeError. The fallback silently stores metadata_raw='None' which misrepresents the data \u2014 it looks like corrupted metadata rather than absent metadata.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/checkpoint.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-a77e434c3858",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-18e737c2fbcb-RGS-a77e434c3858",
+      "content": "In `_validate_latest_checkpoint`, the `review_base_commit` type check on lines 190-192 is redundant \u2014 the identical check was already performed at lines 107-109 in `target_from_latest_checkpoint` (the only caller that uses the return value). More importantly, the git operations at lines 193-206 shell out with user-controlled data from the checkpoint JSON (`base` string) without validating it looks like a hex SHA first. A malformed `review_base_commit` value containing shell metacharacters is safe here because `subprocess.run` with a list avoids shell injection, but a value like `--upload-pack=...` could be interpreted as a git flag. Consider validating the format (40/64 hex chars) before passing to git.",
+      "finding_id": "RGF-0573",
+      "fingerprint": "dcb23ecce724985ade51b9be26ef55893a98b473a0a07201549e4fae6fd217a4",
+      "latest_occurrence": {
+        "cell_id": "RGC-8769b06915f1af11",
+        "end_line": 202,
+        "finding_id": "RGF-0573",
+        "imprecise": 0,
+        "occurrence_id": 573,
+        "path": "src/review_gauntlet/checkpoint.py",
+        "run_id": 215,
+        "start_line": 190
+      },
+      "metadata": "{\"fingerprint\":\"dcb23ecce724985ade51b9be26ef55893a98b473a0a07201549e4fae6fd217a4\",\"path\":\"src/review_gauntlet/checkpoint.py\",\"rule_id\":\"data-validation\",\"content\":\"In `_validate_latest_checkpoint`, the `review_base_commit` type check on lines 190-192 is redundant \u2014 the identical check was already performed at lines 107-109 in `target_from_latest_checkpoint` (the only caller that uses the return value). More importantly, the git operations at lines 193-206 shell out with user-controlled data from the checkpoint JSON (`base` string) without validating it looks like a hex SHA first. A malformed `review_base_commit` value containing shell metacharacters is safe here because `subprocess.run` with a list avoids shell injection, but a value like `--upload-pack=...` could be interpreted as a git flag. Consider validating the format (40/64 hex chars) before passing to git.\",\"suggestion_code\":\"    base = checkpoint[\\\"review_base_commit\\\"]\\n    if not isinstance(base, str):\\n        raise ValueError(\\\"latest checkpoint review_base_commit must be a string\\\")\\n    import re\\n    if not re.fullmatch(r\\\"[0-9a-f]{40,64}\\\", base):\\n        raise ValueError(\\\"latest checkpoint review_base_commit must be a hex commit SHA\\\")\\n    try:\\n        resolved_base = _git(root, \\\"rev-parse\\\", \\\"--verify\\\", f\\\"{base}^{{commit}}\\\")\\n    except subprocess.CalledProcessError as exc:\\n        raise ValueError(\\n            \\\"latest checkpoint review_base_commit does not resolve to a commit\\\"\\n        ) from exc\\n    if base != resolved_base:\\n        raise ValueError(\\n            \\\"latest checkpoint review_base_commit must be a resolved commit SHA, not a mutable ref\\\"\\n        )\",\"existing_code\":\"    base = checkpoint[\\\"review_base_commit\\\"]\\n    if not isinstance(base, str):\\n        raise ValueError(\\\"latest checkpoint review_base_commit must be a string\\\")\\n    try:\\n        resolved_base = _git(root, \\\"rev-parse\\\", \\\"--verify\\\", f\\\"{base}^{{commit}}\\\")\\n    except subprocess.CalledProcessError as exc:\\n        raise ValueError(\\n            \\\"latest checkpoint review_base_commit does not resolve to a commit\\\"\\n        ) from exc\\n    if base != resolved_base:\\n        raise ValueError(\\n            \\\"latest checkpoint review_base_commit must be a resolved commit SHA, not a mutable ref\\\"\\n        )\",\"start_line\":190,\"end_line\":202,\"thinking\":\"The base value comes from JSON parsed from a file. While subprocess.run with a list prevents shell injection, git itself interprets arguments starting with -- as flags. A crafted review_base_commit like '--upload-pack=/bin/malicious' passed to git rev-parse could cause unexpected behavior. Validating the hex SHA format before passing to git is a defense-in-depth measure.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/checkpoint.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-a77e434c3858",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-18e737c2fbcb-RGS-a77e434c3858",
+      "content": "Race condition in checkpoint commit error recovery: if `git commit` fails after staging files, the recovery code attempts `git restore --staged` but swallows the error with `suppress(CalledProcessError)`. However, `paths_to_stage` only contains paths that were NOT already staged before. If the original staging state included some of the `allowed_paths`, those remain staged after the failed commit \u2014 the working tree is left in a state the caller doesn't expect. The recovery should restore the exact pre-call staging state rather than only unstaging the newly-added paths.",
+      "finding_id": "RGF-0574",
+      "fingerprint": "df9abc93d6d926d1fe0793cf9745d870e2c7583c5a6539e6e3da286573ff217d",
+      "latest_occurrence": {
+        "cell_id": "RGC-f760d63617535770",
+        "end_line": 537,
+        "finding_id": "RGF-0574",
+        "imprecise": 0,
+        "occurrence_id": 574,
+        "path": "src/review_gauntlet/checkpoint.py",
+        "run_id": 215,
+        "start_line": 534
+      },
+      "metadata": "{\"fingerprint\":\"df9abc93d6d926d1fe0793cf9745d870e2c7583c5a6539e6e3da286573ff217d\",\"path\":\"src/review_gauntlet/checkpoint.py\",\"rule_id\":\"test-evidence\",\"content\":\"Race condition in checkpoint commit error recovery: if `git commit` fails after staging files, the recovery code attempts `git restore --staged` but swallows the error with `suppress(CalledProcessError)`. However, `paths_to_stage` only contains paths that were NOT already staged before. If the original staging state included some of the `allowed_paths`, those remain staged after the failed commit \u2014 the working tree is left in a state the caller doesn't expect. The recovery should restore the exact pre-call staging state rather than only unstaging the newly-added paths.\",\"suggestion_code\":\"        if paths_to_stage:\\n            with suppress(subprocess.CalledProcessError):\\n                _git(root, \\\"restore\\\", \\\"--staged\\\", \\\"--\\\", *paths_to_stage)\",\"existing_code\":\"        if paths_to_stage:\\n            with suppress(subprocess.CalledProcessError):\\n                _git(root, \\\"restore\\\", \\\"--staged\\\", \\\"--\\\", *paths_to_stage)\",\"start_line\":534,\"end_line\":537,\"thinking\":\"The error recovery path only unstages the files that were newly staged by this function (paths_to_stage). But the function proceeds to commit all staged checkpoint-related files (staged), which may include files that were already staged before entry. If the commit fails, these pre-existing staged files remain staged. This is a minor inconsistency but in practice the caller likely doesn't depend on exact staging state after a failure. Keeping as informational.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/checkpoint.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-a77e434c3858",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-18e737c2fbcb-RGS-a77e434c3858",
+      "content": "In `write_latest_checkpoint`, if `pointer_path` is a regular file (the expected case for an existing pointer), the rollback path at line 349-353 handles dir and missing-ok unlink. But on line 335-336, if `pointer_path.is_dir()` is true (an unusual/corrupted state), the old dir is renamed to `pointer_backup_dir` and then `pointer_tmp.replace(pointer_path)` on line 337 creates a file at `pointer_path`. However, on error rollback (line 349-353), `pointer_backup_dir.rename(pointer_path)` would fail because `pointer_path` now exists as a file from the partial `replace` call. The `shutil.rmtree` on line 350 only runs if `pointer_path.is_dir()`, but after the replace it's a file, so the `unlink` branch runs \u2014 this is correct. Disregard, the logic is actually sound on closer inspection.",
+      "finding_id": "RGF-0575",
+      "fingerprint": "c94b8337ccde85a8e145e287fe0be5e7bd6c2d165e255bf85a716de2394f73c5",
+      "latest_occurrence": {
+        "cell_id": "RGC-f760d63617535770",
+        "end_line": 353,
+        "finding_id": "RGF-0575",
+        "imprecise": 0,
+        "occurrence_id": 575,
+        "path": "src/review_gauntlet/checkpoint.py",
+        "run_id": 215,
+        "start_line": 335
+      },
+      "metadata": "{\"fingerprint\":\"c94b8337ccde85a8e145e287fe0be5e7bd6c2d165e255bf85a716de2394f73c5\",\"path\":\"src/review_gauntlet/checkpoint.py\",\"rule_id\":\"test-evidence\",\"content\":\"In `write_latest_checkpoint`, if `pointer_path` is a regular file (the expected case for an existing pointer), the rollback path at line 349-353 handles dir and missing-ok unlink. But on line 335-336, if `pointer_path.is_dir()` is true (an unusual/corrupted state), the old dir is renamed to `pointer_backup_dir` and then `pointer_tmp.replace(pointer_path)` on line 337 creates a file at `pointer_path`. However, on error rollback (line 349-353), `pointer_backup_dir.rename(pointer_path)` would fail because `pointer_path` now exists as a file from the partial `replace` call. The `shutil.rmtree` on line 350 only runs if `pointer_path.is_dir()`, but after the replace it's a file, so the `unlink` branch runs \u2014 this is correct. Disregard, the logic is actually sound on closer inspection.\",\"suggestion_code\":\"        if pointer_path.is_dir():\\n            pointer_path.rename(pointer_backup_dir)\\n        pointer_tmp.replace(pointer_path)\",\"existing_code\":\"        if pointer_path.is_dir():\\n            pointer_path.rename(pointer_backup_dir)\\n        pointer_tmp.replace(pointer_path)\",\"start_line\":335,\"end_line\":353,\"thinking\":\"On closer inspection the rollback logic handles this: pointer_path.unlink(missing_ok=True) removes the file, then pointer_backup_dir.rename(pointer_path) restores the dir. This is fine.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/checkpoint.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-a77e434c3858",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-18e737c2fbcb-RGS-a77e434c3858",
+      "content": "The `_dirty_review_universe_paths` and `_get_all_uncommitted_paths` functions are near-duplicates (lines 215-232 vs 235-241). They both run the same three git commands. The only difference is that the first filters by review-universe membership and excludes `.review-gauntlet/` paths. Consider extracting the shared git-status gathering into a single helper and applying filters in the callers to reduce duplication and ensure consistency if the git queries ever need updating.",
+      "finding_id": "RGF-0576",
+      "fingerprint": "0238bcc824390d1fd26bb0cdbc40727bb060d907205f9ed44bdcead226e99748",
+      "latest_occurrence": {
+        "cell_id": "RGC-f760d63617535770",
+        "end_line": 241,
+        "finding_id": "RGF-0576",
+        "imprecise": 0,
+        "occurrence_id": 576,
+        "path": "src/review_gauntlet/checkpoint.py",
+        "run_id": 215,
+        "start_line": 215
+      },
+      "metadata": "{\"fingerprint\":\"0238bcc824390d1fd26bb0cdbc40727bb060d907205f9ed44bdcead226e99748\",\"path\":\"src/review_gauntlet/checkpoint.py\",\"rule_id\":\"test-evidence\",\"content\":\"The `_dirty_review_universe_paths` and `_get_all_uncommitted_paths` functions are near-duplicates (lines 215-232 vs 235-241). They both run the same three git commands. The only difference is that the first filters by review-universe membership and excludes `.review-gauntlet/` paths. Consider extracting the shared git-status gathering into a single helper and applying filters in the callers to reduce duplication and ensure consistency if the git queries ever need updating.\",\"suggestion_code\":\"def _all_uncommitted_names(root: Path) -> tuple[str, ...]:\\n    if not (root / \\\".git\\\").exists():\\n        return ()\\n    names = _split(_git(root, \\\"diff\\\", \\\"--name-only\\\", \\\"--cached\\\"))\\n    names += _split(_git(root, \\\"diff\\\", \\\"--name-only\\\"))\\n    names += _split(_git(root, \\\"ls-files\\\", \\\"--others\\\", \\\"--exclude-standard\\\"))\\n    return tuple(sorted({name for name in names}))\\n\\n\\ndef _dirty_review_universe_paths(root: Path) -> tuple[str, ...]:\\n    from review_gauntlet.inventory import should_include_review_relative_path\\n\\n    return tuple(\\n        name\\n        for name in _all_uncommitted_names(root)\\n        if not name.startswith(\\\".review-gauntlet/\\\")\\n        and should_include_review_relative_path(name)\\n    )\\n\\n\\ndef _get_all_uncommitted_paths(root: Path) -> tuple[str, ...]:\\n    return _all_uncommitted_names(root)\",\"existing_code\":\"def _dirty_review_universe_paths(root: Path) -> tuple[str, ...]:\\n    if not (root / \\\".git\\\").exists():\\n        return ()\\n    names = _split(_git(root, \\\"diff\\\", \\\"--name-only\\\", \\\"--cached\\\"))\\n    names += _split(_git(root, \\\"diff\\\", \\\"--name-only\\\"))\\n    names += _split(_git(root, \\\"ls-files\\\", \\\"--others\\\", \\\"--exclude-standard\\\"))\\n    from review_gauntlet.inventory import should_include_review_relative_path\\n\\n    return tuple(\\n        sorted(\\n            {\\n                name\\n                for name in names\\n                if not name.startswith(\\\".review-gauntlet/\\\")\\n                and should_include_review_relative_path(name)\\n            }\\n        )\\n    )\\n\\n\\ndef _get_all_uncommitted_paths(root: Path) -> tuple[str, ...]:\\n    if not (root / \\\".git\\\").exists():\\n        return ()\\n    names = _split(_git(root, \\\"diff\\\", \\\"--name-only\\\", \\\"--cached\\\"))\\n    names += _split(_git(root, \\\"diff\\\", \\\"--name-only\\\"))\\n    names += _split(_git(root, \\\"ls-files\\\", \\\"--others\\\", \\\"--exclude-standard\\\"))\\n    return tuple(sorted({name for name in names}))\",\"start_line\":215,\"end_line\":241,\"thinking\":\"These two functions run identical git commands but apply different filters. Extracting the common git queries into a shared helper eliminates duplication and the risk of them diverging.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/checkpoint.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-a77e434c3858",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-18e737c2fbcb-RGS-a77e434c3858",
+      "content": "Potential command-line length issue: `_git(root, \"add\", \"--\", *paths_to_stage)` on line 525 and `_git(root, \"commit\", \"-m\", commit_message, \"--\", *staged)` on line 532 pass all paths as individual arguments. On repositories with many checkpoint artifacts, this could exceed the OS argument length limit (`ARG_MAX`). Consider using `git add --pathspec-from-file` with a temporary file, or batching the paths, for robustness.",
+      "finding_id": "RGF-0577",
+      "fingerprint": "33fe3b5b4c7815bbe6fca479d20ed48fe79634a8a4c6aa65ac104028b2763203",
+      "latest_occurrence": {
+        "cell_id": "RGC-f760d63617535770",
+        "end_line": 532,
+        "finding_id": "RGF-0577",
+        "imprecise": 0,
+        "occurrence_id": 577,
+        "path": "src/review_gauntlet/checkpoint.py",
+        "run_id": 215,
+        "start_line": 525
+      },
+      "metadata": "{\"fingerprint\":\"33fe3b5b4c7815bbe6fca479d20ed48fe79634a8a4c6aa65ac104028b2763203\",\"path\":\"src/review_gauntlet/checkpoint.py\",\"rule_id\":\"test-evidence\",\"content\":\"Potential command-line length issue: `_git(root, \\\"add\\\", \\\"--\\\", *paths_to_stage)` on line 525 and `_git(root, \\\"commit\\\", \\\"-m\\\", commit_message, \\\"--\\\", *staged)` on line 532 pass all paths as individual arguments. On repositories with many checkpoint artifacts, this could exceed the OS argument length limit (`ARG_MAX`). Consider using `git add --pathspec-from-file` with a temporary file, or batching the paths, for robustness.\",\"suggestion_code\":\"            _git(root, \\\"add\\\", \\\"--\\\", *paths_to_stage)\\n        staged = _split(_git(root, \\\"diff\\\", \\\"--cached\\\", \\\"--name-only\\\", \\\"--\\\", *checkpoint_dirty))\\n        if not staged:\\n            return CheckpointCommitResult(\\n                attempted=True, committed=False, commit=None, reason=\\\"no_checkpoint_diff\\\"\\n            )\\n        commit_message = f\\\"checkpoint: finalize review-gauntlet session {session_id}\\\"\\n        _git(root, \\\"commit\\\", \\\"-m\\\", commit_message, \\\"--\\\", *staged)\",\"existing_code\":\"            _git(root, \\\"add\\\", \\\"--\\\", *paths_to_stage)\\n        staged = _split(_git(root, \\\"diff\\\", \\\"--cached\\\", \\\"--name-only\\\", \\\"--\\\", *checkpoint_dirty))\\n        if not staged:\\n            return CheckpointCommitResult(\\n                attempted=True, committed=False, commit=None, reason=\\\"no_checkpoint_diff\\\"\\n            )\\n        commit_message = f\\\"checkpoint: finalize review-gauntlet session {session_id}\\\"\\n        _git(root, \\\"commit\\\", \\\"-m\\\", commit_message, \\\"--\\\", *staged)\",\"start_line\":525,\"end_line\":532,\"thinking\":\"In practice checkpoint artifacts are a small fixed set (4 standard files + pointer), so this is unlikely to hit ARG_MAX. But if generated_files grows or the pattern is reused elsewhere, it could become an issue. Low severity.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/checkpoint.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-a77e434c3858",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-18e737c2fbcb-RGS-a77e434c3858",
+      "content": "The `_get_all_uncommitted_paths` function collects dirty paths from three separate `git` calls by concatenating tuples, but never deduplicates them before returning. A file that is both staged and has unstaged changes will appear twice in the result. Downstream consumers like `commit_latest_checkpoint` iterate over `dirty` and check membership in `allowed_paths` \u2014 duplicate entries won't cause incorrect logic per se, but they inflate the `blocked_paths` tuple and could cause confusing diagnostic output. The deduplication only happens in `_dirty_review_universe_paths` (via a set comprehension) but not here. Use a set to deduplicate, consistent with the sibling function.",
+      "finding_id": "RGF-0578",
+      "fingerprint": "c0135486a17c6879198c13525a08c079af22768c92d9b4b2a3991e43b71a6551",
+      "latest_occurrence": {
+        "cell_id": "RGC-8769b06915f1af11",
+        "end_line": 245,
+        "finding_id": "RGF-0578",
+        "imprecise": 0,
+        "occurrence_id": 578,
+        "path": "src/review_gauntlet/checkpoint.py",
+        "run_id": 216,
+        "start_line": 242
+      },
+      "metadata": "{\"fingerprint\":\"c0135486a17c6879198c13525a08c079af22768c92d9b4b2a3991e43b71a6551\",\"path\":\"src/review_gauntlet/checkpoint.py\",\"rule_id\":\"data-validation\",\"content\":\"The `_get_all_uncommitted_paths` function collects dirty paths from three separate `git` calls by concatenating tuples, but never deduplicates them before returning. A file that is both staged and has unstaged changes will appear twice in the result. Downstream consumers like `commit_latest_checkpoint` iterate over `dirty` and check membership in `allowed_paths` \u2014 duplicate entries won't cause incorrect logic per se, but they inflate the `blocked_paths` tuple and could cause confusing diagnostic output. The deduplication only happens in `_dirty_review_universe_paths` (via a set comprehension) but not here. Use a set to deduplicate, consistent with the sibling function.\",\"suggestion_code\":\"    staged = set(_split(_git(root, \\\"diff\\\", \\\"--name-only\\\", \\\"--cached\\\")))\\n    unstaged = set(_split(_git(root, \\\"diff\\\", \\\"--name-only\\\")))\\n    untracked = set(_split(_git(root, \\\"ls-files\\\", \\\"--others\\\", \\\"--exclude-standard\\\")))\\n    return tuple(sorted(staged | unstaged | untracked))\",\"existing_code\":\"    names = _split(_git(root, \\\"diff\\\", \\\"--name-only\\\", \\\"--cached\\\"))\\n    names += _split(_git(root, \\\"diff\\\", \\\"--name-only\\\"))\\n    names += _split(_git(root, \\\"ls-files\\\", \\\"--others\\\", \\\"--exclude-standard\\\"))\\n    return tuple(sorted({name for name in names}))\",\"start_line\":242,\"end_line\":245,\"thinking\":\"Looking at lines 242-245: the function already deduplicates via `sorted({name for name in names})` \u2014 the set comprehension handles it. However the intermediate `names` list accumulates duplicates needlessly. The existing code is functionally correct but the pattern of concatenating then deduplicating is less clear than using set union directly. This is a minor style/clarity issue \u2014 the existing set comprehension already handles correctness. Downgrading severity.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/checkpoint.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-a77e434c3858",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-18e737c2fbcb-RGS-a77e434c3858",
+      "content": "In `_validate_latest_checkpoint`, the `re` module is imported inside the function body (line 193) rather than at module level. While this works, it is inconsistent with the rest of the file which imports all standard-library modules at the top. This deferred import has no lazy-loading benefit since `re` is lightweight and likely already imported elsewhere in the process. Moving it to the top-level imports improves readability and consistency.",
+      "finding_id": "RGF-0579",
+      "fingerprint": "f2acd2fa86dedda76c870a9e957262ec437e12f24732b0f28db3ef060748f624",
+      "latest_occurrence": {
+        "cell_id": "RGC-8769b06915f1af11",
+        "end_line": 195,
+        "finding_id": "RGF-0579",
+        "imprecise": 0,
+        "occurrence_id": 579,
+        "path": "src/review_gauntlet/checkpoint.py",
+        "run_id": 216,
+        "start_line": 193
+      },
+      "metadata": "{\"fingerprint\":\"f2acd2fa86dedda76c870a9e957262ec437e12f24732b0f28db3ef060748f624\",\"path\":\"src/review_gauntlet/checkpoint.py\",\"rule_id\":\"data-validation\",\"content\":\"In `_validate_latest_checkpoint`, the `re` module is imported inside the function body (line 193) rather than at module level. While this works, it is inconsistent with the rest of the file which imports all standard-library modules at the top. This deferred import has no lazy-loading benefit since `re` is lightweight and likely already imported elsewhere in the process. Moving it to the top-level imports improves readability and consistency.\",\"suggestion_code\":\"    if not re.fullmatch(r\\\"[0-9a-f]{40,64}\\\", base):\",\"existing_code\":\"    import re\\n\\n    if not re.fullmatch(r\\\"[0-9a-f]{40,64}\\\", base):\",\"start_line\":193,\"end_line\":195,\"thinking\":\"The `import re` at line 193 is a local import inside a function. All other standard-library imports (json, os, shutil, subprocess, etc.) are at the top of the file. This should be moved to the module-level imports for consistency. The suggestion_code removes the local import, and the user should add `import re` near line 3-6 with the other stdlib imports.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/checkpoint.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-a77e434c3858",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-18e737c2fbcb-RGS-a77e434c3858",
+      "content": "In `commit_latest_checkpoint`, when `git commit` fails (line 541), the rollback attempts to unstage only `paths_to_stage` (files that were newly staged). However, if `git commit -- *staged` partially succeeded on some paths before failing (unlikely with git but defensive code should account for edge cases), the error-handling block does not verify the actual index state after the failure. More importantly, the `_git_error` helper on line 615 silently returns an empty string when both stderr and stdout are non-string types (e.g., bytes if `text=True` were ever removed from `_git`). Consider adding a fallback that always includes `str(exc)` when stderr and stdout are empty.",
+      "finding_id": "RGF-0580",
+      "fingerprint": "abb81502aadbd6bc4fe38e052f7b9b27ec4c30ba3a9d8e74b696364c80ebf9a4",
+      "latest_occurrence": {
+        "cell_id": "RGC-8769b06915f1af11",
+        "end_line": 619,
+        "finding_id": "RGF-0580",
+        "imprecise": 0,
+        "occurrence_id": 580,
+        "path": "src/review_gauntlet/checkpoint.py",
+        "run_id": 216,
+        "start_line": 615
+      },
+      "metadata": "{\"fingerprint\":\"abb81502aadbd6bc4fe38e052f7b9b27ec4c30ba3a9d8e74b696364c80ebf9a4\",\"path\":\"src/review_gauntlet/checkpoint.py\",\"rule_id\":\"data-validation\",\"content\":\"In `commit_latest_checkpoint`, when `git commit` fails (line 541), the rollback attempts to unstage only `paths_to_stage` (files that were newly staged). However, if `git commit -- *staged` partially succeeded on some paths before failing (unlikely with git but defensive code should account for edge cases), the error-handling block does not verify the actual index state after the failure. More importantly, the `_git_error` helper on line 615 silently returns an empty string when both stderr and stdout are non-string types (e.g., bytes if `text=True` were ever removed from `_git`). Consider adding a fallback that always includes `str(exc)` when stderr and stdout are empty.\",\"suggestion_code\":\"def _git_error(exc: subprocess.CalledProcessError) -> str:\\n    stderr = exc.stderr.strip() if isinstance(exc.stderr, str) else \\\"\\\"\\n    stdout = exc.stdout.strip() if isinstance(exc.stdout, str) else \\\"\\\"\\n    return stderr or stdout or str(exc)\",\"existing_code\":\"def _git_error(exc: subprocess.CalledProcessError) -> str:\\n    stderr = exc.stderr.strip() if isinstance(exc.stderr, str) else \\\"\\\"\\n    stdout = exc.stdout.strip() if isinstance(exc.stdout, str) else \\\"\\\"\\n    detail = stderr or stdout or str(exc)\\n    return detail\",\"start_line\":615,\"end_line\":619,\"thinking\":\"The current code already has the `or str(exc)` fallback, so it does handle the case. The unnecessary intermediate variable `detail` is a minor style issue. The logic is actually correct. This is a very minor suggestion to simplify.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/checkpoint.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-a77e434c3858",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-18e737c2fbcb-RGS-a77e434c3858",
+      "content": "In `write_latest_checkpoint`, the cleanup of `pointer_tmp` in the exception handler (line 359) passes `missing_ok=True` to `unlink`, which is correct. However, the `pointer_tmp` file is created at line 338 but if an exception occurs between lines 330-337 (before `pointer_tmp` is written), the `pointer_tmp` file won't exist yet. The `suppress(OSError)` around `pointer_tmp.unlink(missing_ok=True)` is redundant since `missing_ok=True` already suppresses `FileNotFoundError`. The `suppress(OSError)` would only catch non-ENOENT OS errors during unlink, which is fine, but the double protection is slightly confusing.",
+      "finding_id": "RGF-0581",
+      "fingerprint": "519c71ee9257a3ffa0b58b0d322604f093171836deaa8c5b90af312e6295d2b8",
+      "latest_occurrence": {
+        "cell_id": "RGC-8769b06915f1af11",
+        "end_line": 359,
+        "finding_id": "RGF-0581",
+        "imprecise": 0,
+        "occurrence_id": 581,
+        "path": "src/review_gauntlet/checkpoint.py",
+        "run_id": 216,
+        "start_line": 358
+      },
+      "metadata": "{\"fingerprint\":\"519c71ee9257a3ffa0b58b0d322604f093171836deaa8c5b90af312e6295d2b8\",\"path\":\"src/review_gauntlet/checkpoint.py\",\"rule_id\":\"data-validation\",\"content\":\"In `write_latest_checkpoint`, the cleanup of `pointer_tmp` in the exception handler (line 359) passes `missing_ok=True` to `unlink`, which is correct. However, the `pointer_tmp` file is created at line 338 but if an exception occurs between lines 330-337 (before `pointer_tmp` is written), the `pointer_tmp` file won't exist yet. The `suppress(OSError)` around `pointer_tmp.unlink(missing_ok=True)` is redundant since `missing_ok=True` already suppresses `FileNotFoundError`. The `suppress(OSError)` would only catch non-ENOENT OS errors during unlink, which is fine, but the double protection is slightly confusing.\",\"suggestion_code\":\"        pointer_tmp.unlink(missing_ok=True)\",\"existing_code\":\"        with suppress(OSError):\\n            pointer_tmp.unlink(missing_ok=True)\",\"start_line\":358,\"end_line\":359,\"thinking\":\"The `suppress(OSError)` wrapping `unlink(missing_ok=True)` is redundant for FileNotFoundError but does catch other OSError subclasses (like PermissionError). In the cleanup path, silently swallowing permission errors might mask real issues. However, in a cleanup/rollback path, it's debatable \u2014 you don't want cleanup failures to mask the original error. This is a minor style/clarity issue.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/checkpoint.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-a77e434c3858",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-18e737c2fbcb-RGS-a77e434c3858",
+      "content": "Race condition in `commit_latest_checkpoint`: between checking `dirty` / `staged_before` / `unstaged_before` and the subsequent `git add` + `git commit`, another process could modify the working tree or index. The error-recovery block attempts `git restore --staged` but only for `paths_to_stage`, leaving the index in a partially modified state if `git commit` fails after staging additional files. Consider using `git stash` or an index lock to make the check-stage-commit sequence atomic.",
+      "finding_id": "RGF-0582",
+      "fingerprint": "2ec1738dc31f740371180f5ba98e6efac76cef709788468606a900a6449d7750",
+      "latest_occurrence": {
+        "cell_id": "RGC-8769b06915f1af11",
+        "end_line": 543,
+        "finding_id": "RGF-0582",
+        "imprecise": 0,
+        "occurrence_id": 582,
+        "path": "src/review_gauntlet/checkpoint.py",
+        "run_id": 217,
+        "start_line": 499
+      },
+      "metadata": "{\"fingerprint\":\"2ec1738dc31f740371180f5ba98e6efac76cef709788468606a900a6449d7750\",\"path\":\"src/review_gauntlet/checkpoint.py\",\"rule_id\":\"data-validation\",\"content\":\"Race condition in `commit_latest_checkpoint`: between checking `dirty` / `staged_before` / `unstaged_before` and the subsequent `git add` + `git commit`, another process could modify the working tree or index. The error-recovery block attempts `git restore --staged` but only for `paths_to_stage`, leaving the index in a partially modified state if `git commit` fails after staging additional files. Consider using `git stash` or an index lock to make the check-stage-commit sequence atomic.\",\"suggestion_code\":\"\",\"existing_code\":\"    dirty = _get_all_uncommitted_paths(root)\\n    allowed_paths = _allowed_checkpoint_commit_paths(root, generated_files)\\n    staged_before = _split(_git(root, \\\"diff\\\", \\\"--cached\\\", \\\"--name-only\\\"))\\n    ...\\n    except subprocess.CalledProcessError as exc:\\n        if paths_to_stage:\\n            with suppress(subprocess.CalledProcessError):\\n                _git(root, \\\"restore\\\", \\\"--staged\\\", \\\"--\\\", *paths_to_stage)\",\"start_line\":499,\"end_line\":543,\"thinking\":\"The function performs multiple git commands non-atomically: it reads dirty/staged state, then stages, then commits. Between any of these steps the working tree could change. The rollback only unstages paths_to_stage but doesn't account for files that were already staged before the function ran being included in the commit attempt.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/checkpoint.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-a77e434c3858",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-18e737c2fbcb-RGS-a77e434c3858",
+      "content": "`_get_all_uncommitted_paths` (and `_dirty_review_universe_paths`) concatenates three separate `git` calls without deduplication before `sorted({...})`. If any single git call fails (e.g., in a bare repo or corrupted index), the `CalledProcessError` propagates unhandled. The `.exists()` check on `.git` is not sufficient\u2014it could be a file (gitdir for worktrees) but still fail on `diff --cached`. More importantly, a file that appears in both `--cached` and unstaged output is counted once thanks to the set, but the three calls are not atomic\u2014files can move between states between calls.",
+      "finding_id": "RGF-0583",
+      "fingerprint": "eda823e19f3eb528736ae53f7533cf50e726dea33a397faf1e2fb2ea33fea6ae",
+      "latest_occurrence": {
+        "cell_id": "RGC-8769b06915f1af11",
+        "end_line": 244,
+        "finding_id": "RGF-0583",
+        "imprecise": 0,
+        "occurrence_id": 583,
+        "path": "src/review_gauntlet/checkpoint.py",
+        "run_id": 217,
+        "start_line": 238
+      },
+      "metadata": "{\"fingerprint\":\"eda823e19f3eb528736ae53f7533cf50e726dea33a397faf1e2fb2ea33fea6ae\",\"path\":\"src/review_gauntlet/checkpoint.py\",\"rule_id\":\"data-validation\",\"content\":\"`_get_all_uncommitted_paths` (and `_dirty_review_universe_paths`) concatenates three separate `git` calls without deduplication before `sorted({...})`. If any single git call fails (e.g., in a bare repo or corrupted index), the `CalledProcessError` propagates unhandled. The `.exists()` check on `.git` is not sufficient\u2014it could be a file (gitdir for worktrees) but still fail on `diff --cached`. More importantly, a file that appears in both `--cached` and unstaged output is counted once thanks to the set, but the three calls are not atomic\u2014files can move between states between calls.\",\"suggestion_code\":\"    names = _split(_git(root, \\\"status\\\", \\\"--porcelain\\\", \\\"-z\\\"))\\n    # Parse porcelain output for a single-command atomic snapshot\",\"existing_code\":\"    names = _split(_git(root, \\\"diff\\\", \\\"--name-only\\\", \\\"--cached\\\"))\\n    names += _split(_git(root, \\\"diff\\\", \\\"--name-only\\\"))\\n    names += _split(_git(root, \\\"ls-files\\\", \\\"--others\\\", \\\"--exclude-standard\\\"))\",\"start_line\":238,\"end_line\":244,\"thinking\":\"Using `git status --porcelain` (or `--porcelain=v1`) in a single call would give an atomic snapshot of all dirty paths instead of three separate calls that can race with each other.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/checkpoint.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-a77e434c3858",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-18e737c2fbcb-RGS-a77e434c3858",
+      "content": "`latest_checkpoint_dir` returns an `__invalid_latest_checkpoint_pointer__` sentinel path on every failure mode (symlink, directory, missing file, bad content). Callers like `load_latest_checkpoint` then check `.exists()` on the sentinel, which silently succeeds if that sentinel directory happens to exist on disk. A more robust design would raise or return `None` so callers can distinguish \"no checkpoint\" from \"corrupted pointer\".",
+      "finding_id": "RGF-0584",
+      "fingerprint": "5ba2c77a8f7a8659603d1b561ff13760d1f51b77ab12f1ba21779e2c3f2019f8",
+      "latest_occurrence": {
+        "cell_id": "RGC-8769b06915f1af11",
+        "end_line": 83,
+        "finding_id": "RGF-0584",
+        "imprecise": 0,
+        "occurrence_id": 584,
+        "path": "src/review_gauntlet/checkpoint.py",
+        "run_id": 217,
+        "start_line": 64
+      },
+      "metadata": "{\"fingerprint\":\"5ba2c77a8f7a8659603d1b561ff13760d1f51b77ab12f1ba21779e2c3f2019f8\",\"path\":\"src/review_gauntlet/checkpoint.py\",\"rule_id\":\"data-validation\",\"content\":\"`latest_checkpoint_dir` returns an `__invalid_latest_checkpoint_pointer__` sentinel path on every failure mode (symlink, directory, missing file, bad content). Callers like `load_latest_checkpoint` then check `.exists()` on the sentinel, which silently succeeds if that sentinel directory happens to exist on disk. A more robust design would raise or return `None` so callers can distinguish \\\"no checkpoint\\\" from \\\"corrupted pointer\\\".\",\"suggestion_code\":\"\",\"existing_code\":\"    invalid = pointer.parent / \\\"__invalid_latest_checkpoint_pointer__\\\"\",\"start_line\":64,\"end_line\":83,\"thinking\":\"The sentinel path __invalid_latest_checkpoint_pointer__ is a real filesystem path. If someone (or a bug) creates that directory, load_latest_checkpoint would try to read status.json from it. Returning None or raising would be safer.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/checkpoint.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-a77e434c3858",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-18e737c2fbcb-RGS-a77e434c3858",
+      "content": "In `write_latest_checkpoint`, the pointer file is written via `pointer_tmp.write_text(...)` then `pointer_tmp.replace(pointer_path)`. However, the old pointer backup uses `pointer_path.rename(pointer_backup_dir)` which moves the pointer into a directory path\u2014this only works if `pointer_path.is_dir()` (line 338). When the pointer is a regular file (the normal case), the old pointer is not backed up before replacement, so a crash between `replace` and cleanup could leave the pointer in a half-updated state without recovery. The `is_dir()` guard on line 338 suggests this was intended for a different scenario but doesn't protect the regular-file case.",
+      "finding_id": "RGF-0585",
+      "fingerprint": "cbcd8239d6ae4f14e898570870c5c8a2307be219241f0bd15141862c39f40b9b",
+      "latest_occurrence": {
+        "cell_id": "RGC-8769b06915f1af11",
+        "end_line": 340,
+        "finding_id": "RGF-0585",
+        "imprecise": 0,
+        "occurrence_id": 585,
+        "path": "src/review_gauntlet/checkpoint.py",
+        "run_id": 217,
+        "start_line": 337
+      },
+      "metadata": "{\"fingerprint\":\"cbcd8239d6ae4f14e898570870c5c8a2307be219241f0bd15141862c39f40b9b\",\"path\":\"src/review_gauntlet/checkpoint.py\",\"rule_id\":\"data-validation\",\"content\":\"In `write_latest_checkpoint`, the pointer file is written via `pointer_tmp.write_text(...)` then `pointer_tmp.replace(pointer_path)`. However, the old pointer backup uses `pointer_path.rename(pointer_backup_dir)` which moves the pointer into a directory path\u2014this only works if `pointer_path.is_dir()` (line 338). When the pointer is a regular file (the normal case), the old pointer is not backed up before replacement, so a crash between `replace` and cleanup could leave the pointer in a half-updated state without recovery. The `is_dir()` guard on line 338 suggests this was intended for a different scenario but doesn't protect the regular-file case.\",\"suggestion_code\":\"\",\"existing_code\":\"        pointer_tmp.write_text(checkpoint_id + \\\"\\\\n\\\", encoding=\\\"utf-8\\\")\\n        if pointer_path.is_dir():\\n            pointer_path.rename(pointer_backup_dir)\\n        pointer_tmp.replace(pointer_path)\",\"start_line\":337,\"end_line\":340,\"thinking\":\"The `replace` call is atomic on POSIX for file-to-file, so the regular-file path is actually safe on POSIX. But the `is_dir()` branch is there to handle a corrupted state where the pointer became a directory. The real issue is that if pointer_path is a directory, renaming it to pointer_backup_dir and then replacing with a file is not atomic\u2014a crash between rename and replace leaves no pointer at all. But this is an edge-case recovery path, not the normal flow.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/checkpoint.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-a77e434c3858",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-18e737c2fbcb-RGS-a77e434c3858",
+      "content": "In `_checkpoint_events`, `raw_metadata` is popped and then conditionally parsed. If `raw_metadata` is an unexpected type (e.g., an integer or dict already deserialized by sqlite3), `str(raw_metadata)` produces a representation that won't round-trip through `json.loads`, silently falling into the `metadata_raw` fallback. Consider explicitly checking the type before attempting JSON parsing.",
+      "finding_id": "RGF-0586",
+      "fingerprint": "02c6d945835e421f485d2e1a2d0af8a826c485acde277c254d4db6b6ade4970d",
+      "latest_occurrence": {
+        "cell_id": "RGC-8769b06915f1af11",
+        "end_line": 427,
+        "finding_id": "RGF-0586",
+        "imprecise": 0,
+        "occurrence_id": 586,
+        "path": "src/review_gauntlet/checkpoint.py",
+        "run_id": 217,
+        "start_line": 419
+      },
+      "metadata": "{\"fingerprint\":\"02c6d945835e421f485d2e1a2d0af8a826c485acde277c254d4db6b6ade4970d\",\"path\":\"src/review_gauntlet/checkpoint.py\",\"rule_id\":\"data-validation\",\"content\":\"In `_checkpoint_events`, `raw_metadata` is popped and then conditionally parsed. If `raw_metadata` is an unexpected type (e.g., an integer or dict already deserialized by sqlite3), `str(raw_metadata)` produces a representation that won't round-trip through `json.loads`, silently falling into the `metadata_raw` fallback. Consider explicitly checking the type before attempting JSON parsing.\",\"suggestion_code\":\"        raw_metadata = item.pop(\\\"metadata\\\")\\n        if raw_metadata is None:\\n            item[\\\"metadata\\\"] = None\\n        elif isinstance(raw_metadata, str):\\n            try:\\n                item[\\\"metadata\\\"] = json.loads(raw_metadata)\\n            except json.JSONDecodeError:\\n                item[\\\"metadata_raw\\\"] = raw_metadata\\n        else:\\n            item[\\\"metadata\\\"] = raw_metadata\",\"existing_code\":\"        raw_metadata = item.pop(\\\"metadata\\\")\\n        if raw_metadata is None:\\n            item[\\\"metadata\\\"] = None\\n        else:\\n            try:\\n                item[\\\"metadata\\\"] = json.loads(str(raw_metadata))\\n            except json.JSONDecodeError:\\n                item[\\\"metadata_raw\\\"] = str(raw_metadata)\",\"start_line\":419,\"end_line\":427,\"thinking\":\"If raw_metadata is already a dict (e.g., from a JSON column type), str() would produce Python repr syntax like \\\"{'key': 'value'}\\\" which is not valid JSON, causing json.loads to fail and storing a misleading metadata_raw. Checking isinstance(raw_metadata, str) before parsing is more defensive.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/checkpoint.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-a77e434c3858",
+      "state": "false_positive"
+    }
+  ],
+  "schema_version": 1
+}
