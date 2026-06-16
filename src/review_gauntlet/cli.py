@@ -1067,7 +1067,7 @@ def _cmd_verify_fixes(args: argparse.Namespace, root: Path, store: SessionStore)
             seen_fingerprints.add(finding.fingerprint)
             finding_ids.append(store.upsert_finding(session_id, run_id, selected.id, finding))
         store.refresh_file_digest(
-            session_id, selected.file_path, selected.content_digest, stale_to_pending=True
+            session_id, selected.file_path, selected.content_digest, stale_to_pending=False
         )
         store.mark_cell_reviewed(session_id, selected)
         reviewed += 1
@@ -1823,10 +1823,6 @@ def _status(
     reasons = _finalize_reasons(
         effective_cell_counts, finding_counts, store, session_id, root, allow_non_review_dirty
     )
-    current_coverage_requires_review = bool(
-        effective_cell_counts.get(CellState.PENDING.value, 0)
-        or effective_cell_counts.get(CellState.STALE.value, 0)
-    )
     return {
         "session_id": session_id,
         "session_state": "active",
@@ -1835,9 +1831,7 @@ def _status(
         "run_count": int(run_count),
         "can_finalize": not reasons,
         "finalize_blockers": reasons,
-        "next_required_action": _next_action(
-            effective_cell_counts, finding_counts, reasons, current_coverage_requires_review
-        ),
+        "next_required_action": _next_action(effective_cell_counts, finding_counts, reasons),
     }
 
 
@@ -2169,7 +2163,6 @@ def _next_action(
     cell_counts: dict[str, int],
     finding_counts: dict[str, int],
     reasons: list[str],
-    current_coverage_requires_review: bool,
 ) -> str:
     if cell_counts.get("pending", 0):
         return "run_review"

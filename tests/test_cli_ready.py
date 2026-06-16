@@ -622,6 +622,20 @@ def test_ready_prompts_review_for_incomplete_coverage_before_fixed_pending_findi
     assert "Review stale review cells" not in stale_prompt
 
 
+def test_ready_prompts_verify_fixes_when_stale_cells_coexist_with_fixed_pending(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_session(tmp_path, capsys)
+    _set_all_cells(tmp_path, CellState.STALE)
+    _insert_finding(tmp_path, FindingState.FIXED_PENDING_VERIFICATION, 1)
+
+    prompt = _ready_json(tmp_path, capsys)["prompt"]
+
+    assert prompt is not None
+    _assert_skill_directed_short_prompt(prompt, "Verify fixed-pending findings")
+    assert "Review stale review cells" not in prompt
+
+
 def test_ready_prompts_verify_fixes_when_only_whole_digest_drifted(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
