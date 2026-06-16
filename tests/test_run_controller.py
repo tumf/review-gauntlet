@@ -14,6 +14,7 @@ from review_gauntlet.review_cells import CellState, ReviewCell
 from review_gauntlet.run_controller import (
     AgentOutputProgress,
     RunController,
+    RunEvent,
     RunExecutionContext,
     SessionCommandResult,
     checkpoint_generated_files_from_stdout,
@@ -354,10 +355,11 @@ def test_run_controller_attempts_checkpoint_commit_after_finalization(
     result = controller.run()
 
     assert calls == [(tmp_path, "RGS-test", (".review-gauntlet/checkpoints/latest/status.json",))]
-    assert result["checkpoint_commit_attempted"] is True
-    assert result["checkpoint_committed"] is True
-    assert result["checkpoint_commit"] == "abc123"
-    assert result["checkpoint_commit_reason"] == "committed"
+    cc = result["checkpoint_commit"]
+    assert cc["checkpoint_commit_attempted"] is True
+    assert cc["checkpoint_committed"] is True
+    assert cc["checkpoint_commit"] == "abc123"
+    assert cc["checkpoint_commit_reason"] == "committed"
     assert [event.type for event in controller.events][-3:] == [
         "checkpoint_commit_started",
         "checkpoint_commit_finished",
@@ -393,6 +395,91 @@ def test_checkpoint_generated_files_from_stdout_rejects_non_json_checkpoint_path
     assert checkpoint_generated_files_from_stdout(stdout) == (
         ".review-gauntlet/checkpoints/latest/status.json",
     )
+
+
+def test_checkpoint_generated_files_from_stdout_rejects_absolute_path() -> None:
+    stdout = json.dumps({"generated_files": ["/etc/passwd"]})
+    assert checkpoint_generated_files_from_stdout(stdout) == ()
+
+
+def test_checkpoint_generated_files_from_stdout_rejects_parent_traversal() -> None:
+    stdout = json.dumps({"generated_files": ["../../etc/passwd"]})
+    assert checkpoint_generated_files_from_stdout(stdout) == ()
+
+
+def test_checkpoint_generated_files_from_stdout_rejects_empty_string() -> None:
+    stdout = json.dumps({"generated_files": [""]})
+    assert checkpoint_generated_files_from_stdout(stdout) == ()
+
+
+def test_checkpoint_generated_files_from_stdout_deduplicates() -> None:
+    path = ".review-gauntlet/checkpoints/latest/status.json"
+    stdout = json.dumps({"generated_files": [path, path, path]})
+    assert checkpoint_generated_files_from_stdout(stdout) == (path,)
+
+
+def test_run_execution_context_raises_for_missing_worktree_path(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    metadata = store.session_metadata("RGS-test")
+    with store.connect() as conn:
+        conn.execute(
+            "update sessions set metadata = ? where session_id = ?",
+            (
+                json.dumps({**metadata, "git_worktree": {"enabled": True}}, sort_keys=True),
+                "RGS-test",
+            ),
+        )
+
+    with pytest.raises(ValueError, match="missing worktree_path"):
+        RunExecutionContext.from_active_session(root=tmp_path, store=store, session_id="RGS-test")
+
+
+def test_run_execution_context_raises_for_path_traversal_outside_root(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    metadata = store.session_metadata("RGS-test")
+    with store.connect() as conn:
+        conn.execute(
+            "update sessions set metadata = ? where session_id = ?",
+            (
+                json.dumps(
+                    {
+                        **metadata,
+                        "git_worktree": {"enabled": True, "worktree_path": "../../outside"},
+                    },
+                    sort_keys=True,
+                ),
+                "RGS-test",
+            ),
+        )
+    (tmp_path / ".." / ".." / "outside").mkdir(parents=True, exist_ok=True)
+
+    with pytest.raises(ValueError, match="must stay inside repository root"):
+        RunExecutionContext.from_active_session(root=tmp_path, store=store, session_id="RGS-test")
+
+
+def test_run_execution_context_raises_for_missing_worktree_directory(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    metadata = store.session_metadata("RGS-test")
+    with store.connect() as conn:
+        conn.execute(
+            "update sessions set metadata = ? where session_id = ?",
+            (
+                json.dumps(
+                    {
+                        **metadata,
+                        "git_worktree": {
+                            "enabled": True,
+                            "worktree_path": ".review-gauntlet/worktrees/RGS-test",
+                        },
+                    },
+                    sort_keys=True,
+                ),
+                "RGS-test",
+            ),
+        )
+
+    with pytest.raises(ValueError, match="worktree is missing"):
+        RunExecutionContext.from_active_session(root=tmp_path, store=store, session_id="RGS-test")
 
 
 def test_run_controller_honors_interrupt_requested_during_command(tmp_path: Path) -> None:
@@ -787,3 +874,105 @@ def test_run_controller_snapshot_prefers_legacy_findings_when_present(tmp_path: 
     snapshot = controller.snapshot()
 
     assert snapshot.findings == {"legacy": 1}
+
+
+def test_agent_output_progress_ring_buffer_truncation() -> None:
+    progress = AgentOutputProgress(limit=3)
+    for i in range(5):
+        progress.push("stdout", f"line-{i}")
+    _age, tail = progress.snapshot()
+    assert len(tail) == 3
+    assert [e.text for e in tail] == ["line-2", "line-3", "line-4"]
+
+
+def test_run_event_model_dump_key_collision() -> None:
+    event = RunEvent.create("test", type="should_be_overwritten", timestamp="should_be_overwritten")
+    dumped = event.model_dump()
+    assert dumped["type"] == "test"
+    assert dumped["timestamp"] != "should_be_overwritten"
+
+
+def test_run_controller_max_steps_zero_raises(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    with pytest.raises(ValueError, match="positive integer"):
+        RunController(
+            root=tmp_path,
+            store=store,
+            config_path=None,
+            max_steps=0,
+            ready_prompt=lambda _store, _root: "ready prompt",
+            status_snapshot=_status,
+            command_runner=lambda _config, _root, _state_dir, _prompt: SessionCommandResult(
+                argv=[], cwd=None, returncode=0, stdout="", stderr=""
+            ),
+        )
+
+
+def test_run_controller_max_steps_negative_raises(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    with pytest.raises(ValueError, match="positive integer"):
+        RunController(
+            root=tmp_path,
+            store=store,
+            config_path=None,
+            max_steps=-1,
+            ready_prompt=lambda _store, _root: "ready prompt",
+            status_snapshot=_status,
+            command_runner=lambda _config, _root, _state_dir, _prompt: SessionCommandResult(
+                argv=[], cwd=None, returncode=0, stdout="", stderr=""
+            ),
+        )
+
+
+def test_run_controller_session_disappeared_before_loop(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    controller = RunController(
+        root=tmp_path,
+        store=store,
+        config_path=None,
+        max_steps=3,
+        ready_prompt=lambda _store, _root: "ready prompt",
+        status_snapshot=_status,
+        command_runner=lambda _config, _root, _state_dir, _prompt: SessionCommandResult(
+            argv=["fake-agent"], cwd=None, returncode=0, stdout="ok", stderr=""
+        ),
+    )
+
+    store.active_path.unlink()
+    result = controller.run()
+
+    assert result["completed"] is False
+    assert result["reason"] == "session_disappeared"
+
+
+def test_run_controller_post_loop_completion_session_disappears_on_final_step(
+    tmp_path: Path,
+) -> None:
+    store = _store(tmp_path)
+    call_count = 0
+
+    def command(
+        _config: CommandAdapterConfig, _root: Path, _state_dir: Path, _prompt: str
+    ) -> SessionCommandResult:
+        nonlocal call_count
+        call_count += 1
+        if call_count == 3:
+            store.active_path.unlink()
+        return SessionCommandResult(
+            argv=["fake-agent"], cwd=None, returncode=0, stdout="ok", stderr=""
+        )
+
+    controller = RunController(
+        root=tmp_path,
+        store=store,
+        config_path=None,
+        max_steps=3,
+        ready_prompt=lambda _store, _root: "ready prompt",
+        status_snapshot=_status,
+        command_runner=command,
+    )
+
+    result = controller.run()
+
+    assert result["completed"] is True
+    assert result["reason"] == "completed"

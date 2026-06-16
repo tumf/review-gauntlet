@@ -6,7 +6,13 @@ from typing import Any
 import pytest
 
 from review_gauntlet.cli import main
-from review_gauntlet.git_worktree import merge_preflight_blockers, run_worktree_setup
+from review_gauntlet.git_worktree import (
+    _base_dirty_paths,  # pyright: ignore[reportPrivateUsage]
+    _unique_session_branch,  # pyright: ignore[reportPrivateUsage]
+    _validate_session_id,  # pyright: ignore[reportPrivateUsage]
+    merge_preflight_blockers,
+    run_worktree_setup,
+)
 from review_gauntlet.session_store import SessionStore
 
 
@@ -97,6 +103,47 @@ def test_run_worktree_setup_warns_on_nonzero_exit(tmp_path: Path) -> None:
     assert result.warning is not None
     assert "status 7" in result.warning
     assert "setup failed" in result.warning
+
+
+def test_run_worktree_setup_returns_warning_on_timeout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _write_setup_script(tmp_path, "#!/bin/sh\nsleep 999\n")
+    timeout_seconds = 3.0
+
+    def fake_run(*args, **kwargs):
+        raise subprocess.TimeoutExpired(cmd=args[0], timeout=timeout_seconds)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    result = run_worktree_setup(tmp_path, enabled=True, timeout_seconds=timeout_seconds)
+
+    assert result.ran is True
+    assert result.returncode == -1
+    assert result.skipped_reason is None
+    assert result.warning is not None
+    assert "timed out" in result.warning
+    assert "3 seconds" in result.warning
+
+
+def test_run_worktree_setup_returns_warning_on_oserror(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _write_setup_script(tmp_path, "#!/bin/sh\necho ok\n")
+
+    def fake_run(*args, **kwargs):
+        raise OSError("Permission denied")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    result = run_worktree_setup(tmp_path, enabled=True, timeout_seconds=5)
+
+    assert result.ran is True
+    assert result.returncode is None
+    assert result.skipped_reason is None
+    assert result.warning is not None
+    assert "could not be executed" in result.warning
+    assert "Permission denied" in result.warning
 
 
 def test_init_git_worktree_records_metadata_and_preserves_worktree_target(
@@ -384,3 +431,61 @@ def test_finalize_merge_reports_cleanup_failure_after_success(
     assert data["next_required_action"] == "cleanup_git_worktree"
     assert data["cleanup_blockers"] == ["simulated cleanup failure"]
     assert data["session_state"] == "finalized"
+
+
+# --- RGF-0407: _validate_session_id rejection ---
+
+
+class TestValidateSessionId:
+    def test_rejects_path_traversal(self) -> None:
+        with pytest.raises(ValueError):
+            _validate_session_id("../../etc")
+
+    def test_rejects_spaces(self) -> None:
+        with pytest.raises(ValueError):
+            _validate_session_id("a b")
+
+    def test_rejects_empty_string(self) -> None:
+        with pytest.raises(ValueError):
+            _validate_session_id("")
+
+    def test_accepts_valid_id(self) -> None:
+        _validate_session_id("valid-id_123")
+
+
+# --- RGF-0408: _unique_session_branch collision dedup ---
+
+
+class TestUniqueSessionBranch:
+    def test_appends_suffix_on_collision(self, tmp_path: Path) -> None:
+        _init_repo(tmp_path)
+        _git(tmp_path, "branch", "review-gauntlet/test-session")
+
+        result = _unique_session_branch(tmp_path, "test-session")
+
+        assert result == "review-gauntlet/test-session-2"
+
+    def test_increments_suffix_on_repeated_collision(self, tmp_path: Path) -> None:
+        _init_repo(tmp_path)
+        _git(tmp_path, "branch", "review-gauntlet/test-session")
+        _git(tmp_path, "branch", "review-gauntlet/test-session-2")
+
+        result = _unique_session_branch(tmp_path, "test-session")
+
+        assert result == "review-gauntlet/test-session-3"
+
+
+# --- RGF-0409: rename handling in _base_dirty_paths ---
+
+
+class TestBaseDirtyPathsRename:
+    def test_includes_renamed_file(self, tmp_path: Path) -> None:
+        _init_repo(tmp_path)
+        (tmp_path / "old_name.py").write_text("content\n", encoding="utf-8")
+        _git(tmp_path, "add", "old_name.py")
+        _git(tmp_path, "commit", "-m", "add old_name")
+        _git(tmp_path, "mv", "old_name.py", "new_name.py")
+
+        dirty = _base_dirty_paths(tmp_path)
+
+        assert "new_name.py" in dirty

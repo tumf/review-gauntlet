@@ -78,16 +78,29 @@ class GitWorktreeMergeResult:
     next_required_action: str | None = None
 
 
-def git(root: Path, *args: str, check: bool = True) -> str:
-    completed = subprocess.run(
-        ["git", *args], cwd=root, text=True, capture_output=True, timeout=10, check=False
-    )
+def git(root: Path, *args: str, check: bool = True, timeout: float = 10) -> str:
+    try:
+        completed = subprocess.run(
+            ["git", *args], cwd=root, text=True, capture_output=True, timeout=timeout, check=False
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise GitCommandError(args, root, -1, "", f"timed out after {timeout} seconds") from exc
     if check and completed.returncode != 0:
         raise GitCommandError(args, root, completed.returncode, completed.stdout, completed.stderr)
     return completed.stdout.strip()
 
 
+def _validate_session_id(session_id: str) -> None:
+    import re
+
+    if not re.fullmatch(r"[a-zA-Z0-9_-]+", session_id):
+        raise ValueError(
+            f"session_id must contain only alphanumerics, hyphens, and underscores: {session_id!r}"
+        )
+
+
 def create_session_worktree(root: Path, session_id: str) -> GitWorktreeMetadata:
+    _validate_session_id(session_id)
     base_branch = _current_branch(root)
     base_commit = git(root, "rev-parse", "--verify", "HEAD^{commit}")
     session_branch = _unique_session_branch(root, session_id)
@@ -134,6 +147,7 @@ def run_worktree_setup(
         return WorktreeSetupResult(
             ran=True,
             script_path=script_path_text,
+            returncode=-1,
             warning=f"worktree setup timed out after {timeout_seconds:g} seconds: {script_path}",
         )
     except OSError as exc:
@@ -180,11 +194,31 @@ def merge_session_worktree(
             next_required_action="resolve_finalize_blockers",
         )
     session_worktree = (root / str(git_meta["worktree_path"])).resolve()
+    if not session_worktree.is_relative_to(root.resolve()):
+        return GitWorktreeMergeResult(
+            merged=False,
+            cleaned_up=False,
+            finalize_blockers=(
+                f"worktree_path escapes repository root: {git_meta['worktree_path']}",
+            ),
+            next_required_action="resolve_finalize_blockers",
+        )
     session_branch = str(git_meta["session_branch"])
     base_branch = str(git_meta["base_branch"])
     _commit_session_changes(session_worktree, session_id=session_id, commit_paths=commit_paths)
     session_commit = git(session_worktree, "rev-parse", "--verify", "HEAD^{commit}")
-    git(root, "merge", "--ff-only", session_branch)
+    try:
+        git(root, "merge", "--ff-only", session_branch)
+    except GitCommandError as exc:
+        return GitWorktreeMergeResult(
+            merged=False,
+            cleaned_up=False,
+            base_branch=base_branch,
+            session_branch=session_branch,
+            session_commit=session_commit,
+            finalize_blockers=(f"fast-forward merge failed: {exc}",),
+            next_required_action="resolve_finalize_blockers",
+        )
     merge_commit = git(root, "rev-parse", "--verify", "HEAD^{commit}")
     cleanup = cleanup_session_worktree(root, git_meta)
     return GitWorktreeMergeResult(
@@ -208,7 +242,8 @@ def merge_preflight_blockers(root: Path, git_meta: dict[str, object]) -> list[st
     session_branch = str(git_meta.get("session_branch", ""))
     worktree_path = str(git_meta.get("worktree_path", ""))
     session_worktree = (root / worktree_path).resolve()
-    if not _ref_exists(root, base_branch):
+    base_exists = _ref_exists(root, base_branch)
+    if not base_exists:
         blockers.append(f"base branch is missing: {base_branch}")
     if not _ref_exists(root, session_branch):
         blockers.append(f"session branch is missing: {session_branch}")
@@ -216,28 +251,55 @@ def merge_preflight_blockers(root: Path, git_meta: dict[str, object]) -> list[st
         blockers.append(f"session worktree is missing: {worktree_path}")
     if _base_dirty_paths(root):
         blockers.append("base branch worktree has uncommitted files")
-    if _ref_exists(root, base_branch):
+    if base_exists:
         current_base = git(root, "rev-parse", "--verify", f"{base_branch}^{{commit}}")
         if current_base != base_commit:
             blockers.append("base branch has advanced from recorded base_commit")
     if not blockers:
-        merge_tree_result = subprocess.run(
-            ["git", "merge-tree", "--write-tree", base_branch, session_branch],
-            cwd=root,
-            text=True,
-            capture_output=True,
-            timeout=10,
-            check=False,
-        )
-        merge_tree_output = f"{merge_tree_result.stdout}\n{merge_tree_result.stderr}"
-        if merge_tree_result.returncode != 0 or "<<<<<<<" in merge_tree_output:
-            blockers.append("session branch would conflict with base branch")
+        try:
+            merge_tree_result = subprocess.run(
+                ["git", "merge-tree", "--write-tree", base_branch, session_branch],
+                cwd=root,
+                text=True,
+                capture_output=True,
+                timeout=10,
+                check=False,
+            )
+        except subprocess.TimeoutExpired:
+            blockers.append("merge-tree conflict check timed out")
+        else:
+            if merge_tree_result.returncode != 0:
+                blockers.append("session branch would conflict with base branch")
     return blockers
 
 
 def cleanup_session_worktree(root: Path, git_meta: dict[str, object]) -> GitWorktreeCleanupResult:
-    worktree_path = str(git_meta["worktree_path"])
-    session_branch = str(git_meta["session_branch"])
+    raw_worktree = git_meta.get("worktree_path")
+    raw_branch = git_meta.get("session_branch")
+    if not isinstance(raw_worktree, str) or not raw_worktree:
+        return GitWorktreeCleanupResult(
+            cleaned_up=False,
+            removed_worktree_path=None,
+            deleted_branch=None,
+            cleanup_blockers=("missing or invalid worktree_path in metadata",),
+        )
+    if not isinstance(raw_branch, str) or not raw_branch:
+        return GitWorktreeCleanupResult(
+            cleaned_up=False,
+            removed_worktree_path=None,
+            deleted_branch=None,
+            cleanup_blockers=("missing or invalid session_branch in metadata",),
+        )
+    worktree_path = raw_worktree
+    session_branch = raw_branch
+    resolved = (root / worktree_path).resolve()
+    if not resolved.is_relative_to(root.resolve()):
+        return GitWorktreeCleanupResult(
+            cleaned_up=False,
+            removed_worktree_path=None,
+            deleted_branch=None,
+            cleanup_blockers=(f"worktree_path escapes repository root: {worktree_path}",),
+        )
     blockers: list[str] = []
     removed: str | None = None
     deleted: str | None = None
@@ -294,9 +356,12 @@ def _base_dirty_paths(root: Path) -> tuple[str, ...]:
     output = git(root, "status", "--porcelain", check=True)
     paths: list[str] = []
     for line in output.splitlines():
-        path = line[3:]
-        if not path.startswith(".review-gauntlet/"):
-            paths.append(path)
+        if len(line) < 4:
+            continue
+        entry = line[3:]
+        paths_in_entry = entry.split(" -> ") if " -> " in entry else [entry]
+        if not all(p.startswith(".review-gauntlet/") for p in paths_in_entry):
+            paths.append(paths_in_entry[-1])
     return tuple(paths)
 
 
@@ -318,6 +383,8 @@ def _git_worktree_metadata(metadata: dict[str, object]) -> dict[str, object] | N
 def _commit_session_changes(
     session_worktree: Path, *, session_id: str, commit_paths: tuple[str, ...]
 ) -> None:
+    if not commit_paths:
+        return
     git(session_worktree, "add", "--", *commit_paths)
     dirty = git(session_worktree, "diff", "--cached", "--name-only")
     if not dirty:

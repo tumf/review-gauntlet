@@ -367,8 +367,8 @@ print('error line', file=sys.stderr, flush=True)
     assert result.stderr == "error line\n"
     assert tuple(entry.text for entry in result.output_tail) == (
         "first line",
-        "second line",
         "error line",
+        "second line",
     )
 
 

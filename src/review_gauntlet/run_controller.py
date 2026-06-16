@@ -88,7 +88,10 @@ class RunEvent:
         )
 
     def model_dump(self) -> dict[str, object]:
-        return {"type": self.type, "timestamp": self.timestamp, **self.payload}
+        result = dict(self.payload)
+        result["type"] = self.type
+        result["timestamp"] = self.timestamp
+        return result
 
 
 @dataclass(frozen=True)
@@ -160,6 +163,8 @@ class RunController:
         command_runner: CommandRunner,
         event_sink: EventSink | None = None,
     ) -> None:
+        if max_steps < 1:
+            raise ValueError(f"max_steps must be a positive integer, got {max_steps}")
         self.root = root
         self.store = store
         self.config_path = config_path
@@ -179,7 +184,6 @@ class RunController:
         self._agent_step_started_at: datetime | None = None
         self._agent_timeout_seconds: float | None = None
         self._agent_output_progress: AgentOutputProgress | None = None
-        self._last_result: dict[str, object] | None = None
         self._started_at = datetime.now(UTC)
 
     def set_agent_step_started_at_for_testing(self, started_at: datetime) -> None:
@@ -240,8 +244,9 @@ class RunController:
         now = datetime.now(UTC)
         last_output_age = self._agent_lifecycle.last_output_age_seconds
         output_tail = self._agent_lifecycle.output_tail
-        if self._agent_output_progress is not None:
-            progress_age, progress_tail = self._agent_output_progress.snapshot()
+        output_progress = self._agent_output_progress
+        if output_progress is not None:
+            progress_age, progress_tail = output_progress.snapshot()
             if progress_tail:
                 last_output_age = progress_age
                 output_tail = progress_tail
@@ -298,7 +303,17 @@ class RunController:
                     error="active session disappeared during run",
                     session_id=None,
                 )
-            prompt = self._ready_prompt(self.store, self.root)
+            try:
+                prompt = self._ready_prompt(self.store, self.root)
+            except LookupError:
+                self._emit("blocked", reason="session_disappeared")
+                return _run_result(
+                    completed=False,
+                    steps=steps,
+                    reason="session_disappeared",
+                    error="active session disappeared during run",
+                    session_id=session_id,
+                )
             if prompt is None:
                 self._emit("blocked", reason="no_ready_task", session_id=session_id)
                 return _run_result(
@@ -328,6 +343,21 @@ class RunController:
                     store=self.store,
                     session_id=session_id,
                 )
+            except ValueError as exc:
+                self._agent_output_progress = None
+                self._agent_status = "failed"
+                self._agent_lifecycle = AgentLifecycle(status="failed")
+                self._agent_step_started_at = None
+                self._agent_timeout_seconds = None
+                self._emit("failed", reason="worktree_error", error=str(exc))
+                return _run_result(
+                    completed=False,
+                    steps=steps,
+                    reason="worktree_error",
+                    error=str(exc),
+                    session_id=session_id,
+                )
+            try:
                 command_result = self._command_runner(
                     effective_config.adapter,
                     execution_context.agent_root,
@@ -558,7 +588,7 @@ def _run_result(
     if max_steps is not None:
         result["max_steps"] = max_steps
     if checkpoint_commit is not None:
-        result.update(checkpoint_commit.model_dump())
+        result["checkpoint_commit"] = checkpoint_commit.model_dump()
     return result
 
 
@@ -584,12 +614,12 @@ def checkpoint_generated_files_from_stdout(stdout: str) -> tuple[str, ...]:
         if not isinstance(item, str):
             continue
         relative = Path(item)
-        if relative.is_absolute() or any(part in {"", ".", ".."} for part in relative.parts):
+        if relative.is_absolute() or ".." in relative.parts:
             continue
         normalized = relative.as_posix()
         if not normalized.startswith(".review-gauntlet/checkpoints/"):
             continue
-        if relative.suffix != ".json" or relative.name == "":
+        if relative.suffix != ".json":
             continue
         if normalized not in seen:
             files.append(normalized)
@@ -608,9 +638,6 @@ def _run_step_payload(
         "returncode": result.returncode,
         "stdout": result.stdout,
         "stderr": result.stderr,
-        "stdout_artifact": result.stdout_artifact,
-        "stderr_artifact": result.stderr_artifact,
-        "activity_artifact": result.activity_artifact,
         "output_tail": [entry.__dict__ for entry in result.output_tail],
     }
     if result.stdout_artifact is not None:

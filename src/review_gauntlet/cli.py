@@ -350,15 +350,25 @@ def _root_arg(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("root", nargs="?", default=".", help="Repository root (default: .)")
 
 
+def _non_negative_int(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be an integer") from exc
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("must be a non-negative integer")
+    return parsed
+
+
 def _budget_arg(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
-        "--budget", type=int, default=50, help="Maximum review budget (default: 50)"
+        "--budget", type=_non_negative_int, default=50, help="Maximum review budget (default: 50)"
     )
 
 
 def _concurrency_arg(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
-        "--concurrency", type=int, default=8, help="Review concurrency (default: 8)"
+        "--concurrency", type=_positive_int, default=8, help="Review concurrency (default: 8)"
     )
 
 
@@ -608,11 +618,8 @@ def _cmd_config_init(args: argparse.Namespace, root: Path) -> None:
 
 def _config_init_output_path(args: argparse.Namespace, root: Path) -> Path:
     if args.output is not None:
-        return (
-            args.output.expanduser().resolve()
-            if args.output.is_absolute()
-            else (root / args.output).resolve()
-        )
+        expanded = args.output.expanduser()
+        return expanded.resolve() if expanded.is_absolute() else (root / expanded).resolve()
     if args.global_config:
         return default_global_config_path()
     return default_project_config_path(root)
@@ -861,16 +868,12 @@ def _review_inventory(inventory: Inventory) -> Inventory:
 
 
 def _cmd_review(args: argparse.Namespace, root: Path, store: SessionStore) -> None:
-    if args.concurrency < 1:
-        fail("review --concurrency must be a positive integer")
     session_id = store.active_session_id()
     metadata = store.session_metadata(session_id)
     ruleset = load_ruleset()
     digest = target_digest(root)
     target = TargetSpec.model_validate(metadata["target"])
     _reconcile_cells(store, root, target)
-    if args.budget < 0:
-        fail("review --budget must be a non-negative integer")
     if args.budget == 0:
         status = _status(store, root)
         _emit(
@@ -974,8 +977,6 @@ def _cmd_review(args: argparse.Namespace, root: Path, store: SessionStore) -> No
 
 
 def _cmd_verify_fixes(args: argparse.Namespace, root: Path, store: SessionStore) -> None:
-    if args.concurrency < 1:
-        fail("verify-fixes --concurrency must be a positive integer")
     session_id = store.active_session_id()
     metadata = store.session_metadata(session_id)
     target = TargetSpec.model_validate(metadata["target"])
@@ -998,8 +999,6 @@ def _cmd_verify_fixes(args: argparse.Namespace, root: Path, store: SessionStore)
         reopened_ids=[],
         unverifiable_ids=[str(row["finding_id"]) for row in target_rows],
     )
-    if args.budget < 0:
-        fail("verify-fixes --budget must be a non-negative integer")
     if args.budget == 0 or not target_rows:
         _emit(result_base, args.format)
         return
@@ -1227,7 +1226,7 @@ def review_cells_concurrently(
         return {}
     progress = reporter or ReviewProgressReporter(enabled=False)
     results: dict[str, ReviewAdapterResult | ReviewAdapterError] = {}
-    max_workers = min(concurrency, len(cells))
+    max_workers = min(concurrency, len(cells), 64)
     executor = ThreadPoolExecutor(max_workers=max_workers)
     futures: dict[Future[ReviewAdapterResult], ReviewCell] = {}
     try:
@@ -1615,8 +1614,9 @@ def _run_session_command_step(
         returncode = process.wait()
         stdout_thread.join(timeout=1.0)
         stderr_thread.join(timeout=1.0)
-        stdout = _process_session_output_text("".join(stdout_lines))
-        stderr = _process_session_output_text("".join(stderr_lines))
+        with output_lock:
+            stdout = _process_session_output_text("".join(stdout_lines))
+            stderr = _process_session_output_text("".join(stderr_lines))
         return _persist_session_command_artifacts(
             state_dir,
             SessionCommandResult(
@@ -1638,12 +1638,15 @@ def _run_session_command_step(
         process.wait()
         stdout_thread.join(timeout=1.0)
         stderr_thread.join(timeout=1.0)
+        with output_lock:
+            captured_stdout = "".join(stdout_lines)
+            captured_stderr = "".join(stderr_lines)
         return SessionCommandResult(
             argv=argv,
             cwd=str(cwd_path),
             returncode=None,
-            stdout="".join(stdout_lines),
-            stderr="".join(stderr_lines),
+            stdout=captured_stdout,
+            stderr=captured_stderr,
             failure={
                 "reason": RUN_INTERRUPTED_REASON,
                 "error": RUN_INTERRUPTED_ERROR,
@@ -1651,8 +1654,9 @@ def _run_session_command_step(
         )
     stdout_thread.join(timeout=1.0)
     stderr_thread.join(timeout=1.0)
-    stdout = "".join(stdout_lines)
-    stderr = "".join(stderr_lines)
+    with output_lock:
+        stdout = "".join(stdout_lines)
+        stderr = "".join(stderr_lines)
     failure: dict[str, object] | None = None
     if returncode != 0:
         failure = {
@@ -1715,9 +1719,17 @@ def _persist_session_command_artifacts(
 def _agent_output_tail(
     stdout: str, stderr: str, *, limit: int = 20
 ) -> tuple[AgentOutputEntry, ...]:
+    stdout_lines = [line for line in stdout.splitlines() if line.strip()]
+    stderr_lines = [line for line in stderr.splitlines() if line.strip()]
     entries: list[AgentOutputEntry] = []
-    entries.extend(AgentOutputEntry("stdout", line) for line in stdout.splitlines() if line.strip())
-    entries.extend(AgentOutputEntry("stderr", line) for line in stderr.splitlines() if line.strip())
+    i = j = 0
+    while i < len(stdout_lines) or j < len(stderr_lines):
+        if i < len(stdout_lines):
+            entries.append(AgentOutputEntry("stdout", stdout_lines[i]))
+            i += 1
+        if j < len(stderr_lines):
+            entries.append(AgentOutputEntry("stderr", stderr_lines[j]))
+            j += 1
     return tuple(entries[-limit:])
 
 
@@ -1941,12 +1953,17 @@ def _matches_finding_path_filter(path: str, path_filter: str) -> bool:
 
 
 def _normalize_finding_path(path: str) -> str:
+    if not path or not path.strip():
+        raise ValueError("finding path filter must not be empty")
     suffix = "/" if path.replace("\\", "/").endswith("/") else ""
     try:
         normalized = normalize_repository_relative_path(path)
     except UnsafeRepositoryPathError as exc:
         raise ValueError(f"invalid finding path filter: {path}") from exc
-    return posixpath.normpath(normalized) + suffix
+    result = posixpath.normpath(normalized) + suffix
+    if result == "." or result == "./":
+        raise ValueError(f"finding path filter must not be the repository root: {path}")
+    return result
 
 
 def _finalize(
@@ -2062,7 +2079,9 @@ def _copy_checkpoint_artifacts_to_session_worktree(
 def _remove_base_checkpoint_artifacts_before_merge(
     root: Path, checkpoint: dict[str, object]
 ) -> None:
-    checkpoint_dir = root / str(checkpoint["checkpoint_dir"])
+    checkpoint_dir = (root / str(checkpoint["checkpoint_dir"])).resolve()
+    if not checkpoint_dir.is_relative_to(root.resolve()):
+        raise ValueError(f"checkpoint_dir escapes repository root: {checkpoint_dir}")
     if checkpoint_dir.exists():
         shutil.rmtree(checkpoint_dir)
     latest = root / ".review-gauntlet" / "checkpoints" / "latest"
@@ -2145,7 +2164,7 @@ def _is_expired(metadata_json: str, today: date) -> bool:
     try:
         raw_metadata = json.loads(metadata_json)
         if not isinstance(raw_metadata, dict):
-            return True
+            return False
         metadata = cast(dict[str, Any], raw_metadata)
         until = metadata.get("until")
         if not until:
