@@ -1,6 +1,8 @@
 import json
 import subprocess
 import sys
+import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -8,6 +10,7 @@ import pytest
 from review_gauntlet.cli import main, run_session_command_step_for_testing
 from review_gauntlet.config import CommandAdapterConfig
 from review_gauntlet.review_cells import CellState
+from review_gauntlet.run_controller import AgentOutputProgress, SessionCommandResult
 from review_gauntlet.session_store import SessionStore
 
 
@@ -302,6 +305,71 @@ def test_run_session_command_expands_repo_root_state_dir_and_defaults_cwd(
     assert result.cwd == str(tmp_path)
     assert result.stdout_artifact is not None
     assert Path(result.stdout_artifact).is_relative_to(state_dir)
+
+
+def test_run_session_command_streams_output_progress_before_process_exit(
+    tmp_path: Path,
+) -> None:
+    state_dir = tmp_path / ".review-gauntlet"
+    state_dir.mkdir()
+    script = tmp_path / "slow_agent.py"
+    script.write_text(
+        """
+import sys
+import time
+
+print('first line', flush=True)
+time.sleep(0.3)
+print('second line', flush=True)
+print('error line', file=sys.stderr, flush=True)
+""".strip(),
+        encoding="utf-8",
+    )
+    config = CommandAdapterConfig(
+        type="command",
+        command=sys.executable,
+        args=(str(script),),
+        timeout_seconds=5,
+    )
+    progress = AgentOutputProgress()
+    result_holder: list[SessionCommandResult] = []
+
+    def run_command() -> None:
+        result_holder.append(
+            run_session_command_step_for_testing(
+                config=config,
+                root=tmp_path,
+                state_dir=state_dir,
+                prompt="prompt",
+                output_progress=progress,
+            )
+        )
+
+    thread = threading.Thread(target=run_command)
+    thread.start()
+    deadline = time.monotonic() + 1.0
+    live_tail: tuple[str, ...] = ()
+    while time.monotonic() < deadline:
+        _age, tail = progress.snapshot()
+        live_tail = tuple(entry.text for entry in tail)
+        if "first line" in live_tail:
+            break
+        time.sleep(0.01)
+
+    assert "first line" in live_tail
+    assert thread.is_alive()
+    thread.join(timeout=2.0)
+    assert not thread.is_alive()
+    assert len(result_holder) == 1
+    result = result_holder[0]
+    assert result.failure is None
+    assert result.stdout == "first line\nsecond line\n"
+    assert result.stderr == "error line\n"
+    assert tuple(entry.text for entry in result.output_tail) == (
+        "first line",
+        "second line",
+        "error line",
+    )
 
 
 def test_run_session_command_resolves_nested_cwd_and_rejects_escape(

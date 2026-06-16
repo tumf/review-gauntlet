@@ -8,6 +8,7 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
 import uuid
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
@@ -69,6 +70,7 @@ from review_gauntlet.run_controller import (
     RUN_INTERRUPTED_ERROR,
     RUN_INTERRUPTED_REASON,
     AgentOutputEntry,
+    AgentOutputProgress,
     RunController,
     SessionCommandResult,
 )
@@ -1451,6 +1453,19 @@ def _interrupted_run_result(store: SessionStore) -> dict[str, object]:
 
 
 def _cmd_run(args: argparse.Namespace, root: Path, store: SessionStore) -> dict[str, object]:
+    controller: RunController
+
+    def command_runner(
+        config: CommandAdapterConfig, agent_root: Path, state_dir: Path, prompt: str
+    ) -> SessionCommandResult:
+        return _run_session_command_step_from_config(
+            config,
+            agent_root,
+            state_dir,
+            prompt,
+            output_progress=controller.agent_output_progress,
+        )
+
     controller = RunController(
         root=root,
         store=store,
@@ -1458,7 +1473,7 @@ def _cmd_run(args: argparse.Namespace, root: Path, store: SessionStore) -> dict[
         max_steps=int(args.max_steps),
         ready_prompt=_ready_prompt,
         status_snapshot=lambda session_store, repo_root: _status(session_store, repo_root),
-        command_runner=_run_session_command_step_from_config,
+        command_runner=command_runner,
     )
     use_tui = should_use_tui(
         output_format=str(args.format),
@@ -1480,13 +1495,29 @@ def _cmd_run(args: argparse.Namespace, root: Path, store: SessionStore) -> dict[
 
 
 def _run_session_command_step_from_config(
-    config: CommandAdapterConfig, root: Path, state_dir: Path, prompt: str
+    config: CommandAdapterConfig,
+    root: Path,
+    state_dir: Path,
+    prompt: str,
+    *,
+    output_progress: AgentOutputProgress | None = None,
 ) -> SessionCommandResult:
-    return _run_session_command_step(config=config, root=root, state_dir=state_dir, prompt=prompt)
+    return _run_session_command_step(
+        config=config,
+        root=root,
+        state_dir=state_dir,
+        prompt=prompt,
+        output_progress=output_progress,
+    )
 
 
 def _run_session_command_step(
-    *, config: CommandAdapterConfig, root: Path, state_dir: Path, prompt: str
+    *,
+    config: CommandAdapterConfig,
+    root: Path,
+    state_dir: Path,
+    prompt: str,
+    output_progress: AgentOutputProgress | None = None,
 ) -> SessionCommandResult:
     variables = {
         "repo_root": str(root.resolve()),
@@ -1510,17 +1541,20 @@ def _run_session_command_step(
             stderr="",
             failure={"reason": "template_error", "error": str(exc)},
         )
+    stdout_lines: list[str] = []
+    stderr_lines: list[str] = []
+    output_lock = threading.Lock()
+
     try:
-        completed = subprocess.run(
+        process = subprocess.Popen(
             argv,
             cwd=cwd_path,
             env=env,
             stdin=subprocess.DEVNULL,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
             shell=False,
-            timeout=config.timeout_seconds,
-            check=False,
         )
     except FileNotFoundError as exc:
         return SessionCommandResult(
@@ -1535,47 +1569,90 @@ def _run_session_command_step(
                 "detail": str(exc),
             },
         )
-    except subprocess.TimeoutExpired as exc:
+
+    def read_stream(stream_name: str, lines: list[str], pipe: Any) -> None:
+        try:
+            for line in pipe:
+                with output_lock:
+                    lines.append(line)
+                if output_progress is not None:
+                    output_progress.push(stream_name, line.rstrip("\n"))
+        finally:
+            pipe.close()
+
+    if process.stdout is None or process.stderr is None:
+        raise RuntimeError("subprocess pipes were not created")
+    stdout_thread = threading.Thread(
+        target=read_stream,
+        args=("stdout", stdout_lines, process.stdout),
+        daemon=True,
+    )
+    stderr_thread = threading.Thread(
+        target=read_stream,
+        args=("stderr", stderr_lines, process.stderr),
+        daemon=True,
+    )
+    stdout_thread.start()
+    stderr_thread.start()
+
+    try:
+        returncode = process.wait(timeout=config.timeout_seconds)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        returncode = process.wait()
+        stdout_thread.join(timeout=1.0)
+        stderr_thread.join(timeout=1.0)
+        stdout = _process_session_output_text("".join(stdout_lines))
+        stderr = _process_session_output_text("".join(stderr_lines))
         return _persist_session_command_artifacts(
             state_dir,
             SessionCommandResult(
                 argv=argv,
                 cwd=str(cwd_path),
                 returncode=None,
-                stdout=_process_session_output_text(exc.stdout),
-                stderr=_process_session_output_text(exc.stderr),
+                stdout=stdout,
+                stderr=stderr,
                 failure={
                     "reason": "timeout",
                     "error": f"command timed out after {config.timeout_seconds} seconds",
                     "timeout_seconds": config.timeout_seconds,
+                    "returncode_after_kill": returncode,
                 },
             ),
         )
     except KeyboardInterrupt:
+        process.kill()
+        process.wait()
+        stdout_thread.join(timeout=1.0)
+        stderr_thread.join(timeout=1.0)
         return SessionCommandResult(
             argv=argv,
             cwd=str(cwd_path),
             returncode=None,
-            stdout="",
-            stderr="",
+            stdout="".join(stdout_lines),
+            stderr="".join(stderr_lines),
             failure={
                 "reason": RUN_INTERRUPTED_REASON,
                 "error": RUN_INTERRUPTED_ERROR,
             },
         )
+    stdout_thread.join(timeout=1.0)
+    stderr_thread.join(timeout=1.0)
+    stdout = "".join(stdout_lines)
+    stderr = "".join(stderr_lines)
     failure: dict[str, object] | None = None
-    if completed.returncode != 0:
+    if returncode != 0:
         failure = {
             "reason": "command_failed",
-            "error": f"command exited with status {completed.returncode}",
-            "returncode": completed.returncode,
+            "error": f"command exited with status {returncode}",
+            "returncode": returncode,
         }
     result = SessionCommandResult(
         argv=argv,
         cwd=str(cwd_path),
-        returncode=completed.returncode,
-        stdout=completed.stdout,
-        stderr=completed.stderr,
+        returncode=returncode,
+        stdout=stdout,
+        stderr=stderr,
         failure=failure,
     )
     return _persist_session_command_artifacts(state_dir, result)
