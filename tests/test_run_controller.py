@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime, timedelta
+import threading
+from datetime import UTC, datetime, timedelta, tzinfo
 from pathlib import Path
 
 import pytest
@@ -11,6 +12,7 @@ from review_gauntlet.checkpoint import CheckpointCommitResult
 from review_gauntlet.config import CommandAdapterConfig
 from review_gauntlet.review_cells import CellState, ReviewCell
 from review_gauntlet.run_controller import (
+    AgentOutputProgress,
     RunController,
     RunExecutionContext,
     SessionCommandResult,
@@ -60,6 +62,120 @@ def _store(tmp_path: Path) -> SessionStore:
 
 def _status(_store: SessionStore, _root: Path) -> dict[str, object]:
     return {"coverage": {"pending": 1}, "findings": {"untriaged": 0}}
+
+
+def test_agent_output_progress_thread_safe_snapshot_returns_age_and_tail() -> None:
+    progress = AgentOutputProgress()
+    pushed = threading.Event()
+
+    def push_output() -> None:
+        progress.push("stdout", "hello")
+        pushed.set()
+
+    thread = threading.Thread(target=push_output)
+    thread.start()
+    assert pushed.wait(timeout=1.0)
+    age, tail = progress.snapshot()
+    thread.join(timeout=1.0)
+
+    assert age is not None and age < 1.0
+    assert tail == progress.snapshot()[1]
+    assert len(tail) == 1
+    assert tail[0].stream == "stdout"
+    assert tail[0].text == "hello"
+    assert tail[0].timestamp is not None
+
+
+def test_run_controller_exposes_agent_output_progress_during_command(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    observed: list[AgentOutputProgress | None] = []
+
+    def command(
+        _config: CommandAdapterConfig, _root: Path, _state_dir: Path, _prompt: str
+    ) -> SessionCommandResult:
+        observed.append(controller.agent_output_progress)
+        store.active_path.unlink()
+        return SessionCommandResult(
+            argv=["fake-agent", "ready prompt"], cwd=None, returncode=0, stdout="ok", stderr=""
+        )
+
+    controller = RunController(
+        root=tmp_path,
+        store=store,
+        config_path=None,
+        max_steps=1,
+        ready_prompt=lambda _store, _root: "ready prompt",
+        status_snapshot=_status,
+        command_runner=command,
+    )
+
+    assert controller.agent_output_progress is None
+    result = controller.run()
+
+    assert result["completed"] is True
+    assert len(observed) == 1
+    assert isinstance(observed[0], AgentOutputProgress)
+    assert controller.agent_output_progress is None
+
+
+def test_run_controller_lifecycle_uses_live_output_progress(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = _store(tmp_path)
+    current_time = datetime(2026, 1, 1, tzinfo=UTC)
+
+    class FrozenDateTime(datetime):
+        @classmethod
+        def now(cls, tz: tzinfo | None = None) -> datetime:
+            return current_time
+
+    monkeypatch.setattr(run_controller_module, "datetime", FrozenDateTime)
+    snapshots: list[tuple[str, float | None, tuple[str, ...]]] = []
+
+    def command(
+        _config: CommandAdapterConfig, _root: Path, _state_dir: Path, _prompt: str
+    ) -> SessionCommandResult:
+        nonlocal current_time
+        assert controller.agent_output_progress is not None
+        controller.agent_output_progress.push("stdout", "recent output")
+        current_time += timedelta(seconds=1)
+        recent = controller.snapshot().agent_lifecycle
+        snapshots.append(
+            (
+                recent.status,
+                recent.last_output_age_seconds,
+                tuple(e.text for e in recent.output_tail),
+            )
+        )
+        current_time += timedelta(seconds=5)
+        quiet = controller.snapshot().agent_lifecycle
+        snapshots.append(
+            (quiet.status, quiet.last_output_age_seconds, tuple(e.text for e in quiet.output_tail))
+        )
+        store.active_path.unlink()
+        return SessionCommandResult(
+            argv=["fake-agent", "ready prompt"], cwd=None, returncode=0, stdout="ok", stderr=""
+        )
+
+    controller = RunController(
+        root=tmp_path,
+        store=store,
+        config_path=None,
+        max_steps=1,
+        ready_prompt=lambda _store, _root: "ready prompt",
+        status_snapshot=_status,
+        command_runner=command,
+    )
+
+    result = controller.run()
+
+    assert result["completed"] is True
+    assert snapshots[0][0] == "running"
+    assert snapshots[0][1] == 1.0
+    assert snapshots[0][2] == ("recent output",)
+    assert snapshots[1][0] == "quiet"
+    assert snapshots[1][1] == 6.0
+    assert snapshots[1][2] == ("recent output",)
 
 
 def test_run_execution_context_uses_git_worktree_agent_root(tmp_path: Path) -> None:

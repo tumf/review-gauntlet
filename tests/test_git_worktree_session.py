@@ -6,7 +6,7 @@ from typing import Any
 import pytest
 
 from review_gauntlet.cli import main
-from review_gauntlet.git_worktree import merge_preflight_blockers
+from review_gauntlet.git_worktree import merge_preflight_blockers, run_worktree_setup
 from review_gauntlet.session_store import SessionStore
 
 
@@ -40,6 +40,63 @@ def _complete_session(root: Path, capsys: pytest.CaptureFixture[str]) -> dict[st
         if data["coverage"].get("pending", 0) == 0:
             break
     return init_data
+
+
+def _write_setup_script(worktree_root: Path, contents: str) -> Path:
+    setup = worktree_root / ".wt" / "setup"
+    setup.parent.mkdir(parents=True, exist_ok=True)
+    setup.write_text(contents, encoding="utf-8")
+    setup.chmod(0o755)
+    return setup
+
+
+def test_run_worktree_setup_reports_missing_script(tmp_path: Path) -> None:
+    result = run_worktree_setup(tmp_path, enabled=True, timeout_seconds=5)
+
+    assert result.as_dict() == {
+        "ran": False,
+        "script_path": (tmp_path / ".wt" / "setup").as_posix(),
+        "skipped_reason": "missing",
+        "returncode": None,
+        "warning": None,
+    }
+
+
+def test_run_worktree_setup_reports_disabled_script(tmp_path: Path) -> None:
+    _write_setup_script(tmp_path, "#!/bin/sh\ntouch should-not-exist\n")
+
+    result = run_worktree_setup(tmp_path, enabled=False, timeout_seconds=5)
+
+    assert result.ran is False
+    assert result.skipped_reason == "disabled"
+    assert result.returncode is None
+    assert result.warning is None
+    assert not (tmp_path / "should-not-exist").exists()
+
+
+def test_run_worktree_setup_runs_script_with_worktree_cwd(tmp_path: Path) -> None:
+    _write_setup_script(tmp_path, "#!/bin/sh\npwd > setup-cwd.txt\n")
+
+    result = run_worktree_setup(tmp_path, enabled=True, timeout_seconds=5)
+
+    assert result.ran is True
+    assert result.skipped_reason is None
+    assert result.returncode == 0
+    assert result.warning is None
+    assert (tmp_path / "setup-cwd.txt").read_text(encoding="utf-8").strip() == str(tmp_path)
+
+
+def test_run_worktree_setup_warns_on_nonzero_exit(tmp_path: Path) -> None:
+    _write_setup_script(tmp_path, "#!/bin/sh\necho setup failed >&2\nexit 7\n")
+
+    result = run_worktree_setup(tmp_path, enabled=True, timeout_seconds=5)
+
+    assert result.ran is True
+    assert result.returncode == 7
+    assert result.skipped_reason is None
+    assert result.warning is not None
+    assert "status 7" in result.warning
+    assert "setup failed" in result.warning
 
 
 def test_init_git_worktree_records_metadata_and_preserves_worktree_target(

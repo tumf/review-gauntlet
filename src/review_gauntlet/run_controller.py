@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import threading
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -20,6 +21,32 @@ class AgentOutputEntry:
     stream: str
     text: str
     timestamp: str | None = None
+
+
+class AgentOutputProgress:
+    def __init__(self, *, limit: int = 20) -> None:
+        self._limit = limit
+        self._lock = threading.Lock()
+        self._last_output_at: datetime | None = None
+        self._output_lines: list[AgentOutputEntry] = []
+
+    def push(self, stream: str, text: str) -> None:
+        timestamp = datetime.now(UTC)
+        entry = AgentOutputEntry(stream=stream, text=text, timestamp=timestamp.isoformat())
+        with self._lock:
+            self._last_output_at = timestamp
+            self._output_lines.append(entry)
+            if len(self._output_lines) > self._limit:
+                del self._output_lines[: len(self._output_lines) - self._limit]
+
+    def snapshot(self) -> tuple[float | None, tuple[AgentOutputEntry, ...]]:
+        now = datetime.now(UTC)
+        with self._lock:
+            last_output_at = self._last_output_at
+            output_tail = tuple(self._output_lines)
+        if last_output_at is None:
+            return None, output_tail
+        return (now - last_output_at).total_seconds(), output_tail
 
 
 @dataclass(frozen=True)
@@ -151,6 +178,7 @@ class RunController:
         self._agent_lifecycle = AgentLifecycle()
         self._agent_step_started_at: datetime | None = None
         self._agent_timeout_seconds: float | None = None
+        self._agent_output_progress: AgentOutputProgress | None = None
         self._last_result: dict[str, object] | None = None
         self._started_at = datetime.now(UTC)
 
@@ -160,6 +188,10 @@ class RunController:
     @property
     def events(self) -> tuple[RunEvent, ...]:
         return tuple(self._events)
+
+    @property
+    def agent_output_progress(self) -> AgentOutputProgress | None:
+        return self._agent_output_progress
 
     def request_stop_after_current_step(self) -> None:
         self._stop_after_current_step = True
@@ -207,6 +239,12 @@ class RunController:
             return self._agent_lifecycle
         now = datetime.now(UTC)
         last_output_age = self._agent_lifecycle.last_output_age_seconds
+        output_tail = self._agent_lifecycle.output_tail
+        if self._agent_output_progress is not None:
+            progress_age, progress_tail = self._agent_output_progress.snapshot()
+            if progress_tail:
+                last_output_age = progress_age
+                output_tail = progress_tail
         if last_output_age is None and self._agent_step_started_at is not None:
             last_output_age = (now - self._agent_step_started_at).total_seconds()
         timeout_remaining = self._agent_lifecycle.timeout_remaining_seconds
@@ -226,7 +264,7 @@ class RunController:
             timeout_remaining_seconds=timeout_remaining,
             timeout_seconds=self._agent_timeout_seconds,
             artifact_path=self._agent_lifecycle.artifact_path,
-            output_tail=self._agent_lifecycle.output_tail,
+            output_tail=output_tail,
         )
 
     def run(self) -> dict[str, object]:
@@ -250,7 +288,16 @@ class RunController:
                 return self._interrupted_result(
                     steps, error="run interrupted by controller request"
                 )
-            session_id = self.store.active_session_id()
+            session_id = self._active_session_id_or_none()
+            if session_id is None:
+                self._emit("blocked", reason="session_disappeared")
+                return _run_result(
+                    completed=False,
+                    steps=steps,
+                    reason="session_disappeared",
+                    error="active session disappeared during run",
+                    session_id=None,
+                )
             prompt = self._ready_prompt(self.store, self.root)
             if prompt is None:
                 self._emit("blocked", reason="no_ready_task", session_id=session_id)
@@ -269,6 +316,7 @@ class RunController:
                 status="running",
                 timeout_seconds=effective_config.adapter.timeout_seconds,
             )
+            self._agent_output_progress = AgentOutputProgress()
             self._emit(
                 "agent_started",
                 command_label=self._command_label,
@@ -287,6 +335,7 @@ class RunController:
                     prompt,
                 )
             except KeyboardInterrupt:
+                self._agent_output_progress = None
                 self._agent_status = RUN_INTERRUPTED_REASON
                 self._agent_lifecycle = AgentLifecycle(
                     status=RUN_INTERRUPTED_REASON,
@@ -296,6 +345,7 @@ class RunController:
                 self._agent_timeout_seconds = None
                 self._emit("interrupted", step=step_number, session_id=session_id)
                 return self._interrupted_result(steps)
+            self._agent_output_progress = None
             self._command_argv = tuple(command_result.argv)
             lifecycle_status = _lifecycle_status_from_result(command_result)
             self._agent_lifecycle = AgentLifecycle(

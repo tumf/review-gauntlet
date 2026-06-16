@@ -8,6 +8,7 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
 import uuid
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
@@ -42,6 +43,7 @@ from review_gauntlet.git_worktree import (
     create_session_worktree,
     merge_preflight_blockers,
     merge_session_worktree,
+    run_worktree_setup,
 )
 from review_gauntlet.inventory import (
     UnsafeRepositoryPathError,
@@ -69,6 +71,7 @@ from review_gauntlet.run_controller import (
     RUN_INTERRUPTED_ERROR,
     RUN_INTERRUPTED_REASON,
     AgentOutputEntry,
+    AgentOutputProgress,
     RunController,
     SessionCommandResult,
 )
@@ -188,6 +191,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--git-worktree",
         action="store_true",
         help="Create an isolated Git linked worktree and session branch (default: false)",
+    )
+    init.add_argument(
+        "--no-setup",
+        action="store_true",
+        help="Skip running .wt/setup in a newly created Git linked worktree (default: false)",
     )
     init.add_argument("--commit")
     init.add_argument(
@@ -819,8 +827,15 @@ def _cmd_init(args: argparse.Namespace, root: Path, store: SessionStore) -> None
     output: dict[str, object] = {"session_id": session_id, "cell_count": len(cells), "run_count": 0}
     if bool(getattr(args, "git_worktree", False)):
         git_metadata = create_session_worktree(root, session_id)
-        metadata["git_worktree"] = git_metadata.as_dict()
-        output["git_worktree"] = git_metadata.as_dict()
+        git_metadata_dict = git_metadata.as_dict()
+        setup_result = run_worktree_setup(
+            (root / git_metadata.worktree_path).resolve(),
+            enabled=not bool(getattr(args, "no_setup", False)),
+            timeout_seconds=120,
+        )
+        git_metadata_dict["setup"] = setup_result.as_dict()
+        metadata["git_worktree"] = git_metadata_dict
+        output["git_worktree"] = git_metadata_dict
     store.create_session(metadata, cells)
     (store.state_dir / "rules.lock").write_text(ruleset.model_dump_json(indent=2), encoding="utf-8")
     _emit(output, args.format)
@@ -1451,6 +1466,19 @@ def _interrupted_run_result(store: SessionStore) -> dict[str, object]:
 
 
 def _cmd_run(args: argparse.Namespace, root: Path, store: SessionStore) -> dict[str, object]:
+    controller: RunController
+
+    def command_runner(
+        config: CommandAdapterConfig, agent_root: Path, state_dir: Path, prompt: str
+    ) -> SessionCommandResult:
+        return _run_session_command_step_from_config(
+            config,
+            agent_root,
+            state_dir,
+            prompt,
+            output_progress=controller.agent_output_progress,
+        )
+
     controller = RunController(
         root=root,
         store=store,
@@ -1458,7 +1486,7 @@ def _cmd_run(args: argparse.Namespace, root: Path, store: SessionStore) -> dict[
         max_steps=int(args.max_steps),
         ready_prompt=_ready_prompt,
         status_snapshot=lambda session_store, repo_root: _status(session_store, repo_root),
-        command_runner=_run_session_command_step_from_config,
+        command_runner=command_runner,
     )
     use_tui = should_use_tui(
         output_format=str(args.format),
@@ -1480,13 +1508,29 @@ def _cmd_run(args: argparse.Namespace, root: Path, store: SessionStore) -> dict[
 
 
 def _run_session_command_step_from_config(
-    config: CommandAdapterConfig, root: Path, state_dir: Path, prompt: str
+    config: CommandAdapterConfig,
+    root: Path,
+    state_dir: Path,
+    prompt: str,
+    *,
+    output_progress: AgentOutputProgress | None = None,
 ) -> SessionCommandResult:
-    return _run_session_command_step(config=config, root=root, state_dir=state_dir, prompt=prompt)
+    return _run_session_command_step(
+        config=config,
+        root=root,
+        state_dir=state_dir,
+        prompt=prompt,
+        output_progress=output_progress,
+    )
 
 
 def _run_session_command_step(
-    *, config: CommandAdapterConfig, root: Path, state_dir: Path, prompt: str
+    *,
+    config: CommandAdapterConfig,
+    root: Path,
+    state_dir: Path,
+    prompt: str,
+    output_progress: AgentOutputProgress | None = None,
 ) -> SessionCommandResult:
     variables = {
         "repo_root": str(root.resolve()),
@@ -1510,17 +1554,20 @@ def _run_session_command_step(
             stderr="",
             failure={"reason": "template_error", "error": str(exc)},
         )
+    stdout_lines: list[str] = []
+    stderr_lines: list[str] = []
+    output_lock = threading.Lock()
+
     try:
-        completed = subprocess.run(
+        process = subprocess.Popen(
             argv,
             cwd=cwd_path,
             env=env,
             stdin=subprocess.DEVNULL,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
             shell=False,
-            timeout=config.timeout_seconds,
-            check=False,
         )
     except FileNotFoundError as exc:
         return SessionCommandResult(
@@ -1535,47 +1582,90 @@ def _run_session_command_step(
                 "detail": str(exc),
             },
         )
-    except subprocess.TimeoutExpired as exc:
+
+    def read_stream(stream_name: str, lines: list[str], pipe: Any) -> None:
+        try:
+            for line in pipe:
+                with output_lock:
+                    lines.append(line)
+                if output_progress is not None:
+                    output_progress.push(stream_name, line.rstrip("\n"))
+        finally:
+            pipe.close()
+
+    if process.stdout is None or process.stderr is None:
+        raise RuntimeError("subprocess pipes were not created")
+    stdout_thread = threading.Thread(
+        target=read_stream,
+        args=("stdout", stdout_lines, process.stdout),
+        daemon=True,
+    )
+    stderr_thread = threading.Thread(
+        target=read_stream,
+        args=("stderr", stderr_lines, process.stderr),
+        daemon=True,
+    )
+    stdout_thread.start()
+    stderr_thread.start()
+
+    try:
+        returncode = process.wait(timeout=config.timeout_seconds)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        returncode = process.wait()
+        stdout_thread.join(timeout=1.0)
+        stderr_thread.join(timeout=1.0)
+        stdout = _process_session_output_text("".join(stdout_lines))
+        stderr = _process_session_output_text("".join(stderr_lines))
         return _persist_session_command_artifacts(
             state_dir,
             SessionCommandResult(
                 argv=argv,
                 cwd=str(cwd_path),
                 returncode=None,
-                stdout=_process_session_output_text(exc.stdout),
-                stderr=_process_session_output_text(exc.stderr),
+                stdout=stdout,
+                stderr=stderr,
                 failure={
                     "reason": "timeout",
                     "error": f"command timed out after {config.timeout_seconds} seconds",
                     "timeout_seconds": config.timeout_seconds,
+                    "returncode_after_kill": returncode,
                 },
             ),
         )
     except KeyboardInterrupt:
+        process.kill()
+        process.wait()
+        stdout_thread.join(timeout=1.0)
+        stderr_thread.join(timeout=1.0)
         return SessionCommandResult(
             argv=argv,
             cwd=str(cwd_path),
             returncode=None,
-            stdout="",
-            stderr="",
+            stdout="".join(stdout_lines),
+            stderr="".join(stderr_lines),
             failure={
                 "reason": RUN_INTERRUPTED_REASON,
                 "error": RUN_INTERRUPTED_ERROR,
             },
         )
+    stdout_thread.join(timeout=1.0)
+    stderr_thread.join(timeout=1.0)
+    stdout = "".join(stdout_lines)
+    stderr = "".join(stderr_lines)
     failure: dict[str, object] | None = None
-    if completed.returncode != 0:
+    if returncode != 0:
         failure = {
             "reason": "command_failed",
-            "error": f"command exited with status {completed.returncode}",
-            "returncode": completed.returncode,
+            "error": f"command exited with status {returncode}",
+            "returncode": returncode,
         }
     result = SessionCommandResult(
         argv=argv,
         cwd=str(cwd_path),
-        returncode=completed.returncode,
-        stdout=completed.stdout,
-        stderr=completed.stderr,
+        returncode=returncode,
+        stdout=stdout,
+        stderr=stderr,
         failure=failure,
     )
     return _persist_session_command_artifacts(state_dir, result)
@@ -1816,7 +1906,14 @@ def _finding_sort_key(finding: dict[str, object]) -> tuple[str, int, int, str]:
 
 def _finding_int_field(finding: dict[str, object], key: str) -> int:
     value = finding.get(key)
-    return int(value) if isinstance(value, int | str) else 0
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return 0
+    return 0
 
 
 def _terminal_finding_states() -> set[FindingState]:
@@ -2035,7 +2132,11 @@ def _expired_terminal_decision_count(store: SessionStore, session_id: str) -> in
                 """,
                 (row["finding_id"], row["state"]),
             ).fetchone()
-            if event is not None and _is_expired(str(event["metadata"]), today):
+            if (
+                event is not None
+                and event["metadata"] is not None
+                and _is_expired(str(event["metadata"]), today)
+            ):
                 expired += 1
     return expired
 
@@ -2051,7 +2152,11 @@ def _is_expired(metadata_json: str, today: date) -> bool:
             return False
         return date.fromisoformat(str(until)) < today
     except (json.JSONDecodeError, ValueError, TypeError):
-        return True
+        print(
+            "warning: unparseable metadata JSON in finding event, treating as not expired",
+            file=sys.stderr,
+        )
+        return False
 
 
 def _next_action(
