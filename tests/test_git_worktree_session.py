@@ -575,7 +575,7 @@ class TestGitWorktreeMetadata:
         assert _git_worktree_metadata({"git_worktree": "not-a-dict"}) is None
 
     def test_returns_none_when_not_enabled(self) -> None:
-        meta = {
+        meta: dict[str, object] = {
             "git_worktree": {
                 "enabled": False,
                 "base_branch": "main",
@@ -587,7 +587,7 @@ class TestGitWorktreeMetadata:
         assert _git_worktree_metadata(meta) is None
 
     def test_returns_none_when_required_key_missing(self) -> None:
-        meta = {
+        meta: dict[str, object] = {
             "git_worktree": {
                 "enabled": True,
                 "base_branch": "main",
@@ -599,7 +599,7 @@ class TestGitWorktreeMetadata:
         assert _git_worktree_metadata(meta) is None
 
     def test_returns_none_when_required_key_empty_string(self) -> None:
-        meta = {
+        meta: dict[str, object] = {
             "git_worktree": {
                 "enabled": True,
                 "base_branch": "main",
@@ -611,7 +611,7 @@ class TestGitWorktreeMetadata:
         assert _git_worktree_metadata(meta) is None
 
     def test_returns_none_when_required_key_non_string(self) -> None:
-        meta = {
+        meta: dict[str, object] = {
             "git_worktree": {
                 "enabled": True,
                 "base_branch": 123,
