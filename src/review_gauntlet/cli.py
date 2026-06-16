@@ -838,7 +838,7 @@ def _cmd_init(args: argparse.Namespace, root: Path, store: SessionStore) -> None
         "cell_count": len(cells),
         "run_count": 0,
         "run_state": "none",
-        "next_command": "review-gauntlet review",
+        "next_command": "review-gauntlet review" if cells else None,
     }
     if bool(getattr(args, "git_worktree", False)):
         git_metadata = create_session_worktree(root, session_id)

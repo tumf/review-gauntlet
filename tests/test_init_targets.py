@@ -92,8 +92,30 @@ def test_package_only_worktree_changes_create_no_review_cells(
 
     main(["init", str(tmp_path), "--worktree", "--format", "json"])
 
-    assert json.loads(capsys.readouterr().out)["cell_count"] == 0
+    data = json.loads(capsys.readouterr().out)
+    assert data["cell_count"] == 0
+    assert data["run_count"] == 0
+    assert data["run_state"] == "none"
+    assert data["next_command"] is None
+    assert data["next_command"] != "review-gauntlet review"
     assert _cell_paths(tmp_path) == set()
+
+
+def test_zero_review_cell_init_text_output_omits_review_next_command(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_repo(tmp_path)
+    (tmp_path / "uv.lock").write_text("version = 1\n", encoding="utf-8")
+    (tmp_path / "package-lock.json").write_text("{}\n", encoding="utf-8")
+    (tmp_path / "Cargo.lock").write_text("# lock\n", encoding="utf-8")
+
+    main(["init", str(tmp_path), "--worktree"])
+
+    output = capsys.readouterr().out
+    assert "cell_count: 0" in output
+    assert "run_count: 0" in output
+    assert "run_state: none" in output
+    assert "next_command: review-gauntlet review" not in output
 
 
 def test_init_git_worktree_runs_setup_and_persists_result(
