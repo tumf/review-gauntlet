@@ -57,9 +57,7 @@
   `openspec/changes/add-worktree-setup-hook/specs/review-sessions/spec.md`
   describing automatic setup, `--no-setup` opt-out, missing-script no-op, and
   warn-and-continue on failure.
-  (verification: manual - `cflx openspec validate add-worktree-setup-hook
-  --strict` passes; the requirement is new (ADDED), so no canonical heading edit
-  is required.)
+  verification: manual - source path `openspec/changes/add-worktree-setup-hook/specs/review-sessions/spec.md` contains the ADDED requirement; runnable command `cflx openspec validate add-worktree-setup-hook --strict` passes.
 
 ## Future Work
 
