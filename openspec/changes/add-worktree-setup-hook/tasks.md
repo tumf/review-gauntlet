@@ -2,7 +2,7 @@
 
 ## Implementation Tasks
 
-- [ ] Add a structured setup-result type and runner in
+- [x] Add a structured setup-result type and runner in
   `src/review_gauntlet/git_worktree.py` (e.g. `WorktreeSetupResult` with
   `ran: bool`, `script_path: str`, `skipped_reason: str | None`,
   `returncode: int | None`, `warning: str | None`) and a
@@ -16,7 +16,7 @@
   missing-script, disabled, success returncode 0, and non-zero-exit cases by
   pointing at temp worktrees with/without a fake executable `.wt/setup`.)
 
-- [ ] Invoke the runner from session creation: after `create_session_worktree`
+- [x] Invoke the runner from session creation: after `create_session_worktree`
   succeeds in `_cmd_init` (`src/review_gauntlet/cli.py:820-823`), call
   `run_worktree_setup` for the absolute worktree path, attach the result as the
   `setup` sub-object on both `output["git_worktree"]` and
@@ -27,7 +27,7 @@
   `ran: true` and the script's observable side effect, e.g. a sentinel file it
   writes, exists in the worktree.)
 
-- [ ] Add the `--no-setup` flag to the `init` subparser
+- [x] Add the `--no-setup` flag to the `init` subparser
   (`src/review_gauntlet/cli.py:~187`) with help text, and thread its value into
   the `enabled` argument of `run_worktree_setup` (default: setup enabled).
   (verification: integration - `tests/test_init_targets.py` asserts
@@ -35,7 +35,7 @@
   `skipped_reason == "disabled"` and that the script's side-effect sentinel is
   absent in the worktree.)
 
-- [ ] Ensure no-op and warn-and-continue semantics end to end: absent
+- [x] Ensure no-op and warn-and-continue semantics end to end: absent
   `.wt/setup` yields success with `skipped_reason == "missing"`; a non-zero-exit
   `.wt/setup` yields a successful `init` (exit 0), preserves the worktree and
   session branch (`git worktree list` still shows it), and surfaces a `warning`
@@ -46,14 +46,14 @@
   `setup.warning` is populated. This path fails if the implementation rolls back
   the worktree or raises instead of warning.)
 
-- [ ] Confirm plain `init` (no `--git-worktree`) emits no `setup` block and does
+- [x] Confirm plain `init` (no `--git-worktree`) emits no `setup` block and does
   not execute `.wt/setup`.
   (verification: unit - `tests/test_init_targets.py` asserts a non-worktree
   `init` output has no `git_worktree` key, and therefore no `setup`.)
 
 ## Spec Tasks
 
-- [ ] Add the new requirement and scenarios under
+- [x] Add the new requirement and scenarios under
   `openspec/changes/add-worktree-setup-hook/specs/review-sessions/spec.md`
   describing automatic setup, `--no-setup` opt-out, missing-script no-op, and
   warn-and-continue on failure.
