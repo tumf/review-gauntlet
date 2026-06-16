@@ -511,6 +511,10 @@ The README Design section SHALL reflect the current implemented capabilities: in
 
 `review-gauntlet init` without explicit target flags SHALL choose a deterministic default target. If a usable latest checkpoint exists, the default target SHALL be the diff from that checkpoint's `review_base_commit` to `HEAD`. If no latest checkpoint exists, the default target SHALL include all eligible repository files. If a latest checkpoint exists but cannot safely be used, `init` SHALL fail explicitly instead of silently falling back. This is a breaking change from the previous bare-`init` worktree default; callers that require worktree review SHALL pass `--worktree` explicitly.
 
+`review-gauntlet init` SHALL create an active review session and review cells, but SHALL NOT start review execution or create a review run. Its output SHALL distinguish the active session lifecycle from the absent review-run lifecycle and SHALL point developers to the command that starts review execution.
+
+<!-- Expected canonical result after archive: the canonical review-sessions spec will make explicit that init creates an active session without creating a review run, and that init output must expose the next review command. -->
+
 #### Scenario: Init defaults to latest checkpoint diff when available
 
 **Given**: `.review-gauntlet/checkpoints/latest/status.json` exists
@@ -529,6 +533,25 @@ The README Design section SHALL reflect the current implemented capabilities: in
 **Then**: the initialized session target is equivalent to `--all`
 **And**: review cells are built from all eligible repository files
 
+#### Scenario: Init creates an active session without starting a run
+
+**Given**: a repository with eligible review files
+**When**: the developer runs `review-gauntlet init --format json`
+**Then**: `.review-gauntlet/active-session.json` records the new active session ID
+**And**: the session ledger contains the initialized review cells
+**And**: no review run row is created for the session
+**And**: stdout includes `session_state: active`, `run_count: 0`, and a lifecycle field showing that no run has started
+**And**: stdout identifies `review-gauntlet review` as the next command for starting review execution
+
+#### Scenario: Review creates the first run after init
+
+**Given**: a repository where `review-gauntlet init --format json` has created an active session
+**And**: the session has pending review cells
+**When**: the developer runs `review-gauntlet review --format json` with a configured adapter or fixture
+**Then**: the first review run is created
+**And**: the command output reports a non-null `run_id`
+**And**: subsequent status output reports `run_count` greater than or equal to `1`
+
 #### Scenario: Init rejects invalid latest checkpoint instead of falling back
 
 **Given**: `.review-gauntlet/checkpoints/latest/status.json` exists
@@ -543,18 +566,6 @@ The README Design section SHALL reflect the current implemented capabilities: in
 **When**: the developer runs `review-gauntlet init --all`, `review-gauntlet init --worktree`, `review-gauntlet init --from main --to HEAD`, or `review-gauntlet init --commit <commit>`
 **Then**: the explicit target mode is used
 **And**: the latest checkpoint does not override that explicit target selection
-
-#### Scenario: Checkpoint files are the only tracked review-gauntlet state
-
-**Given**: repository ignore rules for `.review-gauntlet` state
-**When**: finalize writes checkpoint files under `.review-gauntlet/checkpoints/latest/`
-**Then**: those checkpoint files are eligible for Git tracking
-**And**: `.review-gauntlet/ledger.sqlite` remains ignored
-**And**: `.review-gauntlet/active-session.json` remains ignored
-**And**: `.review-gauntlet/runs/` remains ignored
-**And**: `.review-gauntlet/rules.lock` remains ignored
-**And**: `.review-gauntlet/archive/` remains ignored
-**And**: checkpoint history directories other than `latest/` remain ignored
 
 ### Requirement: Ready command SHALL emit the next skill-directed prompt
 
