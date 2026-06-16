@@ -1388,8 +1388,9 @@ def _ready_prompt(store: SessionStore, root: Path) -> str | None:
         effective_cell_counts, finding_counts, store, session_id, root, allow_non_review_dirty=False
     )
     review_cells = _ready_review_cells(store, session_id, root)
+    review_cells_by_state = _ready_review_cells_by_state(review_cells)
     findings = _ready_findings(store, session_id)
-    if effective_cell_counts.get(CellState.PENDING.value, 0):
+    if review_cells_by_state.get(CellState.PENDING.value, ()):
         return _review_cell_ready_prompt(
             reason="pending_review_cell",
             review_cells=review_cells,
@@ -1401,7 +1402,7 @@ def _ready_prompt(store: SessionStore, root: Path) -> str | None:
         target_findings = findings_by_actionable_state.get(state.value, ())
         if target_findings:
             return _finding_ready_prompt(state, review_cells, target_findings)
-    if effective_cell_counts.get(CellState.STALE.value, 0):
+    if review_cells_by_state.get(CellState.STALE.value, ()):
         return _review_cell_ready_prompt(
             reason="stale_review_cell",
             review_cells=review_cells,
@@ -1428,6 +1429,20 @@ def _review_cell_ready_prompt(
         review_cells=tuple(cell for cell in review_cells if cell.file_path == target_file),
         findings=tuple(finding for finding in findings if finding.file_path == target_file),
     )
+
+
+def _ready_review_cells_by_state(
+    review_cells: tuple[_ReadyReviewCell, ...],
+) -> dict[str, tuple[_ReadyReviewCell, ...]]:
+    buckets: dict[str, list[_ReadyReviewCell]] = {
+        CellState.PENDING.value: [],
+        CellState.STALE.value: [],
+    }
+    for cell in review_cells:
+        bucket = buckets.get(cell.state)
+        if bucket is not None:
+            bucket.append(cell)
+    return {state: tuple(bucket) for state, bucket in buckets.items()}
 
 
 def _finding_ready_prompt(

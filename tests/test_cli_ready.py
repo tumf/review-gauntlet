@@ -189,6 +189,66 @@ def test_ready_skips_empty_finding_bucket_without_traceback(
     assert result == {"prompt": None}
 
 
+@pytest.mark.parametrize("aggregate_state", (CellState.PENDING, CellState.STALE))
+def test_ready_skips_empty_review_cell_bucket_without_traceback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    aggregate_state: CellState,
+) -> None:
+    _init_session(tmp_path, capsys)
+    _set_all_cells(tmp_path, CellState.REVIEWED)
+
+    def drifted_coverage(_store: object, _session_id: str, _root: Path) -> dict[str, int]:
+        return {aggregate_state.value: 1}
+
+    def fail_if_empty_review_cell_prompt_is_requested(
+        *,
+        reason: str,
+        review_cells: tuple[Any, ...],
+        findings: tuple[Any, ...],
+        state: CellState,
+    ) -> str:
+        raise AssertionError(
+            "empty materialized review-cell bucket must not request a prompt: "
+            f"reason={reason} state={state.value} review_cells={review_cells} findings={findings}"
+        )
+
+    monkeypatch.setattr(cli, "_effective_current_target_coverage", drifted_coverage)
+    monkeypatch.setattr(
+        cli,
+        "_review_cell_ready_prompt",
+        fail_if_empty_review_cell_prompt_is_requested,
+    )
+
+    result = _ready_json_exits(tmp_path, capsys, expected_code=1)
+
+    assert result == {"prompt": None}
+
+
+@pytest.mark.parametrize("aggregate_state", (CellState.PENDING, CellState.STALE))
+def test_ready_falls_through_from_empty_review_cell_bucket_to_next_finding(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    aggregate_state: CellState,
+) -> None:
+    _init_session(tmp_path, capsys)
+    _set_all_cells(tmp_path, CellState.REVIEWED)
+    _insert_finding(tmp_path, FindingState.UNTRIAGED, 1)
+
+    def drifted_coverage(_store: object, _session_id: str, _root: Path) -> dict[str, int]:
+        return {aggregate_state.value: 1}
+
+    monkeypatch.setattr(cli, "_effective_current_target_coverage", drifted_coverage)
+
+    prompt = _ready_prompt(tmp_path, capsys)
+
+    _assert_skill_directed_short_prompt(prompt, "untriaged findings need triage")
+    assert "pending review cells need coverage" not in prompt
+    assert "stale review cells need refreshed coverage" not in prompt
+
+
 def test_ready_priority_order_is_deterministic(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -227,6 +287,9 @@ def test_ready_priority_order_is_deterministic(
             "delete from findings where state = ?",
             (FindingState.FIXED_PENDING_VERIFICATION.value,),
         )
+
+    _set_all_cells(tmp_path, CellState.STALE)
+    assert "stale review cells need refreshed coverage" in _ready_prompt(tmp_path, capsys)
 
     _mark_finalize_ready(tmp_path)
     finalize_prompt = _ready_json(tmp_path, capsys)["prompt"]
