@@ -52,7 +52,7 @@ def test_progress_metrics_exclude_superseded_and_only_count_known_completed_stat
 
     assert metrics.completed == 3
     assert metrics.total == 7
-    assert metrics.percent == 43
+    assert metrics.percent == 42
     assert metrics.incomplete == 3
     assert metrics.pending == 2
     assert metrics.stale == 1

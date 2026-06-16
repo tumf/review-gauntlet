@@ -20,6 +20,24 @@ class GitCommandError(RuntimeError):
 
 
 @dataclass(frozen=True)
+class WorktreeSetupResult:
+    ran: bool
+    script_path: str
+    skipped_reason: str | None = None
+    returncode: int | None = None
+    warning: str | None = None
+
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "ran": self.ran,
+            "script_path": self.script_path,
+            "skipped_reason": self.skipped_reason,
+            "returncode": self.returncode,
+            "warning": self.warning,
+        }
+
+
+@dataclass(frozen=True)
 class GitWorktreeMetadata:
     enabled: bool
     base_branch: str
@@ -83,6 +101,56 @@ def create_session_worktree(root: Path, session_id: str) -> GitWorktreeMetadata:
         base_commit=base_commit,
         session_branch=session_branch,
         worktree_path=worktree_path.as_posix(),
+    )
+
+
+def run_worktree_setup(
+    worktree_root: Path, *, enabled: bool, timeout_seconds: float
+) -> WorktreeSetupResult:
+    script_path = worktree_root / ".wt" / "setup"
+    script_path_text = script_path.as_posix()
+    if not enabled:
+        return WorktreeSetupResult(
+            ran=False,
+            script_path=script_path_text,
+            skipped_reason="disabled",
+        )
+    if not script_path.is_file():
+        return WorktreeSetupResult(
+            ran=False,
+            script_path=script_path_text,
+            skipped_reason="missing",
+        )
+    try:
+        completed = subprocess.run(
+            [str(script_path)],
+            cwd=worktree_root,
+            text=True,
+            capture_output=True,
+            timeout=timeout_seconds,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return WorktreeSetupResult(
+            ran=True,
+            script_path=script_path_text,
+            warning=f"worktree setup timed out after {timeout_seconds:g} seconds: {script_path}",
+        )
+    except OSError as exc:
+        return WorktreeSetupResult(
+            ran=True,
+            script_path=script_path_text,
+            warning=f"worktree setup could not be executed: {exc}",
+        )
+    warning = None
+    if completed.returncode != 0:
+        detail = completed.stderr.strip() or completed.stdout.strip() or "no output"
+        warning = f"worktree setup exited with status {completed.returncode}: {detail}"
+    return WorktreeSetupResult(
+        ran=True,
+        script_path=script_path_text,
+        returncode=completed.returncode,
+        warning=warning,
     )
 
 
