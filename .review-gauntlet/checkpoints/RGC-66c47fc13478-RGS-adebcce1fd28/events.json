@@ -1,0 +1,96 @@
+{
+  "checkpoint_id": "RGC-66c47fc13478-RGS-adebcce1fd28",
+  "events": [
+    {
+      "checkpoint_id": "RGC-66c47fc13478-RGS-adebcce1fd28",
+      "created_at": "2026-06-16 14:16:32",
+      "event_id": 1077,
+      "finding_id": "RGF-0562",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "args.limit uses _positive_int type (>=1), so 0 is impossible. Speculative about hypothetical future type changes.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-66c47fc13478-RGS-adebcce1fd28",
+      "created_at": "2026-06-16 14:16:33",
+      "event_id": 1078,
+      "finding_id": "RGF-0563",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Design suggestion to move SQL into SessionStore. SQL is properly parameterized, no data-validation bug.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-66c47fc13478-RGS-adebcce1fd28",
+      "created_at": "2026-06-16 14:16:34",
+      "event_id": 1079,
+      "finding_id": "RGF-0566",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Duplicate of RGF-0563. Refactoring suggestion, not a test-evidence concern.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-66c47fc13478-RGS-adebcce1fd28",
+      "created_at": "2026-06-16 14:16:35",
+      "event_id": 1080,
+      "finding_id": "RGF-0564",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "cell_start at submission time is consistent and predictable. Enhancement suggestion, not a bug.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-66c47fc13478-RGS-adebcce1fd28",
+      "created_at": "2026-06-16 14:16:36",
+      "event_id": 1081,
+      "finding_id": "RGF-0567",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Working pattern for TUI state communication. Design preference, not a correctness issue.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-66c47fc13478-RGS-adebcce1fd28",
+      "created_at": "2026-06-16 14:16:37",
+      "event_id": 1082,
+      "finding_id": "RGF-0570",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Duplicate of RGF-0567. Same _tui_rendered design concern.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-66c47fc13478-RGS-adebcce1fd28",
+      "created_at": "2026-06-16 14:16:38",
+      "event_id": 1083,
+      "finding_id": "RGF-0569",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Without timestamps, no approach preserves true temporal order. Round-robin interleaving is a valid design choice.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-66c47fc13478-RGS-adebcce1fd28",
+      "created_at": "2026-06-16 14:16:39",
+      "event_id": 1084,
+      "finding_id": "RGF-0565",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "SQLite is in-process with negligible overhead for N+1. Optimization suggestion, not a bug.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-66c47fc13478-RGS-adebcce1fd28",
+      "created_at": "2026-06-16 14:16:40",
+      "event_id": 1085,
+      "finding_id": "RGF-0568",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Duplicate of RGF-0565. Same N+1 SQLite concern.",
+      "to_state": "false_positive"
+    }
+  ],
+  "schema_version": 1
+}

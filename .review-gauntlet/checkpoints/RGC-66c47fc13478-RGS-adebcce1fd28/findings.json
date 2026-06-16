@@ -1,0 +1,195 @@
+{
+  "checkpoint_id": "RGC-66c47fc13478-RGS-adebcce1fd28",
+  "findings": [
+    {
+      "checkpoint_id": "RGC-66c47fc13478-RGS-adebcce1fd28",
+      "content": "The `args.limit or 10` fallback uses truthiness instead of an explicit `None` check. If `_positive_int` were ever relaxed to allow `0` (e.g., changed to `_non_negative_int`), `0 or 10` would silently produce `10`. Using `args.limit if args.limit is not None else 10` is more precise and future-proof.",
+      "finding_id": "RGF-0562",
+      "fingerprint": "4c6406fb09df70693b01d7cef0ef52e12ca33a4a23cd217416f9b954c2e80a6a",
+      "latest_occurrence": {
+        "cell_id": "RGC-6cefdd41be393570",
+        "end_line": 788,
+        "finding_id": "RGF-0562",
+        "imprecise": 0,
+        "occurrence_id": 562,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 213,
+        "start_line": 788
+      },
+      "metadata": "{\"fingerprint\":\"4c6406fb09df70693b01d7cef0ef52e12ca33a4a23cd217416f9b954c2e80a6a\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"data-validation\",\"content\":\"The `args.limit or 10` fallback uses truthiness instead of an explicit `None` check. If `_positive_int` were ever relaxed to allow `0` (e.g., changed to `_non_negative_int`), `0 or 10` would silently produce `10`. Using `args.limit if args.limit is not None else 10` is more precise and future-proof.\",\"suggestion_code\":\"                limit=None if bool(args.all_findings) else (args.limit if args.limit is not None else 10),\",\"existing_code\":\"                limit=None if bool(args.all_findings) else int(args.limit or 10),\",\"start_line\":788,\"end_line\":788,\"thinking\":\"args.limit is typed with _positive_int (>= 1) and defaults to None, so `or 10` works today. But the pattern is fragile: if the type validator changes to allow 0, the fallback silently masks it. An explicit None check communicates intent and is robust against such changes.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-adebcce1fd28",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-66c47fc13478-RGS-adebcce1fd28",
+      "content": "`_finding_states` constructs a raw SQL query with a dynamic IN clause and calls `store.connect()` directly, bypassing the `SessionStore` abstraction. While the query is properly parameterized (no injection risk), this couples CLI logic to the database schema. If the `findings` table or column names change, this breaks without any type-system or interface guardrail. Consider adding a `get_finding_states(session_id, finding_ids)` method to `SessionStore`.",
+      "finding_id": "RGF-0563",
+      "fingerprint": "4d0d86ab15ae999bcf238dc1be4a923f666eca9be73e716df9693c125518406a",
+      "latest_occurrence": {
+        "cell_id": "RGC-6cefdd41be393570",
+        "end_line": 1163,
+        "finding_id": "RGF-0563",
+        "imprecise": 0,
+        "occurrence_id": 563,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 213,
+        "start_line": 1151
+      },
+      "metadata": "{\"fingerprint\":\"4d0d86ab15ae999bcf238dc1be4a923f666eca9be73e716df9693c125518406a\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"data-validation\",\"content\":\"`_finding_states` constructs a raw SQL query with a dynamic IN clause and calls `store.connect()` directly, bypassing the `SessionStore` abstraction. While the query is properly parameterized (no injection risk), this couples CLI logic to the database schema. If the `findings` table or column names change, this breaks without any type-system or interface guardrail. Consider adding a `get_finding_states(session_id, finding_ids)` method to `SessionStore`.\",\"suggestion_code\":\"\",\"existing_code\":\"def _finding_states(\\n    store: SessionStore, session_id: str, finding_ids: set[str]\\n) -> dict[str, FindingState]:\\n    if not finding_ids:\\n        return {}\\n    placeholders = \\\",\\\".join(\\\"?\\\" for _ in finding_ids)\\n    query = (\\n        \\\"select finding_id, state from findings \\\"\\n        f\\\"where session_id = ? and finding_id in ({placeholders})\\\"\\n    )\\n    with store.connect() as conn:\\n        rows = conn.execute(query, (session_id, *sorted(finding_ids))).fetchall()\\n    return {str(row[\\\"finding_id\\\"]): FindingState(str(row[\\\"state\\\"])) for row in rows}\",\"start_line\":1151,\"end_line\":1163,\"thinking\":\"This is a maintainability concern rather than a runtime bug. The raw SQL is correctly parameterized so there is no injection vulnerability. However, it accesses store internals directly. Similar raw SQL patterns appear for _ready_findings and _expired_terminal_decision_count, so consolidating store access would improve maintainability.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-adebcce1fd28",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-66c47fc13478-RGS-adebcce1fd28",
+      "content": "All `cell_start` events are emitted in the submission loop before any cell actually begins executing. This makes progress reporting misleading \u2014 every cell is reported as 'started' immediately, rather than when it is picked up by the thread pool. Move `cell_start` into the submitted callable or emit it from the future callback.",
+      "finding_id": "RGF-0564",
+      "fingerprint": "bc27a42dda1b341f4f91b1cbda31055f4afc495d74275d7f33bae73cb05fb3b9",
+      "latest_occurrence": {
+        "cell_id": "RGC-7d47131d23a5f0ce",
+        "end_line": 1244,
+        "finding_id": "RGF-0564",
+        "imprecise": 0,
+        "occurrence_id": 564,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 213,
+        "start_line": 1242
+      },
+      "metadata": "{\"fingerprint\":\"bc27a42dda1b341f4f91b1cbda31055f4afc495d74275d7f33bae73cb05fb3b9\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"test-evidence\",\"content\":\"All `cell_start` events are emitted in the submission loop before any cell actually begins executing. This makes progress reporting misleading \u2014 every cell is reported as 'started' immediately, rather than when it is picked up by the thread pool. Move `cell_start` into the submitted callable or emit it from the future callback.\",\"suggestion_code\":\"        for cell in cells:\\n            def _run(c: ReviewCell = cell) -> ReviewAdapterResult:\\n                progress.cell_start(c)\\n                return adapter.review(c)\\n            futures[executor.submit(_run)] = cell\",\"existing_code\":\"        for cell in cells:\\n            progress.cell_start(cell)\\n            futures[executor.submit(adapter.review, cell)] = cell\",\"start_line\":1242,\"end_line\":1244,\"thinking\":\"cell_start is called for every cell in the for-loop before as_completed processes any results. With high concurrency and many cells, a human or agent consumer sees all cells 'started' at once, defeating the purpose of per-cell progress tracking.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-adebcce1fd28",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-66c47fc13478-RGS-adebcce1fd28",
+      "content": "N+1 query: for each finding matching the session, an additional query fetches its latest event metadata. With many waived/accepted-risk findings this becomes expensive. Consider joining findings and finding_events in a single query.",
+      "finding_id": "RGF-0565",
+      "fingerprint": "c14ec851fa638402af14eaab5f53f4f49070852e47acefab7861b9515fac67a1",
+      "latest_occurrence": {
+        "cell_id": "RGC-7d47131d23a5f0ce",
+        "end_line": 2438,
+        "finding_id": "RGF-0565",
+        "imprecise": 0,
+        "occurrence_id": 565,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 213,
+        "start_line": 2411
+      },
+      "metadata": "{\"fingerprint\":\"c14ec851fa638402af14eaab5f53f4f49070852e47acefab7861b9515fac67a1\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"test-evidence\",\"content\":\"N+1 query: for each finding matching the session, an additional query fetches its latest event metadata. With many waived/accepted-risk findings this becomes expensive. Consider joining findings and finding_events in a single query.\",\"suggestion_code\":\"        rows = conn.execute(\\n            \\\"\\\"\\\"\\n            select f.finding_id, fe.metadata\\n            from findings f\\n            join finding_events fe\\n              on fe.finding_id = f.finding_id\\n             and fe.to_state = f.state\\n             and fe.event_id = (\\n               select max(fe2.event_id)\\n               from finding_events fe2\\n               where fe2.finding_id = f.finding_id and fe2.to_state = f.state\\n             )\\n            where f.session_id = ? and f.state in ('waived', 'accepted_risk')\\n            \\\"\\\"\\\",\\n            (session_id,),\\n        ).fetchall()\\n        expired = sum(\\n            1 for row in rows\\n            if row[\\\"metadata\\\"] is not None and _is_expired(str(row[\\\"metadata\\\"]), today)\\n        )\",\"existing_code\":\"        expired = 0\\n        for row in rows:\\n            event = conn.execute(\\n                \\\"\\\"\\\"\\n                select metadata from finding_events\\n                where finding_id = ? and to_state = ?\\n                order by event_id desc\\n                limit 1\\n                \\\"\\\"\\\",\\n                (row[\\\"finding_id\\\"], row[\\\"state\\\"]),\\n            ).fetchone()\",\"start_line\":2411,\"end_line\":2438,\"thinking\":\"This is a classic N+1 query pattern. Each iteration of the for-loop issues a separate SQL query to fetch the latest finding event. A single joined query achieves the same result with one round-trip.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-adebcce1fd28",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-66c47fc13478-RGS-adebcce1fd28",
+      "content": "The `_finding_states` function constructs SQL and calls `store.connect()` directly, bypassing the SessionStore API. Other similar lookups (e.g. in `_ready_findings`, `_findings`) do the same. This makes the CLI layer coupled to the database schema. Consider moving this query into a SessionStore method.",
+      "finding_id": "RGF-0566",
+      "fingerprint": "bd6271a7d1ae9b6112ff83809c2d8379a64f34dbaca581349693c42545971f85",
+      "latest_occurrence": {
+        "cell_id": "RGC-7d47131d23a5f0ce",
+        "end_line": 1163,
+        "finding_id": "RGF-0566",
+        "imprecise": 0,
+        "occurrence_id": 566,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 213,
+        "start_line": 1156
+      },
+      "metadata": "{\"fingerprint\":\"bd6271a7d1ae9b6112ff83809c2d8379a64f34dbaca581349693c42545971f85\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"test-evidence\",\"content\":\"The `_finding_states` function constructs SQL and calls `store.connect()` directly, bypassing the SessionStore API. Other similar lookups (e.g. in `_ready_findings`, `_findings`) do the same. This makes the CLI layer coupled to the database schema. Consider moving this query into a SessionStore method.\",\"suggestion_code\":\"\",\"existing_code\":\"    placeholders = \\\",\\\".join(\\\"?\\\" for _ in finding_ids)\\n    query = (\\n        \\\"select finding_id, state from findings \\\"\\n        f\\\"where session_id = ? and finding_id in ({placeholders})\\\"\\n    )\\n    with store.connect() as conn:\\n        rows = conn.execute(query, (session_id, *sorted(finding_ids))).fetchall()\\n    return {str(row[\\\"finding_id\\\"]): FindingState(str(row[\\\"state\\\"])) for row in rows}\",\"start_line\":1156,\"end_line\":1163,\"thinking\":\"Multiple functions in cli.py reach through store.connect() to run raw SQL against the findings and finding_events tables. This couples the CLI to the database schema, making schema migrations require changes in both session_store.py and cli.py. The SQL itself is safe (parameterized), but the abstraction leak is a maintainability concern.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-adebcce1fd28",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-66c47fc13478-RGS-adebcce1fd28",
+      "content": "Mutating the argparse Namespace with an undeclared private attribute (`_tui_rendered`) to communicate state between `_cmd_run` and its caller is fragile. If the attribute name changes or a new code path forgets to check it, the text output is silently emitted or suppressed. Consider returning a richer result type or a named tuple that carries both the result dict and a `tui_rendered` flag.",
+      "finding_id": "RGF-0567",
+      "fingerprint": "4162fd4213818b0b120f6cbcdf6b18baadb76aa89f67ec585635f52b7359263c",
+      "latest_occurrence": {
+        "cell_id": "RGC-7d47131d23a5f0ce",
+        "end_line": 1759,
+        "finding_id": "RGF-0567",
+        "imprecise": 0,
+        "occurrence_id": 567,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 213,
+        "start_line": 1759
+      },
+      "metadata": "{\"fingerprint\":\"4162fd4213818b0b120f6cbcdf6b18baadb76aa89f67ec585635f52b7359263c\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"test-evidence\",\"content\":\"Mutating the argparse Namespace with an undeclared private attribute (`_tui_rendered`) to communicate state between `_cmd_run` and its caller is fragile. If the attribute name changes or a new code path forgets to check it, the text output is silently emitted or suppressed. Consider returning a richer result type or a named tuple that carries both the result dict and a `tui_rendered` flag.\",\"suggestion_code\":\"\",\"existing_code\":\"                args._tui_rendered = True\",\"start_line\":1759,\"end_line\":1759,\"thinking\":\"Using a side-channel on the argparse namespace to communicate whether TUI output was rendered is brittle \u2014 it's easy to miss in future refactors and isn't type-checked.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-adebcce1fd28",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-66c47fc13478-RGS-adebcce1fd28",
+      "content": "N+1 query pattern: `_expired_terminal_decision_count` executes one additional SQL query per finding row returned by the initial query. For sessions with many waived/accepted-risk findings, this linearly scales database round-trips. This can be collapsed into a single query with a JOIN between `findings` and `finding_events`.",
+      "finding_id": "RGF-0568",
+      "fingerprint": "fe43b58c0305b45310e55e62a843e38af2a9d9b82a919158f2bc0c106d391d38",
+      "latest_occurrence": {
+        "cell_id": "RGC-98d51e4d6441e1d7",
+        "end_line": 2438,
+        "finding_id": "RGF-0568",
+        "imprecise": 0,
+        "occurrence_id": 568,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 213,
+        "start_line": 2411
+      },
+      "metadata": "{\"fingerprint\":\"fe43b58c0305b45310e55e62a843e38af2a9d9b82a919158f2bc0c106d391d38\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"cli-contract\",\"content\":\"N+1 query pattern: `_expired_terminal_decision_count` executes one additional SQL query per finding row returned by the initial query. For sessions with many waived/accepted-risk findings, this linearly scales database round-trips. This can be collapsed into a single query with a JOIN between `findings` and `finding_events`.\",\"suggestion_code\":\"        events = conn.execute(\\n            \\\"\\\"\\\"\\n            select fe.finding_id, fe.metadata\\n            from finding_events fe\\n            join (\\n              select finding_id, to_state, max(event_id) as event_id\\n              from finding_events\\n              where finding_id in (select finding_id from findings where session_id = ? and state in ('waived', 'accepted_risk'))\\n              group by finding_id, to_state\\n            ) latest\\n              on latest.finding_id = fe.finding_id\\n             and latest.event_id = fe.event_id\\n            join findings f\\n              on f.finding_id = fe.finding_id\\n             and fe.to_state = f.state\\n            where f.session_id = ?\\n            \\\"\\\"\\\",\\n            (session_id, session_id),\\n        ).fetchall()\\n        expired = sum(\\n            1 for event in events\\n            if event[\\\"metadata\\\"] is not None and _is_expired(str(event[\\\"metadata\\\"]), today)\\n        )\",\"existing_code\":\"        for row in rows:\\n            event = conn.execute(\\n                \\\"\\\"\\\"\\n                select metadata from finding_events\\n                where finding_id = ? and to_state = ?\\n                order by event_id desc\\n                limit 1\\n                \\\"\\\"\\\",\\n                (row[\\\"finding_id\\\"], row[\\\"state\\\"]),\\n            ).fetchone()\",\"start_line\":2411,\"end_line\":2438,\"thinking\":\"The current implementation fetches all waived/accepted_risk findings, then issues one query per row to get the latest event metadata. With N findings this is N+1 queries. A single JOIN query would retrieve the same data in one round-trip. While SQLite is local and fast, this is a correctness-adjacent maintainability issue that becomes a real performance problem if the store is ever moved to a networked database or the finding count grows.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "cli-contract",
+      "session_id": "RGS-adebcce1fd28",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-66c47fc13478-RGS-adebcce1fd28",
+      "content": "The round-robin interleaving of stdout and stderr lines in `_agent_output_tail` does not reflect the actual temporal order of output. When an agent writes 5 lines to stdout then 3 to stderr, the tail shows them alternating (stdout[0], stderr[0], stdout[1], stderr[1], ...) rather than in emission order. Since this tail is displayed to users and persisted in activity.jsonl, it can make debugging agent failures misleading.",
+      "finding_id": "RGF-0569",
+      "fingerprint": "1350097f4124a66dae0e6e6d7c802232a1847b94d7ae79d2134438ae3edffc55",
+      "latest_occurrence": {
+        "cell_id": "RGC-98d51e4d6441e1d7",
+        "end_line": 1992,
+        "finding_id": "RGF-0569",
+        "imprecise": 0,
+        "occurrence_id": 569,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 213,
+        "start_line": 1978
+      },
+      "metadata": "{\"fingerprint\":\"1350097f4124a66dae0e6e6d7c802232a1847b94d7ae79d2134438ae3edffc55\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"cli-contract\",\"content\":\"The round-robin interleaving of stdout and stderr lines in `_agent_output_tail` does not reflect the actual temporal order of output. When an agent writes 5 lines to stdout then 3 to stderr, the tail shows them alternating (stdout[0], stderr[0], stdout[1], stderr[1], ...) rather than in emission order. Since this tail is displayed to users and persisted in activity.jsonl, it can make debugging agent failures misleading.\",\"suggestion_code\":\"    entries: list[AgentOutputEntry] = [\\n        AgentOutputEntry(\\\"stdout\\\", line) for line in stdout_lines\\n    ] + [\\n        AgentOutputEntry(\\\"stderr\\\", line) for line in stderr_lines\\n    ]\\n    return tuple(entries[-limit:])\",\"existing_code\":\"    i = j = 0\\n    while i < len(stdout_lines) or j < len(stderr_lines):\\n        if i < len(stdout_lines):\\n            entries.append(AgentOutputEntry(\\\"stdout\\\", stdout_lines[i]))\\n            i += 1\\n        if j < len(stderr_lines):\\n            entries.append(AgentOutputEntry(\\\"stderr\\\", stderr_lines[j]))\\n            j += 1\\n    return tuple(entries[-limit:])\",\"start_line\":1978,\"end_line\":1992,\"thinking\":\"Without timestamps on individual lines, there's no way to reconstruct true temporal order. But interleaving creates a false impression of concurrency. Appending all stdout then all stderr is at least honest about the lack of ordering information, and groups related output together for readability. Alternatively, if real ordering matters, lines should be timestamped during capture in read_stream().\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "cli-contract",
+      "session_id": "RGS-adebcce1fd28",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-66c47fc13478-RGS-adebcce1fd28",
+      "content": "Mutating the argparse Namespace with a private attribute (`args._tui_rendered = True`) couples TUI rendering state to the argument parser in a fragile way. If `_validated_run_result` or any intermediate code accesses `args` from a different scope, or if argparse internals change, this breaks silently. Consider returning a result wrapper or flag from `_cmd_run` instead.",
+      "finding_id": "RGF-0570",
+      "fingerprint": "f5bada946ba5530b7528269df6fe9f06cf64371e3401810349836dcd7416b576",
+      "latest_occurrence": {
+        "cell_id": "RGC-98d51e4d6441e1d7",
+        "end_line": 1759,
+        "finding_id": "RGF-0570",
+        "imprecise": 0,
+        "occurrence_id": 570,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 213,
+        "start_line": 1759
+      },
+      "metadata": "{\"fingerprint\":\"f5bada946ba5530b7528269df6fe9f06cf64371e3401810349836dcd7416b576\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"cli-contract\",\"content\":\"Mutating the argparse Namespace with a private attribute (`args._tui_rendered = True`) couples TUI rendering state to the argument parser in a fragile way. If `_validated_run_result` or any intermediate code accesses `args` from a different scope, or if argparse internals change, this breaks silently. Consider returning a result wrapper or flag from `_cmd_run` instead.\",\"suggestion_code\":\"\",\"existing_code\":\"                args._tui_rendered = True\",\"start_line\":1759,\"end_line\":1759,\"thinking\":\"The _tui_rendered flag is set inside _cmd_run and read in _run_session_command (line 777). Argparse Namespace is a bag of attributes so this technically works, but it's a hidden side-channel. A cleaner approach would be returning a tuple (result, tui_rendered) from _cmd_run, or wrapping the result in a dataclass that carries the flag.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "cli-contract",
+      "session_id": "RGS-adebcce1fd28",
+      "state": "false_positive"
+    }
+  ],
+  "schema_version": 1
+}
