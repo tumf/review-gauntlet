@@ -153,7 +153,7 @@ def test_mark_rejects_until_for_non_terminal_states(
     assert _finding_event_count(tmp_path) == before
 
 
-def test_finalize_treats_malformed_terminal_metadata_as_blocker(
+def test_finalize_does_not_block_on_malformed_terminal_metadata(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _init_with_finding(tmp_path, capsys)
@@ -166,12 +166,10 @@ def test_finalize_treats_malformed_terminal_metadata_as_blocker(
             ("not-json", finding_id, "accepted_risk"),
         )
 
-    with pytest.raises(SystemExit) as excinfo:
-        main(["finalize", str(tmp_path), "--format", "json"])
+    main(["finalize", str(tmp_path), "--format", "json"])
 
     data = json.loads(capsys.readouterr().out)
-    assert excinfo.value.code == 1
-    assert "waived or accepted-risk findings have expired" in data["finalize_blockers"]
+    assert data["can_finalize"] is True
 
 
 def _init_with_finding(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
