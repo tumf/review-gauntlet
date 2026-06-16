@@ -770,12 +770,13 @@ def _run_session_command(args: argparse.Namespace, root: Path) -> None:
             raise SystemExit(1)
     elif args.command == "run":
         try:
-            result = _cmd_run(args, root, store)
+            raw_result: object = _cmd_run(args, root, store)
         except KeyboardInterrupt:
-            result = _interrupted_run_result(store)
+            raw_result = _interrupted_run_result(store)
+        result = _validated_run_result(raw_result)
         if not bool(getattr(args, "_tui_rendered", False)):
             _emit_run(result, args.format)
-        if not result["completed"]:
+        if not bool(result["completed"]):
             raise SystemExit(1)
     elif args.command == "findings":
         _emit(
@@ -1388,9 +1389,11 @@ def _ready_prompt(store: SessionStore, root: Path) -> str | None:
             findings=findings,
             state=CellState.PENDING,
         )
+    findings_by_actionable_state = _ready_findings_by_actionable_state(findings)
     for state in _ACTIONABLE_FINDING_STATES:
-        if finding_counts.get(state.value, 0):
-            return _finding_ready_prompt(state, review_cells, findings)
+        target_findings = findings_by_actionable_state.get(state.value, ())
+        if target_findings:
+            return _finding_ready_prompt(state, review_cells, target_findings)
     if effective_cell_counts.get(CellState.STALE.value, 0):
         return _review_cell_ready_prompt(
             reason="stale_review_cell",
@@ -1433,6 +1436,19 @@ def _finding_ready_prompt(
         review_cells=tuple(cell for cell in review_cells if cell.file_path == target_file),
         findings=tuple(finding for finding in findings if finding.file_path == target_file),
     )
+
+
+def _ready_findings_by_actionable_state(
+    findings: tuple[_ReadyFinding, ...],
+) -> dict[str, tuple[_ReadyFinding, ...]]:
+    buckets: dict[str, list[_ReadyFinding]] = {
+        state.value: [] for state in _ACTIONABLE_FINDING_STATES
+    }
+    for finding in findings:
+        bucket = buckets.get(finding.state)
+        if bucket is not None:
+            bucket.append(finding)
+    return {state: tuple(bucket) for state, bucket in buckets.items()}
 
 
 def _first_file_path_from_cells(cells: tuple[_ReadyReviewCell, ...]) -> str:
@@ -1683,6 +1699,21 @@ def _interrupted_run_result(store: SessionStore) -> dict[str, object]:
         "session_id": session_id,
         "error": RUN_INTERRUPTED_ERROR,
     }
+
+
+def _validated_run_result(result: object) -> dict[str, object]:
+    if not isinstance(result, dict):
+        raise RuntimeError(
+            "run command did not return a result dictionary: "
+            f"result_type={result.__class__.__name__}"
+        )
+    missing = {key for key in ("completed", "reason", "steps", "step_count") if key not in result}
+    if missing:
+        raise RuntimeError(
+            "run command returned an incomplete result dictionary: "
+            f"missing={', '.join(sorted(missing))}"
+        )
+    return cast(dict[str, object], result)
 
 
 def _cmd_run(args: argparse.Namespace, root: Path, store: SessionStore) -> dict[str, object]:
