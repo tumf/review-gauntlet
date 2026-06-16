@@ -355,6 +355,32 @@ def test_view_state_fields_and_terminal_state_classes() -> None:
     assert "FINALIZED" in view.status_summary
 
 
+def test_finalized_snapshot_without_session_state_marks_checkpoint_done() -> None:
+    snapshot = RunSnapshot(
+        session_id=None,
+        coverage={},
+        findings={},
+        next_ready_prompt=None,
+        step=1,
+        agent_status="finalized",
+        command_argv=("agent",),
+        elapsed_seconds=0,
+        session_state=None,
+    )
+
+    view = dashboard_state(snapshot, ())
+    checkpoint_gate = view.gates[5]
+    rendered = compact_dashboard_text(snapshot)
+
+    assert view.status_summary == "FINALIZED"
+    assert view.state_class == "panel-finalized"
+    assert checkpoint_gate.title == "Finalize checkpoint"
+    assert checkpoint_gate.state == "done"
+    assert checkpoint_gate.detail == "complete"
+    assert "FINALIZED · gate 6/6 · Finalize checkpoint" in rendered
+    assert "✓ Finalize checkpoint      done    complete" in rendered
+
+
 @pytest.mark.parametrize(
     ("status", "word", "css_class"),
     [
