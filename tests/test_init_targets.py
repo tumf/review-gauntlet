@@ -453,7 +453,8 @@ def test_default_init_rejects_unresolvable_checkpoint_base(
         main(["init", str(tmp_path), "--format", "json"])
 
     assert excinfo.value.code == 64
-    assert "does not resolve" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert "hex commit SHA" in err or "does not resolve" in err
 
 
 def test_default_init_rejects_mutable_checkpoint_base(
@@ -466,7 +467,8 @@ def test_default_init_rejects_mutable_checkpoint_base(
         main(["init", str(tmp_path), "--format", "json"])
 
     assert excinfo.value.code == 64
-    assert "resolved commit SHA" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert "commit SHA" in err
 
 
 def test_default_init_ignores_unsafe_latest_checkpoint_pointer(

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 from contextlib import suppress
@@ -190,6 +191,8 @@ def _validate_latest_checkpoint(root: Path, checkpoint: dict[str, Any]) -> None:
     base = checkpoint["review_base_commit"]
     if not isinstance(base, str):
         raise ValueError("latest checkpoint review_base_commit must be a string")
+    if not re.fullmatch(r"[0-9a-f]{40,64}", base):
+        raise ValueError("latest checkpoint review_base_commit must be a hex commit SHA")
     try:
         resolved_base = _git(root, "rev-parse", "--verify", f"{base}^{{commit}}")
     except subprocess.CalledProcessError as exc:
@@ -341,7 +344,7 @@ def write_latest_checkpoint(
     except Exception:
         if tmp_dir.exists():
             shutil.rmtree(tmp_dir)
-        if checkpoint_dir.exists() and backup_dir.exists():
+        if checkpoint_dir.exists():
             shutil.rmtree(checkpoint_dir)
         if backup_dir.exists():
             backup_dir.rename(checkpoint_dir)
@@ -413,11 +416,14 @@ def _checkpoint_events(
     for row in rows:
         item = dict(row)
         item["checkpoint_id"] = checkpoint_id
-        metadata = str(item.pop("metadata"))
-        try:
-            item["metadata"] = json.loads(metadata)
-        except json.JSONDecodeError:
-            item["metadata_raw"] = metadata
+        raw_metadata = item.pop("metadata")
+        if raw_metadata is None:
+            item["metadata"] = None
+        else:
+            try:
+                item["metadata"] = json.loads(str(raw_metadata))
+            except json.JSONDecodeError:
+                item["metadata_raw"] = str(raw_metadata)
         events.append(item)
     return events
 
