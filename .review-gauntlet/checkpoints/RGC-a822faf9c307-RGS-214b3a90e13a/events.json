@@ -1,0 +1,236 @@
+{
+  "checkpoint_id": "RGC-a822faf9c307-RGS-214b3a90e13a",
+  "events": [
+    {
+      "checkpoint_id": "RGC-a822faf9c307-RGS-214b3a90e13a",
+      "created_at": "2026-06-16 15:50:05",
+      "event_id": 1106,
+      "finding_id": "RGF-0597",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Help text correctly shows effective default of 10; argparse default=None is intentional for --all-findings logic",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-a822faf9c307-RGS-214b3a90e13a",
+      "created_at": "2026-06-16 15:50:05",
+      "event_id": 1107,
+      "finding_id": "RGF-0588",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "CLI args are naturally bounded by OS limits; theoretical risk only",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-a822faf9c307-RGS-214b3a90e13a",
+      "created_at": "2026-06-16 15:50:05",
+      "event_id": 1108,
+      "finding_id": "RGF-0592",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Accessing parser._actions is a standard argparse completion pattern; non-critical code",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-a822faf9c307-RGS-214b3a90e13a",
+      "created_at": "2026-06-16 15:50:05",
+      "event_id": 1109,
+      "finding_id": "RGF-0589",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "TOCTOU on local CLI file validation is not a practical risk",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-a822faf9c307-RGS-214b3a90e13a",
+      "created_at": "2026-06-16 15:50:05",
+      "event_id": 1110,
+      "finding_id": "RGF-0593",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Architectural observation, not a bug; CLI-layer SQL access is intentional",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-a822faf9c307-RGS-214b3a90e13a",
+      "created_at": "2026-06-16 15:50:06",
+      "event_id": 1111,
+      "finding_id": "RGF-0590",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Finding IDs bounded by session scope; will not hit SQLite 999 param limit in practice",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-a822faf9c307-RGS-214b3a90e13a",
+      "created_at": "2026-06-16 15:50:09",
+      "event_id": 1112,
+      "finding_id": "RGF-0596",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Finally block ensures executor.shutdown is always called; no resource leak",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-a822faf9c307-RGS-214b3a90e13a",
+      "created_at": "2026-06-16 15:50:09",
+      "event_id": 1113,
+      "finding_id": "RGF-0598",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "args._tui_rendered is a known code smell but not a bug; internal coupling only",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-a822faf9c307-RGS-214b3a90e13a",
+      "created_at": "2026-06-16 15:50:09",
+      "event_id": 1114,
+      "finding_id": "RGF-0594",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Same as RGF-0598; undeclared namespace attr is code smell, not a correctness issue",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-a822faf9c307-RGS-214b3a90e13a",
+      "created_at": "2026-06-16 15:50:09",
+      "event_id": 1115,
+      "finding_id": "RGF-0587",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "finding_id from CLI is naturally bounded by shell argument limits",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-a822faf9c307-RGS-214b3a90e13a",
+      "created_at": "2026-06-16 15:50:09",
+      "event_id": 1116,
+      "finding_id": "RGF-0591",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Direct SQL in finalize is intentional; encapsulation concern, not a bug",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-a822faf9c307-RGS-214b3a90e13a",
+      "created_at": "2026-06-16 15:50:10",
+      "event_id": 1117,
+      "finding_id": "RGF-0595",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "N+1 query on waived/accepted-risk findings; count is typically small, no perf issue",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-a822faf9c307-RGS-214b3a90e13a",
+      "created_at": "2026-06-16 15:54:31",
+      "event_id": 1118,
+      "finding_id": "RGF-0601",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Fixed: _mark_finalized now sets AgentLifecycle(status='finalized') to match _agent_status='finalized'. Tests updated.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-a822faf9c307-RGS-214b3a90e13a",
+      "created_at": "2026-06-16 15:54:33",
+      "event_id": 1119,
+      "finding_id": "RGF-0606",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "All _emit callers pass JSON-serializable primitives (str, int, bool, None). No non-serializable types are ever passed through payload.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-a822faf9c307-RGS-214b3a90e13a",
+      "created_at": "2026-06-16 15:54:36",
+      "event_id": 1120,
+      "finding_id": "RGF-0599",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "CPython GIL makes individual attribute reads atomic. Code defensively handles None at L258-260. Slightly inconsistent snapshot during brief window is a known benign tradeoff for display-only data.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-a822faf9c307-RGS-214b3a90e13a",
+      "created_at": "2026-06-16 15:54:37",
+      "event_id": 1121,
+      "finding_id": "RGF-0602",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Duplicate of RGF-0599. Same thread-safety concern. CPython GIL + defensive None handling is sufficient for display-only lifecycle data.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-a822faf9c307-RGS-214b3a90e13a",
+      "created_at": "2026-06-16 15:54:42",
+      "event_id": 1122,
+      "finding_id": "RGF-0600",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "By design: session disappearing after max_steps means adapter already finalized it. No session_id means no checkpoint to commit against. The asymmetry is intentional.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-a822faf9c307-RGS-214b3a90e13a",
+      "created_at": "2026-06-16 15:54:44",
+      "event_id": 1123,
+      "finding_id": "RGF-0603",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Adapters are contractually required to output pure JSON stdout (--audience agent). Non-JSON output is an adapter bug, not a run_controller issue. Silent fallback to empty tuple is correct behavior.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-a822faf9c307-RGS-214b3a90e13a",
+      "created_at": "2026-06-16 15:54:45",
+      "event_id": 1124,
+      "finding_id": "RGF-0605",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Duplicate of RGF-0603. Memory concern is theoretical - stdout comes from controlled subprocess with timeout. Adapter contract requires JSON output.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-a822faf9c307-RGS-214b3a90e13a",
+      "created_at": "2026-06-16 15:54:48",
+      "event_id": 1125,
+      "finding_id": "RGF-0604",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Defense in depth is sufficient: is_absolute() + '..' in parts + prefix check + .json suffix check. Backslash concern is Windows-specific; this tool targets Unix. Path is only used for git staging file list, not filesystem access.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-a822faf9c307-RGS-214b3a90e13a",
+      "created_at": "2026-06-16 15:55:51",
+      "event_id": 1126,
+      "finding_id": "RGF-0601",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-a822faf9c307-RGS-214b3a90e13a",
+      "created_at": "2026-06-16 15:56:04",
+      "event_id": 1127,
+      "finding_id": "RGF-0608",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "CPython GIL makes bool attribute writes atomic. Free-threading (PEP 703) is experimental and not a target. Boolean flag pattern is standard Python concurrency for stop signals.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-a822faf9c307-RGS-214b3a90e13a",
+      "created_at": "2026-06-16 15:56:06",
+      "event_id": 1128,
+      "finding_id": "RGF-0607",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "AgentOutputEntry uses frozen=True without slots=True. Adding slots would be a deliberate change requiring test updates. __dict__ is fine for non-slotted dataclasses and avoids the overhead of dataclasses.asdict deep-copy behavior.",
+      "to_state": "false_positive"
+    }
+  ],
+  "schema_version": 1
+}

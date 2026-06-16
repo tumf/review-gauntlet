@@ -1,0 +1,468 @@
+{
+  "checkpoint_id": "RGC-a822faf9c307-RGS-214b3a90e13a",
+  "findings": [
+    {
+      "checkpoint_id": "RGC-a822faf9c307-RGS-214b3a90e13a",
+      "content": "No format validation on `finding_id` before passing it to the store layer. If a user provides a malformed or excessively long finding_id (e.g., thousands of characters), it propagates unchecked into `store.mark_finding()` and ultimately into SQL queries. Consider validating the format (e.g., expected prefix, max length, allowed characters) at the CLI boundary to provide a clear early error.",
+      "finding_id": "RGF-0587",
+      "fingerprint": "8ef905a902194ec7856e230af6f30dc7b6b6f41c9d6afc560bec9370800e5978",
+      "latest_occurrence": {
+        "cell_id": "RGC-6cefdd41be393570",
+        "end_line": 2076,
+        "finding_id": "RGF-0587",
+        "imprecise": 0,
+        "occurrence_id": 587,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 218,
+        "start_line": 2076
+      },
+      "metadata": "{\"fingerprint\":\"8ef905a902194ec7856e230af6f30dc7b6b6f41c9d6afc560bec9370800e5978\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"data-validation\",\"content\":\"No format validation on `finding_id` before passing it to the store layer. If a user provides a malformed or excessively long finding_id (e.g., thousands of characters), it propagates unchecked into `store.mark_finding()` and ultimately into SQL queries. Consider validating the format (e.g., expected prefix, max length, allowed characters) at the CLI boundary to provide a clear early error.\",\"suggestion_code\":\"    finding_id = str(args.finding_id)\\n    if not finding_id or len(finding_id) > 256:\\n        raise ValueError(\\\"finding_id must be a non-empty string of at most 256 characters\\\")\\n    store.mark_finding(finding_id, mapping[args.state], args.reason, metadata)\",\"existing_code\":\"    store.mark_finding(args.finding_id, mapping[args.state], args.reason, metadata)\",\"start_line\":2076,\"end_line\":2076,\"thinking\":\"The `mark` subcommand accepts a positional `finding_id` argument with no format constraints beyond being a string. While argparse ensures it's present, it doesn't limit length or validate the format. An adversarially long or malformed finding_id could cause unexpected behavior in downstream SQLite operations.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-214b3a90e13a",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-a822faf9c307-RGS-214b3a90e13a",
+      "content": "The `--reason` and `--owner` arguments for the `mark` command accept unbounded strings with no length validation. An extremely long reason or owner value could bloat the database. Consider adding a reasonable length limit at the CLI boundary.",
+      "finding_id": "RGF-0588",
+      "fingerprint": "1ffc2cc8836f3a13ec5c7ccc7b03c958e5b443f7738617f23a0a88959c40dd9c",
+      "latest_occurrence": {
+        "cell_id": "RGC-6cefdd41be393570",
+        "end_line": 290,
+        "finding_id": "RGF-0588",
+        "imprecise": 0,
+        "occurrence_id": 588,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 218,
+        "start_line": 289
+      },
+      "metadata": "{\"fingerprint\":\"1ffc2cc8836f3a13ec5c7ccc7b03c958e5b443f7738617f23a0a88959c40dd9c\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"data-validation\",\"content\":\"The `--reason` and `--owner` arguments for the `mark` command accept unbounded strings with no length validation. An extremely long reason or owner value could bloat the database. Consider adding a reasonable length limit at the CLI boundary.\",\"suggestion_code\":\"    mark.add_argument(\\\"--reason\\\", default=\\\"\\\", help=\\\"Decision reason (default: none)\\\")\\n    mark.add_argument(\\\"--owner\\\", default=\\\"\\\", help=\\\"Decision owner (default: none)\\\")\\n    # Note: consider adding length validation in _cmd_mark for reason/owner fields\",\"existing_code\":\"    mark.add_argument(\\\"--reason\\\", default=\\\"\\\", help=\\\"Decision reason (default: none)\\\")\\n    mark.add_argument(\\\"--owner\\\", default=\\\"\\\", help=\\\"Decision owner (default: none)\\\")\",\"start_line\":289,\"end_line\":290,\"thinking\":\"While this is a CLI tool (not a network service), the mark command stores reason and owner strings directly in the database without any length bounds. A user could accidentally paste a very large string, silently bloating the SQLite database. Validation at the CLI boundary would catch this early.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-214b3a90e13a",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-a822faf9c307-RGS-214b3a90e13a",
+      "content": "TOCTOU (time-of-check-to-time-of-use) gap between the file size check and the file read for verdict validation. The file could grow between `path.stat().st_size` and `path.read_text()`. Consider reading the file first and then checking the byte length of the content, or using a size-limited read.",
+      "finding_id": "RGF-0589",
+      "fingerprint": "d9c62fd115ce7bb6f8cf17c210468e16149ee3f2c8c36c613c7bd1332cfc3143",
+      "latest_occurrence": {
+        "cell_id": "RGC-6cefdd41be393570",
+        "end_line": 684,
+        "finding_id": "RGF-0589",
+        "imprecise": 0,
+        "occurrence_id": 589,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 218,
+        "start_line": 681
+      },
+      "metadata": "{\"fingerprint\":\"d9c62fd115ce7bb6f8cf17c210468e16149ee3f2c8c36c613c7bd1332cfc3143\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"data-validation\",\"content\":\"TOCTOU (time-of-check-to-time-of-use) gap between the file size check and the file read for verdict validation. The file could grow between `path.stat().st_size` and `path.read_text()`. Consider reading the file first and then checking the byte length of the content, or using a size-limited read.\",\"suggestion_code\":\"    content = path.read_text(encoding=\\\"utf-8\\\")\\n    if len(content.encode(\\\"utf-8\\\")) > VERDICT_OUTPUT_SIZE_LIMIT_BYTES:\\n        fail(f\\\"verdict file exceeds size limit: {path}\\\")\\n    try:\\n        payload = validate_verdict_json(content)\",\"existing_code\":\"    if path.stat().st_size > VERDICT_OUTPUT_SIZE_LIMIT_BYTES:\\n        fail(f\\\"verdict file exceeds size limit: {path}\\\")\\n    try:\\n        payload = validate_verdict_json(path.read_text(encoding=\\\"utf-8\\\"))\",\"start_line\":681,\"end_line\":684,\"thinking\":\"The file size is checked via stat(), then the file is read. Between these two operations, the file content could change (e.g., another process appending to it). Reading the content first and then checking its size eliminates this race. In a CLI context the risk is low, but the fix is trivial and makes the check authoritative.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-214b3a90e13a",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-a822faf9c307-RGS-214b3a90e13a",
+      "content": "In `_finding_states`, when `finding_ids` is very large, the dynamically constructed `IN (?, ?, ...)` clause could produce an extremely large SQL statement. SQLite has a default limit of 999 bound parameters (SQLITE_MAX_VARIABLE_NUMBER). Passing more finding IDs than this limit would cause a runtime error. Consider batching the query or adding a guard.",
+      "finding_id": "RGF-0590",
+      "fingerprint": "49b17662dfce55938167790aede2b2358a34912b3bc4c1306567619efb888568",
+      "latest_occurrence": {
+        "cell_id": "RGC-6cefdd41be393570",
+        "end_line": 1163,
+        "finding_id": "RGF-0590",
+        "imprecise": 0,
+        "occurrence_id": 590,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 218,
+        "start_line": 1156
+      },
+      "metadata": "{\"fingerprint\":\"49b17662dfce55938167790aede2b2358a34912b3bc4c1306567619efb888568\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"data-validation\",\"content\":\"In `_finding_states`, when `finding_ids` is very large, the dynamically constructed `IN (?, ?, ...)` clause could produce an extremely large SQL statement. SQLite has a default limit of 999 bound parameters (SQLITE_MAX_VARIABLE_NUMBER). Passing more finding IDs than this limit would cause a runtime error. Consider batching the query or adding a guard.\",\"suggestion_code\":\"    results: dict[str, FindingState] = {}\\n    sorted_ids = sorted(finding_ids)\\n    batch_size = 900\\n    for i in range(0, len(sorted_ids), batch_size):\\n        batch = sorted_ids[i : i + batch_size]\\n        placeholders = \\\",\\\".join(\\\"?\\\" for _ in batch)\\n        query = (\\n            \\\"select finding_id, state from findings \\\"\\n            f\\\"where session_id = ? and finding_id in ({placeholders})\\\"\\n        )\\n        with store.connect() as conn:\\n            rows = conn.execute(query, (session_id, *batch)).fetchall()\\n        results.update(\\n            {str(row[\\\"finding_id\\\"]): FindingState(str(row[\\\"state\\\"])) for row in rows}\\n        )\\n    return results\",\"existing_code\":\"    placeholders = \\\",\\\".join(\\\"?\\\" for _ in finding_ids)\\n    query = (\\n        \\\"select finding_id, state from findings \\\"\\n        f\\\"where session_id = ? and finding_id in ({placeholders})\\\"\\n    )\\n    with store.connect() as conn:\\n        rows = conn.execute(query, (session_id, *sorted(finding_ids))).fetchall()\",\"start_line\":1156,\"end_line\":1163,\"thinking\":\"While the parameterized query is safe from SQL injection, the number of placeholders is unbounded. SQLite's default SQLITE_MAX_VARIABLE_NUMBER is 999 (or 32766 in newer versions). In a session with thousands of findings in fixed-pending-verification state, this could exceed the limit and crash. Batching prevents this edge case.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-214b3a90e13a",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-a822faf9c307-RGS-214b3a90e13a",
+      "content": "Direct SQL `UPDATE` on the `sessions` table bypasses `SessionStore` encapsulation. Every other session mutation goes through the store's API, but finalization writes raw SQL here. If `SessionStore` ever adds validation, hooks, or schema changes for session state transitions, this call will silently skip them.",
+      "finding_id": "RGF-0591",
+      "fingerprint": "64e5b6db0d94a572b2c26d426808332234f1c291ad618ca0d20d9e0bdc6cadb2",
+      "latest_occurrence": {
+        "cell_id": "RGC-7d47131d23a5f0ce",
+        "end_line": 2332,
+        "finding_id": "RGF-0591",
+        "imprecise": 0,
+        "occurrence_id": 591,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 218,
+        "start_line": 2328
+      },
+      "metadata": "{\"fingerprint\":\"64e5b6db0d94a572b2c26d426808332234f1c291ad618ca0d20d9e0bdc6cadb2\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"test-evidence\",\"content\":\"Direct SQL `UPDATE` on the `sessions` table bypasses `SessionStore` encapsulation. Every other session mutation goes through the store's API, but finalization writes raw SQL here. If `SessionStore` ever adds validation, hooks, or schema changes for session state transitions, this call will silently skip them.\",\"suggestion_code\":\"\",\"existing_code\":\"    with store.connect() as conn:\\n        conn.execute(\\n            \\\"update sessions set state = 'finalized' where session_id = ?\\\",\\n            (status[\\\"session_id\\\"],),\\n        )\",\"start_line\":2328,\"end_line\":2332,\"thinking\":\"The CLI layer reaches into the store's database connection to run a raw UPDATE. All other cell/finding/run mutations use dedicated SessionStore methods (mark_cell_reviewed, upsert_finding, create_run, etc.). This finalization state transition should similarly be a method on SessionStore for consistency and to avoid bypassing any future validation logic.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-214b3a90e13a",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-a822faf9c307-RGS-214b3a90e13a",
+      "content": "Accessing `parser._actions` (private attribute) makes the completion and subparser-discovery code fragile across Python versions. The argparse module does not guarantee the shape of `_actions`; it can change without notice in minor releases.",
+      "finding_id": "RGF-0592",
+      "fingerprint": "39ad2867986254442f8eeec0cda0e6af9d7666287e50494929b6db733ee7574e",
+      "latest_occurrence": {
+        "cell_id": "RGC-7d47131d23a5f0ce",
+        "end_line": 444,
+        "finding_id": "RGF-0592",
+        "imprecise": 0,
+        "occurrence_id": 592,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 218,
+        "start_line": 439
+      },
+      "metadata": "{\"fingerprint\":\"39ad2867986254442f8eeec0cda0e6af9d7666287e50494929b6db733ee7574e\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"test-evidence\",\"content\":\"Accessing `parser._actions` (private attribute) makes the completion and subparser-discovery code fragile across Python versions. The argparse module does not guarantee the shape of `_actions`; it can change without notice in minor releases.\",\"suggestion_code\":\"\",\"existing_code\":\"def _subparser_actions(parser: argparse.ArgumentParser) -> list[Any]:\\n    return [\\n        action\\n        for action in parser._actions\\n        if action.__class__.__name__ == \\\"_SubParsersAction\\\" and hasattr(action, \\\"choices\\\")\\n    ]\",\"start_line\":439,\"end_line\":444,\"thinking\":\"Also line 429 uses parser._actions on the sub-parser. argparse internals are not part of the public API and could break. The class name string comparison '_SubParsersAction' compounds the fragility.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-214b3a90e13a",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-a822faf9c307-RGS-214b3a90e13a",
+      "content": "The `_finding_states` function builds and executes a raw SQL query directly in the CLI module rather than going through `SessionStore`. This duplicates the data-access pattern and makes it easy for the query to drift from the schema. Consider adding a dedicated method on `SessionStore` for querying finding states by ID set.",
+      "finding_id": "RGF-0593",
+      "fingerprint": "6dc7d7620103d08abc2b5a3523b0d69e83c3bf44415d25903813a66c2d53a722",
+      "latest_occurrence": {
+        "cell_id": "RGC-7d47131d23a5f0ce",
+        "end_line": 1163,
+        "finding_id": "RGF-0593",
+        "imprecise": 0,
+        "occurrence_id": 593,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 218,
+        "start_line": 1151
+      },
+      "metadata": "{\"fingerprint\":\"6dc7d7620103d08abc2b5a3523b0d69e83c3bf44415d25903813a66c2d53a722\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"test-evidence\",\"content\":\"The `_finding_states` function builds and executes a raw SQL query directly in the CLI module rather than going through `SessionStore`. This duplicates the data-access pattern and makes it easy for the query to drift from the schema. Consider adding a dedicated method on `SessionStore` for querying finding states by ID set.\",\"suggestion_code\":\"\",\"existing_code\":\"def _finding_states(\\n    store: SessionStore, session_id: str, finding_ids: set[str]\\n) -> dict[str, FindingState]:\\n    if not finding_ids:\\n        return {}\\n    placeholders = \\\",\\\".join(\\\"?\\\" for _ in finding_ids)\\n    query = (\\n        \\\"select finding_id, state from findings \\\"\\n        f\\\"where session_id = ? and finding_id in ({placeholders})\\\"\\n    )\\n    with store.connect() as conn:\\n        rows = conn.execute(query, (session_id, *sorted(finding_ids))).fetchall()\\n    return {str(row[\\\"finding_id\\\"]): FindingState(str(row[\\\"state\\\"])) for row in rows}\",\"start_line\":1151,\"end_line\":1163,\"thinking\":\"Same encapsulation issue as the finalization SQL. The CLI should not be constructing SQL queries directly; it should delegate to SessionStore methods. This raw SQL also appears alongside other similar raw queries in _ready_findings (line 1578) and _findings (line 2127) and _status (line 2087).\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-214b3a90e13a",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-a822faf9c307-RGS-214b3a90e13a",
+      "content": "The `_cmd_run` function smuggles a result flag back to the caller by mutating the `argparse.Namespace` object with an undeclared attribute (`args._tui_rendered = True`). This is read back at line 777 via `getattr(args, \"_tui_rendered\", False)`. Using the args namespace as a mutable side-channel is fragile and makes the control flow hard to follow. Consider returning a richer result type or a tuple that includes the TUI-rendered flag.",
+      "finding_id": "RGF-0594",
+      "fingerprint": "a8dd57de2ae8a126d470f35dc204def7bfb37a6f702933d7244428a431a90f4b",
+      "latest_occurrence": {
+        "cell_id": "RGC-7d47131d23a5f0ce",
+        "end_line": 1760,
+        "finding_id": "RGF-0594",
+        "imprecise": 0,
+        "occurrence_id": 594,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 218,
+        "start_line": 1759
+      },
+      "metadata": "{\"fingerprint\":\"a8dd57de2ae8a126d470f35dc204def7bfb37a6f702933d7244428a431a90f4b\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"test-evidence\",\"content\":\"The `_cmd_run` function smuggles a result flag back to the caller by mutating the `argparse.Namespace` object with an undeclared attribute (`args._tui_rendered = True`). This is read back at line 777 via `getattr(args, \\\"_tui_rendered\\\", False)`. Using the args namespace as a mutable side-channel is fragile and makes the control flow hard to follow. Consider returning a richer result type or a tuple that includes the TUI-rendered flag.\",\"suggestion_code\":\"\",\"existing_code\":\"                args._tui_rendered = True\\n                return cast(dict[str, object], result)\",\"start_line\":1759,\"end_line\":1760,\"thinking\":\"The args object is intended to hold parsed CLI arguments, not runtime state. This pattern makes it non-obvious where _tui_rendered is set when reading the check at line 777. A named return value or small dataclass would be clearer.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-214b3a90e13a",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-a822faf9c307-RGS-214b3a90e13a",
+      "content": "N+1 query pattern: `_expired_terminal_decision_count` runs one query to fetch all waived/accepted-risk findings, then a separate query per finding to check expiry metadata. For sessions with many such findings, this becomes a significant performance bottleneck. This can be collapsed into a single query joining `findings` with `finding_events`.",
+      "finding_id": "RGF-0595",
+      "fingerprint": "2ae248c6e40210b2b94b302490c0b2164e7ed26303b5bb72cddd5be2fc5bd58d",
+      "latest_occurrence": {
+        "cell_id": "RGC-98d51e4d6441e1d7",
+        "end_line": 2439,
+        "finding_id": "RGF-0595",
+        "imprecise": 0,
+        "occurrence_id": 595,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 218,
+        "start_line": 2411
+      },
+      "metadata": "{\"fingerprint\":\"2ae248c6e40210b2b94b302490c0b2164e7ed26303b5bb72cddd5be2fc5bd58d\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"cli-contract\",\"content\":\"N+1 query pattern: `_expired_terminal_decision_count` runs one query to fetch all waived/accepted-risk findings, then a separate query per finding to check expiry metadata. For sessions with many such findings, this becomes a significant performance bottleneck. This can be collapsed into a single query joining `findings` with `finding_events`.\",\"suggestion_code\":\"    rows = conn.execute(\\n            \\\"\\\"\\\"\\n            select f.finding_id, f.state, (\\n              select fe.metadata from finding_events fe\\n              where fe.finding_id = f.finding_id and fe.to_state = f.state\\n              order by fe.event_id desc\\n              limit 1\\n            ) as metadata\\n            from findings f\\n            where f.session_id = ? and f.state in ('waived', 'accepted_risk')\\n            \\\"\\\"\\\",\\n            (session_id,),\\n        ).fetchall()\\n        expired = 0\\n        for row in rows:\\n            if (\\n                row[\\\"metadata\\\"] is not None\\n                and _is_expired(str(row[\\\"metadata\\\"]), today)\\n            ):\\n                expired += 1\",\"existing_code\":\"    rows = conn.execute(\\n            \\\"\\\"\\\"\\n            select finding_id, state\\n            from findings\\n            where session_id = ? and state in ('waived', 'accepted_risk')\\n            \\\"\\\"\\\",\\n            (session_id,),\\n        ).fetchall()\\n        expired = 0\\n        for row in rows:\\n            event = conn.execute(\\n                \\\"\\\"\\\"\\n                select metadata from finding_events\\n                where finding_id = ? and to_state = ?\\n                order by event_id desc\\n                limit 1\\n                \\\"\\\"\\\",\\n                (row[\\\"finding_id\\\"], row[\\\"state\\\"]),\\n            ).fetchone()\",\"start_line\":2411,\"end_line\":2439,\"thinking\":\"This N+1 query pattern can degrade as sessions accumulate waived/accepted-risk findings. A correlated subquery collapses it into a single round-trip while preserving the same semantics (latest event per finding).\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "cli-contract",
+      "session_id": "RGS-214b3a90e13a",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-a822faf9c307-RGS-214b3a90e13a",
+      "content": "The `ThreadPoolExecutor` is created without a context manager. While the `finally` block calls `executor.shutdown()`, an exception raised between executor construction (line 1238) and the `try` block entry (line 1241) would leak the executor and its threads. Using `with ThreadPoolExecutor(...) as executor:` is safer.",
+      "finding_id": "RGF-0596",
+      "fingerprint": "bff2850bf23981abbd503c391cbc4e3299c25f732389bb98911253680ec4aa86",
+      "latest_occurrence": {
+        "cell_id": "RGC-98d51e4d6441e1d7",
+        "end_line": 1269,
+        "finding_id": "RGF-0596",
+        "imprecise": 0,
+        "occurrence_id": 596,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 218,
+        "start_line": 1238
+      },
+      "metadata": "{\"fingerprint\":\"bff2850bf23981abbd503c391cbc4e3299c25f732389bb98911253680ec4aa86\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"cli-contract\",\"content\":\"The `ThreadPoolExecutor` is created without a context manager. While the `finally` block calls `executor.shutdown()`, an exception raised between executor construction (line 1238) and the `try` block entry (line 1241) would leak the executor and its threads. Using `with ThreadPoolExecutor(...) as executor:` is safer.\",\"suggestion_code\":\"    interrupted = False\\n    with ThreadPoolExecutor(max_workers=max_workers) as executor:\\n      futures: dict[Future[ReviewAdapterResult], ReviewCell] = {}\\n      try:\",\"existing_code\":\"    executor = ThreadPoolExecutor(max_workers=max_workers)\\n    futures: dict[Future[ReviewAdapterResult], ReviewCell] = {}\\n    interrupted = False\\n    try:\",\"start_line\":1238,\"end_line\":1269,\"thinking\":\"The window between creating the executor and entering the try block is small, but using a context manager is the idiomatic way to ensure cleanup and eliminates the manual shutdown() call in the finally block.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "cli-contract",
+      "session_id": "RGS-214b3a90e13a",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-a822faf9c307-RGS-214b3a90e13a",
+      "content": "The `--limit` argument's help text says `(default: 10)` but the argparse default is `None`. The effective default of 10 is applied later at line 788 via `int(args.limit or 10)`. This mismatch means `--all-findings` validation (line 523) compares against `None` while the user reads 'default: 10'. The argparse default should be 10 to match the documented behavior and simplify downstream logic.",
+      "finding_id": "RGF-0597",
+      "fingerprint": "f694efd67f9121f39cf27783597b89a9c6660669f7d30b9633b9781ea10e3376",
+      "latest_occurrence": {
+        "cell_id": "RGC-98d51e4d6441e1d7",
+        "end_line": 265,
+        "finding_id": "RGF-0597",
+        "imprecise": 0,
+        "occurrence_id": 597,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 218,
+        "start_line": 261
+      },
+      "metadata": "{\"fingerprint\":\"f694efd67f9121f39cf27783597b89a9c6660669f7d30b9633b9781ea10e3376\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"cli-contract\",\"content\":\"The `--limit` argument's help text says `(default: 10)` but the argparse default is `None`. The effective default of 10 is applied later at line 788 via `int(args.limit or 10)`. This mismatch means `--all-findings` validation (line 523) compares against `None` while the user reads 'default: 10'. The argparse default should be 10 to match the documented behavior and simplify downstream logic.\",\"suggestion_code\":\"    findings.add_argument(\\n        \\\"--limit\\\",\\n        type=_positive_int,\\n        default=10,\\n        help=\\\"Maximum findings to return (default: 10)\\\",\\n    )\",\"existing_code\":\"    findings.add_argument(\\n        \\\"--limit\\\",\\n        type=_positive_int,\\n        default=None,\\n        help=\\\"Maximum findings to return (default: 10)\\\",\\n    )\",\"start_line\":261,\"end_line\":265,\"thinking\":\"Setting the argparse default to 10 aligns the documented default with the actual default. The --all-findings validation at line 523 would still work correctly (args.limit would be 10 not None when user doesn't pass --limit), and the downstream code at line 788 could simplify to just `args.limit`. However, the current validation 'if args.all_findings and args.limit is not None' would need to change to detect user-explicit --limit (e.g., via argparse default sentinel), or the validation could be dropped since --all-findings already overrides limit at line 788.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "cli-contract",
+      "session_id": "RGS-214b3a90e13a",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-a822faf9c307-RGS-214b3a90e13a",
+      "content": "Mutating `args._tui_rendered = True` uses a private-style attribute on an `argparse.Namespace` to smuggle state between `_cmd_run` and `_run_session_command`. This couples two distant call sites through a hidden side-channel. A cleaner approach is to return a result tuple or a small dataclass that includes a `tui_rendered` flag.",
+      "finding_id": "RGF-0598",
+      "fingerprint": "26db5535e6f3018c5c0cf4f9e6efd7597690cef86ca6c9b3dc56fc4bfd9f85de",
+      "latest_occurrence": {
+        "cell_id": "RGC-98d51e4d6441e1d7",
+        "end_line": 1759,
+        "finding_id": "RGF-0598",
+        "imprecise": 0,
+        "occurrence_id": 598,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 218,
+        "start_line": 1759
+      },
+      "metadata": "{\"fingerprint\":\"26db5535e6f3018c5c0cf4f9e6efd7597690cef86ca6c9b3dc56fc4bfd9f85de\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"cli-contract\",\"content\":\"Mutating `args._tui_rendered = True` uses a private-style attribute on an `argparse.Namespace` to smuggle state between `_cmd_run` and `_run_session_command`. This couples two distant call sites through a hidden side-channel. A cleaner approach is to return a result tuple or a small dataclass that includes a `tui_rendered` flag.\",\"suggestion_code\":\"\",\"existing_code\":\"                args._tui_rendered = True\",\"start_line\":1759,\"end_line\":1759,\"thinking\":\"_cmd_run returns a dict result but the tui_rendered flag is communicated by mutating the args namespace passed by reference. This makes the control flow harder to follow and is fragile - any refactor that copies or reconstructs args would silently break the flag. Returning a richer result (e.g., a named tuple with result + tui_rendered) would make the data flow explicit.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "cli-contract",
+      "session_id": "RGS-214b3a90e13a",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-a822faf9c307-RGS-214b3a90e13a",
+      "content": "Thread-safety issue: `_current_agent_lifecycle` reads `self._agent_output_progress`, `self._agent_step_started_at`, and `self._agent_timeout_seconds` without synchronization, while `run()` mutates them from another thread. If `snapshot()` is called concurrently (e.g., from a TUI refresh), a torn read could produce an inconsistent `AgentLifecycle` \u2014 for instance, `_agent_step_started_at` could be `None` while `_agent_timeout_seconds` is set, leading to `timeout_remaining` being computed as `max(0.0, timeout - 0.0)` instead of reflecting the actual elapsed time.",
+      "finding_id": "RGF-0599",
+      "fingerprint": "c5d14fee62a5df488f730dd615fc93bd97b8a5bf99a075ab4bc0a01f3591ad03",
+      "latest_occurrence": {
+        "cell_id": "RGC-818ca3c0010eb49e",
+        "end_line": 273,
+        "finding_id": "RGF-0599",
+        "imprecise": 0,
+        "occurrence_id": 599,
+        "path": "src/review_gauntlet/run_controller.py",
+        "run_id": 219,
+        "start_line": 241
+      },
+      "metadata": "{\"fingerprint\":\"c5d14fee62a5df488f730dd615fc93bd97b8a5bf99a075ab4bc0a01f3591ad03\",\"path\":\"src/review_gauntlet/run_controller.py\",\"rule_id\":\"test-evidence\",\"content\":\"Thread-safety issue: `_current_agent_lifecycle` reads `self._agent_output_progress`, `self._agent_step_started_at`, and `self._agent_timeout_seconds` without synchronization, while `run()` mutates them from another thread. If `snapshot()` is called concurrently (e.g., from a TUI refresh), a torn read could produce an inconsistent `AgentLifecycle` \u2014 for instance, `_agent_step_started_at` could be `None` while `_agent_timeout_seconds` is set, leading to `timeout_remaining` being computed as `max(0.0, timeout - 0.0)` instead of reflecting the actual elapsed time.\",\"suggestion_code\":\"\",\"existing_code\":\"    def _current_agent_lifecycle(self) -> AgentLifecycle:\\n        if self._agent_status != \\\"running\\\":\\n            return self._agent_lifecycle\\n        now = datetime.now(UTC)\\n        last_output_age = self._agent_lifecycle.last_output_age_seconds\\n        output_tail = self._agent_lifecycle.output_tail\\n        output_progress = self._agent_output_progress\",\"start_line\":241,\"end_line\":273,\"thinking\":\"The `run()` method sets `_agent_step_started_at`, `_agent_timeout_seconds`, `_agent_output_progress`, and `_agent_lifecycle` in sequence without a lock. `_current_agent_lifecycle` (called from `snapshot()` which can be invoked from a TUI thread) reads these same fields without synchronization. On CPython the GIL makes individual attribute reads atomic, but multi-field consistency is not guaranteed \u2014 the reader can observe a partially-updated set of fields between two writer assignments. A threading.Lock or copying all relevant fields into a single frozen dataclass atomically would eliminate this window.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_controller.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-214b3a90e13a",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-a822faf9c307-RGS-214b3a90e13a",
+      "content": "Post-loop finalization at lines 453-463 marks the run as `completed` and emits a `finalized` event but skips the checkpoint commit that the normal finalization path (lines 424-442) performs. If the session disappears exactly when `max_steps` is exhausted, any pending checkpoint data is silently dropped. Consider whether `_commit_finalized_checkpoint` should also be called here, or at least log/emit an event noting the checkpoint was skipped.",
+      "finding_id": "RGF-0600",
+      "fingerprint": "2e85dc0dd9ec5fa8d64e0e6b04473bad218d80e201d2dca2a11580775dcf6557",
+      "latest_occurrence": {
+        "cell_id": "RGC-818ca3c0010eb49e",
+        "end_line": 463,
+        "finding_id": "RGF-0600",
+        "imprecise": 0,
+        "occurrence_id": 600,
+        "path": "src/review_gauntlet/run_controller.py",
+        "run_id": 219,
+        "start_line": 453
+      },
+      "metadata": "{\"fingerprint\":\"2e85dc0dd9ec5fa8d64e0e6b04473bad218d80e201d2dca2a11580775dcf6557\",\"path\":\"src/review_gauntlet/run_controller.py\",\"rule_id\":\"test-evidence\",\"content\":\"Post-loop finalization at lines 453-463 marks the run as `completed` and emits a `finalized` event but skips the checkpoint commit that the normal finalization path (lines 424-442) performs. If the session disappears exactly when `max_steps` is exhausted, any pending checkpoint data is silently dropped. Consider whether `_commit_finalized_checkpoint` should also be called here, or at least log/emit an event noting the checkpoint was skipped.\",\"suggestion_code\":\"\",\"existing_code\":\"        session_id = self._active_session_id_or_none()\\n        if session_id is None:\\n            self._mark_finalized()\\n            self._emit(\\\"finalized\\\", session_id=None)\\n            return _run_result(\\n                completed=True,\\n                steps=steps,\\n                reason=\\\"completed\\\",\\n                error=None,\\n                session_id=None,\\n            )\",\"start_line\":453,\"end_line\":463,\"thinking\":\"The in-loop finalization path (lines 424-442) commits the checkpoint before marking finalized. The post-loop path at lines 453-463 only fires when the session vanishes between the last step and the loop exit, which is a narrow window, but it silently skips the checkpoint commit. If the last agent step produced checkpoint data, it would be lost. This may be intentional (no session = nothing to commit against) but the asymmetry is worth documenting or handling explicitly.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_controller.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-214b3a90e13a",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-a822faf9c307-RGS-214b3a90e13a",
+      "content": "Status mismatch: `_mark_finalized` sets `self._agent_status = \"finalized\"` but `AgentLifecycle(status=\"completed\")`. Consumers of `RunSnapshot` see `agent_status=\"finalized\"` and `agent_lifecycle.status=\"completed\"` for the same state, which is confusing and error-prone for downstream code that compares these values.",
+      "finding_id": "RGF-0601",
+      "fingerprint": "93d18131fb4a6d7f7a1853528f9b09e1e753a812c137e6b404c46a74121b52c3",
+      "latest_occurrence": {
+        "cell_id": "RGC-e57d4d934b9b550e",
+        "end_line": 489,
+        "finding_id": "RGF-0601",
+        "imprecise": 0,
+        "occurrence_id": 601,
+        "path": "src/review_gauntlet/run_controller.py",
+        "run_id": 219,
+        "start_line": 487
+      },
+      "metadata": "{\"fingerprint\":\"93d18131fb4a6d7f7a1853528f9b09e1e753a812c137e6b404c46a74121b52c3\",\"path\":\"src/review_gauntlet/run_controller.py\",\"rule_id\":\"cli-contract\",\"content\":\"Status mismatch: `_mark_finalized` sets `self._agent_status = \\\"finalized\\\"` but `AgentLifecycle(status=\\\"completed\\\")`. Consumers of `RunSnapshot` see `agent_status=\\\"finalized\\\"` and `agent_lifecycle.status=\\\"completed\\\"` for the same state, which is confusing and error-prone for downstream code that compares these values.\",\"suggestion_code\":\"    def _mark_finalized(self) -> None:\\n        self._agent_status = \\\"finalized\\\"\\n        self._agent_lifecycle = AgentLifecycle(status=\\\"finalized\\\")\",\"existing_code\":\"    def _mark_finalized(self) -> None:\\n        self._agent_status = \\\"finalized\\\"\\n        self._agent_lifecycle = AgentLifecycle(status=\\\"completed\\\")\",\"start_line\":487,\"end_line\":489,\"thinking\":\"The _mark_finalized method uses two different status strings for what represents the same logical state. self._agent_status is set to 'finalized' while AgentLifecycle.status is set to 'completed'. This divergence can trip up any consumer that checks both fields expecting consistency \u2014 e.g., a TUI or API layer that maps lifecycle status to display strings.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_controller.py",
+      "rule_id": "cli-contract",
+      "session_id": "RGS-214b3a90e13a",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-a822faf9c307-RGS-214b3a90e13a",
+      "content": "In a multithreaded context (the TUI likely calls `snapshot()` from a different thread while `run()` mutates state), `_current_agent_lifecycle` reads several instance variables (`_agent_status`, `_agent_output_progress`, `_agent_step_started_at`, `_agent_timeout_seconds`) without synchronization. While CPython's GIL makes individual attribute reads atomic, you can still observe a torn state across multiple reads \u2014 e.g., `_agent_status` is still `\"running\"` but `_agent_step_started_at` has already been reset to `None`. Consider grouping these fields under a single lock or replacing them with a single atomic reference to an immutable snapshot.",
+      "finding_id": "RGF-0602",
+      "fingerprint": "2bf90b36f6221e4fb5b0f651029c840d406b01ab9bf38710f4d0a4faf5f55ce5",
+      "latest_occurrence": {
+        "cell_id": "RGC-e57d4d934b9b550e",
+        "end_line": 273,
+        "finding_id": "RGF-0602",
+        "imprecise": 0,
+        "occurrence_id": 602,
+        "path": "src/review_gauntlet/run_controller.py",
+        "run_id": 219,
+        "start_line": 241
+      },
+      "metadata": "{\"fingerprint\":\"2bf90b36f6221e4fb5b0f651029c840d406b01ab9bf38710f4d0a4faf5f55ce5\",\"path\":\"src/review_gauntlet/run_controller.py\",\"rule_id\":\"cli-contract\",\"content\":\"In a multithreaded context (the TUI likely calls `snapshot()` from a different thread while `run()` mutates state), `_current_agent_lifecycle` reads several instance variables (`_agent_status`, `_agent_output_progress`, `_agent_step_started_at`, `_agent_timeout_seconds`) without synchronization. While CPython's GIL makes individual attribute reads atomic, you can still observe a torn state across multiple reads \u2014 e.g., `_agent_status` is still `\\\"running\\\"` but `_agent_step_started_at` has already been reset to `None`. Consider grouping these fields under a single lock or replacing them with a single atomic reference to an immutable snapshot.\",\"suggestion_code\":\"\",\"existing_code\":\"\",\"start_line\":241,\"end_line\":273,\"thinking\":\"The run() method sets _agent_step_started_at to None at line 390 and _agent_status to 'idle' at line 408 in separate assignments. If snapshot() is called between those two assignments from another thread, _current_agent_lifecycle sees agent_status='running' (not yet updated) but _agent_step_started_at=None (already cleared). The code defensively handles None in the ternary at line 258-260, so this doesn't crash, but timeout_remaining will be calculated with elapsed=0.0 instead of the real elapsed time, producing a subtly wrong value. This is a latent correctness issue.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_controller.py",
+      "rule_id": "cli-contract",
+      "session_id": "RGS-214b3a90e13a",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-a822faf9c307-RGS-214b3a90e13a",
+      "content": "`checkpoint_generated_files_from_stdout` parses the entire stdout as JSON. If the command adapter emits any non-JSON text before or after the JSON payload (progress lines, warnings, etc.), parsing silently fails and returns an empty tuple, discarding valid generated-file metadata. Consider extracting only the last JSON object from stdout, or requiring a structured delimiter.",
+      "finding_id": "RGF-0603",
+      "fingerprint": "fc048d31c0a61912be928b4cdbd4af04e0e40b525d1c434cd37e21082230542a",
+      "latest_occurrence": {
+        "cell_id": "RGC-e57d4d934b9b550e",
+        "end_line": 608,
+        "finding_id": "RGF-0603",
+        "imprecise": 0,
+        "occurrence_id": 603,
+        "path": "src/review_gauntlet/run_controller.py",
+        "run_id": 219,
+        "start_line": 605
+      },
+      "metadata": "{\"fingerprint\":\"fc048d31c0a61912be928b4cdbd4af04e0e40b525d1c434cd37e21082230542a\",\"path\":\"src/review_gauntlet/run_controller.py\",\"rule_id\":\"cli-contract\",\"content\":\"`checkpoint_generated_files_from_stdout` parses the entire stdout as JSON. If the command adapter emits any non-JSON text before or after the JSON payload (progress lines, warnings, etc.), parsing silently fails and returns an empty tuple, discarding valid generated-file metadata. Consider extracting only the last JSON object from stdout, or requiring a structured delimiter.\",\"suggestion_code\":\"\",\"existing_code\":\"    try:\\n        payload = json.loads(stdout)\\n    except json.JSONDecodeError:\\n        return ()\",\"start_line\":605,\"end_line\":608,\"thinking\":\"This is a fragile parsing pattern. If any adapter writes a log line or warning to stdout before the JSON payload, json.loads fails on the entire string and the function silently returns no generated files. The checkpoint commit then proceeds without knowing which files were generated. This could cause generated checkpoint files to be missed in the commit.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_controller.py",
+      "rule_id": "cli-contract",
+      "session_id": "RGS-214b3a90e13a",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-a822faf9c307-RGS-214b3a90e13a",
+      "content": "Path traversal check is incomplete. `Path(item).parts` won't catch all `..` payloads \u2014 for example, a value like `\"foo/..\\\\bar\"` on Windows or symlink tricks can bypass the `\"..' in relative.parts\"` check. Additionally, `relative.as_posix()` is called without resolving symlinks, so a crafted path could still escape the checkpoint directory. Consider using `Path.resolve()` relative to a known root and then verifying containment with `relative_to()`, similar to the pattern used in `RunExecutionContext.from_active_session`.",
+      "finding_id": "RGF-0604",
+      "fingerprint": "42df8fbc221721ff1198ea0096a94fd56af9113998b2c747649f2782ac9d3ee3",
+      "latest_occurrence": {
+        "cell_id": "RGC-eaadb43273cd57a0",
+        "end_line": 635,
+        "finding_id": "RGF-0604",
+        "imprecise": 0,
+        "occurrence_id": 604,
+        "path": "src/review_gauntlet/run_controller.py",
+        "run_id": 219,
+        "start_line": 622
+      },
+      "metadata": "{\"fingerprint\":\"42df8fbc221721ff1198ea0096a94fd56af9113998b2c747649f2782ac9d3ee3\",\"path\":\"src/review_gauntlet/run_controller.py\",\"rule_id\":\"data-validation\",\"content\":\"Path traversal check is incomplete. `Path(item).parts` won't catch all `..` payloads \u2014 for example, a value like `\\\"foo/..\\\\\\\\bar\\\"` on Windows or symlink tricks can bypass the `\\\"..' in relative.parts\\\"` check. Additionally, `relative.as_posix()` is called without resolving symlinks, so a crafted path could still escape the checkpoint directory. Consider using `Path.resolve()` relative to a known root and then verifying containment with `relative_to()`, similar to the pattern used in `RunExecutionContext.from_active_session`.\",\"suggestion_code\":\"    for item in typed_files:\\n        if not isinstance(item, str):\\n            continue\\n        relative = Path(item)\\n        if relative.is_absolute():\\n            continue\\n        normalized = relative.as_posix()\\n        if not normalized.startswith(\\\".review-gauntlet/checkpoints/\\\"):\\n            continue\\n        if relative.suffix != \\\".json\\\":\\n            continue\\n        # Verify no traversal component escapes the prefix\\n        try:\\n            relative.resolve().relative_to(Path(\\\".\\\").resolve() / \\\".review-gauntlet\\\" / \\\"checkpoints\\\")\\n        except ValueError:\\n            continue\\n        if normalized not in seen:\\n            files.append(normalized)\\n            seen.add(normalized)\",\"existing_code\":\"    for item in typed_files:\\n        if not isinstance(item, str):\\n            continue\\n        relative = Path(item)\\n        if relative.is_absolute() or \\\"..\\\" in relative.parts:\\n            continue\\n        normalized = relative.as_posix()\\n        if not normalized.startswith(\\\".review-gauntlet/checkpoints/\\\"):\\n            continue\\n        if relative.suffix != \\\".json\\\":\\n            continue\\n        if normalized not in seen:\\n            files.append(normalized)\\n            seen.add(normalized)\",\"start_line\":622,\"end_line\":635,\"thinking\":\"The function parses untrusted JSON from agent stdout to extract file paths. The current '..' check via `parts` is a reasonable first pass but can be bypassed with OS-specific path separator tricks. Since this code determines which files are committed as checkpoint artifacts, a traversal could cause unintended files to be staged. The resolve+relative_to pattern is already used elsewhere in this file (line 143) and is more robust.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_controller.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-214b3a90e13a",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-a822faf9c307-RGS-214b3a90e13a",
+      "content": "`json.loads(stdout)` on the full stdout of an external command is a potential issue. If the command emits non-JSON preamble (log lines, progress bars) before the JSON payload, parsing silently fails and returns an empty tuple. More critically, a very large stdout string could cause excessive memory use during parsing. Consider extracting only the last JSON object from stdout, or imposing a size limit before parsing.",
+      "finding_id": "RGF-0605",
+      "fingerprint": "5b341832711da282ac467184ded669e3db9742eb98573f0e3af9c0002498ec9b",
+      "latest_occurrence": {
+        "cell_id": "RGC-eaadb43273cd57a0",
+        "end_line": 608,
+        "finding_id": "RGF-0605",
+        "imprecise": 0,
+        "occurrence_id": 605,
+        "path": "src/review_gauntlet/run_controller.py",
+        "run_id": 219,
+        "start_line": 605
+      },
+      "metadata": "{\"fingerprint\":\"5b341832711da282ac467184ded669e3db9742eb98573f0e3af9c0002498ec9b\",\"path\":\"src/review_gauntlet/run_controller.py\",\"rule_id\":\"data-validation\",\"content\":\"`json.loads(stdout)` on the full stdout of an external command is a potential issue. If the command emits non-JSON preamble (log lines, progress bars) before the JSON payload, parsing silently fails and returns an empty tuple. More critically, a very large stdout string could cause excessive memory use during parsing. Consider extracting only the last JSON object from stdout, or imposing a size limit before parsing.\",\"suggestion_code\":\"    stdout_stripped = stdout.strip()\\n    if not stdout_stripped or len(stdout_stripped) > 10 * 1024 * 1024:\\n        return ()\\n    try:\\n        payload = json.loads(stdout_stripped)\\n    except json.JSONDecodeError:\\n        return ()\",\"existing_code\":\"    try:\\n        payload = json.loads(stdout)\\n    except json.JSONDecodeError:\\n        return ()\",\"start_line\":605,\"end_line\":608,\"thinking\":\"The function parses raw stdout from an external command. There's no size guard and no stripping of whitespace. A malicious or buggy agent could produce a multi-gigabyte stdout that gets fully loaded into a Python dict. Adding a reasonable size cap and strip() is a simple defensive measure for data validation.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_controller.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-214b3a90e13a",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-a822faf9c307-RGS-214b3a90e13a",
+      "content": "The `_emit` method passes arbitrary `**payload` values to `RunEvent.create` without validating that all values are JSON-serializable. Since `RunEvent.model_dump()` merges payload into the result dict and events are likely serialized to JSON (e.g., for logging or persistence), non-serializable values (datetimes, Path objects, custom types) would cause a late `TypeError` at serialization time rather than at event creation. Consider validating or coercing payload values in `model_dump()`.",
+      "finding_id": "RGF-0606",
+      "fingerprint": "280cfdb59f7968c0b840e1373d4d5da112a8fe582f110f7fdb1543205f1f94a4",
+      "latest_occurrence": {
+        "cell_id": "RGC-eaadb43273cd57a0",
+        "end_line": 94,
+        "finding_id": "RGF-0606",
+        "imprecise": 0,
+        "occurrence_id": 606,
+        "path": "src/review_gauntlet/run_controller.py",
+        "run_id": 219,
+        "start_line": 90
+      },
+      "metadata": "{\"fingerprint\":\"280cfdb59f7968c0b840e1373d4d5da112a8fe582f110f7fdb1543205f1f94a4\",\"path\":\"src/review_gauntlet/run_controller.py\",\"rule_id\":\"data-validation\",\"content\":\"The `_emit` method passes arbitrary `**payload` values to `RunEvent.create` without validating that all values are JSON-serializable. Since `RunEvent.model_dump()` merges payload into the result dict and events are likely serialized to JSON (e.g., for logging or persistence), non-serializable values (datetimes, Path objects, custom types) would cause a late `TypeError` at serialization time rather than at event creation. Consider validating or coercing payload values in `model_dump()`.\",\"suggestion_code\":\"    def model_dump(self) -> dict[str, object]:\\n        result = {k: v for k, v in self.payload.items()}\\n        result[\\\"type\\\"] = self.type\\n        result[\\\"timestamp\\\"] = self.timestamp\\n        return result\",\"existing_code\":\"    def model_dump(self) -> dict[str, object]:\\n        result = dict(self.payload)\\n        result[\\\"type\\\"] = self.type\\n        result[\\\"timestamp\\\"] = self.timestamp\\n        return result\",\"start_line\":90,\"end_line\":94,\"thinking\":\"This is a data validation concern: the RunEvent payload is typed as dict[str, object] which accepts anything, but downstream consumers expect JSON-compatible data. The model_dump method does no coercion or validation. While changing model_dump's implementation to something more defensive would be ideal, the core issue is the lack of validation at event creation time. The suggested code is the same functionally but flagging the concern for awareness.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_controller.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-214b3a90e13a",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-a822faf9c307-RGS-214b3a90e13a",
+      "content": "Using `__dict__` on a frozen dataclass is fragile. If `AgentOutputEntry` ever adds `slots=True` (a common optimization for frozen dataclasses), `__dict__` will raise `AttributeError` at runtime with no static analysis warning. Use `dataclasses.asdict` for robust serialization.",
+      "finding_id": "RGF-0607",
+      "fingerprint": "63a90608e393c9412323f488e4d066e515b8581f393eb5791df888aa1c663d90",
+      "latest_occurrence": {
+        "cell_id": "RGC-e57d4d934b9b550e",
+        "end_line": 650,
+        "finding_id": "RGF-0607",
+        "imprecise": 0,
+        "occurrence_id": 607,
+        "path": "src/review_gauntlet/run_controller.py",
+        "run_id": 220,
+        "start_line": 650
+      },
+      "metadata": "{\"fingerprint\":\"63a90608e393c9412323f488e4d066e515b8581f393eb5791df888aa1c663d90\",\"path\":\"src/review_gauntlet/run_controller.py\",\"rule_id\":\"cli-contract\",\"content\":\"Using `__dict__` on a frozen dataclass is fragile. If `AgentOutputEntry` ever adds `slots=True` (a common optimization for frozen dataclasses), `__dict__` will raise `AttributeError` at runtime with no static analysis warning. Use `dataclasses.asdict` for robust serialization.\",\"suggestion_code\":\"\\\"output_tail\\\": [dataclasses.asdict(entry) for entry in result.output_tail],\",\"existing_code\":\"\\\"output_tail\\\": [entry.__dict__ for entry in result.output_tail],\",\"start_line\":650,\"end_line\":650,\"thinking\":\"dataclasses.asdict is the idiomatic way to serialize dataclass instances. It handles nested dataclasses, respects field definitions, and works regardless of whether __slots__ is enabled. The __dict__ approach bypasses the dataclass machinery entirely and will break if slots=True is added to the frozen dataclass.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_controller.py",
+      "rule_id": "cli-contract",
+      "session_id": "RGS-214b3a90e13a",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-a822faf9c307-RGS-214b3a90e13a",
+      "content": "`interrupt()` and `request_stop_after_current_step()` set boolean flags read by `run()` without synchronization. This works under CPython's GIL but is not formally thread-safe and would break on GIL-free Python (PEP 703 / Python 3.13+ free-threading). Consider using `threading.Event` for these cross-thread signals, which is already the pattern used in `AgentOutputProgress`.",
+      "finding_id": "RGF-0608",
+      "fingerprint": "93459ebceafa673ff736a269ec305ca317c31665834dc008f0147c16a1909f15",
+      "latest_occurrence": {
+        "cell_id": "RGC-e57d4d934b9b550e",
+        "end_line": 206,
+        "finding_id": "RGF-0608",
+        "imprecise": 0,
+        "occurrence_id": 608,
+        "path": "src/review_gauntlet/run_controller.py",
+        "run_id": 220,
+        "start_line": 200
+      },
+      "metadata": "{\"fingerprint\":\"93459ebceafa673ff736a269ec305ca317c31665834dc008f0147c16a1909f15\",\"path\":\"src/review_gauntlet/run_controller.py\",\"rule_id\":\"cli-contract\",\"content\":\"`interrupt()` and `request_stop_after_current_step()` set boolean flags read by `run()` without synchronization. This works under CPython's GIL but is not formally thread-safe and would break on GIL-free Python (PEP 703 / Python 3.13+ free-threading). Consider using `threading.Event` for these cross-thread signals, which is already the pattern used in `AgentOutputProgress`.\",\"suggestion_code\":\"    def request_stop_after_current_step(self) -> None:\\n        self._stop_after_current_step_event.set()\\n        self._emit(\\\"stop_requested\\\", mode=\\\"after_current_step\\\")\\n\\n    def interrupt(self) -> None:\\n        self._interrupted_event.set()\\n        self._emit(\\\"interrupt_requested\\\")\",\"existing_code\":\"    def request_stop_after_current_step(self) -> None:\\n        self._stop_after_current_step = True\\n        self._emit(\\\"stop_requested\\\", mode=\\\"after_current_step\\\")\\n\\n    def interrupt(self) -> None:\\n        self._interrupted = True\\n        self._emit(\\\"interrupt_requested\\\")\",\"start_line\":200,\"end_line\":206,\"thinking\":\"The run() method checks self._interrupted and self._stop_after_current_step from the main thread while interrupt()/request_stop_after_current_step() set them from signal handlers or other threads. Under CPython's GIL, boolean assignment is atomic, but with free-threading (PEP 703, available in Python 3.13+), this is a data race. threading.Event is the standard synchronization primitive for this pattern and is already imported.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_controller.py",
+      "rule_id": "cli-contract",
+      "session_id": "RGS-214b3a90e13a",
+      "state": "false_positive"
+    }
+  ],
+  "schema_version": 1
+}
