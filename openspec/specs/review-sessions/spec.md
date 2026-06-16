@@ -167,49 +167,65 @@ When the same finding is detected while it is `fixed_pending_verification`, the 
 
 `review-gauntlet finalize` SHALL close a complete active review session into deterministic latest-only checkpoint files that are suitable for Git diff review and safe as the next review base. Finalization SHALL only write checkpoint files when completion blockers are absent, when review-universe files are clean relative to `HEAD`, and when current `HEAD` can be resolved to a commit. The checkpoint SHALL be derived from the existing durable session ledger, SHALL include review coverage, findings, triage events, and review-base metadata, and SHALL NOT replace the ledger as the source of truth before successful finalization.
 
-Interactive `run` TUI presentation SHALL render a compact dashboard that is faithful to the target user-facing structure: a `Review Gauntlet` header, a `Finalize checklist` progress checklist, side-by-side `Agent` and `Session` summary panels where terminal width allows, an `Activity` timeline, and compact implemented controls. The TUI SHALL derive a human-facing dashboard view model from raw controller and session state before rendering. That view model SHALL include header fields, finalize checklist rows, agent summary fields, session summary fields, and normalized activity rows. TUI widgets SHALL render the view model rather than directly dumping raw prompt text, raw argv payloads, raw event payloads, raw full session IDs, raw finalize action names, or raw blocker lists.
+Dirty review-universe blockers SHALL identify that review-universe files are dirty relative to `HEAD` without including individual dirty file paths in `finalize_blockers`.
 
-The primary progress panel SHALL be titled `Finalize checklist` and SHALL render exactly these six ordered checklist rows: Review coverage, Triage findings, Fix confirmed findings, Verify fixes, Final checks, and Finalize checkpoint. Each row SHALL use only one of these TUI state labels: `running`, `done`, `next`, `later`, `blocked`, or `failed`. Internal states such as `pending`, `stale`, `untriaged`, `confirmed`, `reopened`, and `fixed_pending_verification` MAY appear in row details but SHALL NOT be used as primary row states. The TUI SHALL NOT render the old `Resolve finalize blockers` checklist row.
+When `review-gauntlet run` detects that an agent step successfully finalized the active session, the run workflow SHALL attempt a checkpoint-only git commit for the generated latest checkpoint artifacts before reporting final completion. The checkpoint commit SHALL stage only `.review-gauntlet/checkpoints/latest` and the concrete `status.json`, `findings.json`, `events.json`, and `summary.md` files under the generated checkpoint directory referenced by the current latest pointer. The run workflow SHALL NOT stage or commit product/source files, ledger files, run logs, unrelated review artifacts, stale checkpoint generations, or unrelated dirty worktree changes. If agent stdout does not contain a parseable complete generated-files list, the checkpoint commit helper SHALL derive the allowed generated checkpoint files from the current safe latest pointer. If checkpoint artifacts have no diff, the run workflow SHALL report a successful checkpoint-commit no-op. If unrelated dirty worktree state prevents a safe checkpoint-only commit, the run workflow SHALL surface a structured blocker instead of silently claiming full completion. Standalone `review-gauntlet finalize` and `finalize --merge` SHALL keep their existing commit and merge semantics.
 
-The TUI SHALL use known `next_required_action` values from session status as the authoritative source for selecting the current `Finalize checklist` row in the header, Session summary, and checklist presentation. The mapping SHALL be: `run_review` to Review coverage, `triage_findings` to Triage findings, `fix_confirmed_findings` to Fix confirmed findings, `run_verify_fixes` to Verify fixes, `resolve_finalize_blockers` to Final checks, `finalize` to Finalize checkpoint, and `cleanup_git_worktree` to Finalize checkpoint. The TUI SHALL keep actual coverage, finding, and blocker details visible even when `next_required_action` selects a later checklist row. If `next_required_action` is missing or unknown, the TUI SHALL fall back to deriving the current checklist row from coverage, finding counts, blockers, finalization state, and failure state.
+#### Scenario: Run finalization commits checkpoint artifacts when agent stdout is not JSON
 
-The TUI SHALL classify finalize blockers for display. Coverage blockers, including pending review cells and stale review cells, SHALL be represented by the Review coverage row. Finding blockers, including untriaged, reopened, confirmed, and fixed-pending-verification findings, SHALL be represented by the corresponding finding rows. Finalize-only blockers, including dirty worktree blockers, target digest drift, expired waived or accepted-risk findings, no completed review run, and unclassified finalization blockers, SHALL be represented by Final checks. While any earlier checklist row is incomplete and no known `next_required_action` selects Final checks, Final checks SHALL render as `later` with human wording such as `checked after review/findings` rather than displaying a generic finalize blocker count. Final checks SHALL render as `blocked` when `next_required_action` is `resolve_finalize_blockers` or when prior rows are complete and finalize-only blockers remain.
+**Given**: an active review session with complete reviewed coverage and all live findings closed
+**And**: the command adapter invoked by `review-gauntlet run` finalizes the session successfully
+**And**: the adapter stdout is not parseable JSON
+**And**: the latest pointer safely references the generated checkpoint directory
+**And**: generated latest checkpoint files differ from `HEAD`
+**And**: no unrelated dirty worktree files are present
+**When**: the developer runs `review-gauntlet run --format json`
+**Then**: the run workflow creates a git commit containing `.review-gauntlet/checkpoints/latest`
+**And**: the commit contains the latest checkpoint directory's `status.json`, `findings.json`, `events.json`, and `summary.md`
+**And**: the JSON result reports that checkpoint commit was attempted and created
+**And**: the JSON result includes the checkpoint commit SHA
 
-The TUI SHALL avoid user-facing internal action names such as `run_review`, `run_verify_fixes`, and `resolve_finalize_blockers`. It SHALL map those internal actions to human wording such as `waiting`, `ready to finalize`, `waits for coverage`, `checked after review/findings`, or the relevant checklist title.
+#### Scenario: Run checkpoint commit derives missing generated files from latest pointer
 
-<!-- Expected canonical result after archive: the canonical review-sessions spec will require the run TUI active Finalize checklist row to follow status.next_required_action for known actions while retaining six checklist rows, data-grounded row details, and fallback derivation for missing or unknown actions. -->
+**Given**: an active review session that finalizes during `review-gauntlet run`
+**And**: the adapter stdout omits some or all generated checkpoint artifact paths
+**And**: `.review-gauntlet/checkpoints/latest` is a normal file containing a path-safe checkpoint id
+**And**: the referenced checkpoint directory contains `status.json`, `findings.json`, `events.json`, and `summary.md`
+**When**: the run workflow reaches checkpoint commit handling
+**Then**: the checkpoint commit allowlist includes the pointer file and the four standard files under the referenced checkpoint directory
+**And**: the run workflow can commit those files without requiring agent-reported generated paths
 
-#### Scenario: Run TUI follows next_required_action for verify fixes
+#### Scenario: Run checkpoint commit does not trust unsafe latest pointers
 
-**Given**: an active session status includes `coverage.stale > 0`
-**And**: the same status includes fixed-pending-verification findings
-**And**: the same status includes `next_required_action: run_verify_fixes`
-**When**: the TUI renders the session snapshot
-**Then**: the header identifies `Verify fixes` as the current checklist row
-**And**: the Session summary identifies `Verify fixes` as the current checklist row
-**And**: the Finalize checklist marks `Verify fixes` as the active row
-**And**: the Review coverage row still shows stale or incomplete coverage detail
-**And**: the rendered dashboard does not expose `run_verify_fixes` as raw text
+**Given**: an active review session that finalizes during `review-gauntlet run`
+**And**: the adapter stdout omits generated checkpoint artifact paths
+**And**: `.review-gauntlet/checkpoints/latest` is missing, is a symlink, is a directory, references a nested path, references parent traversal, or references a checkpoint id that is not path-safe
+**When**: the run workflow reaches checkpoint commit handling
+**Then**: the unsafe latest pointer is not used to expand the checkpoint commit allowlist
+**And**: dirty generated files that are not explicitly safe remain visible as checkpoint commit blockers
 
-#### Scenario: Run TUI maps status actions to checklist rows
+#### Scenario: Run checkpoint commit keeps unrelated checkpoint generations blocked
 
-**Given**: an active session status contains a known `next_required_action`
-**When**: the TUI renders the session snapshot
-**Then**: `run_review` selects Review coverage
-**And**: `triage_findings` selects Triage findings
-**And**: `fix_confirmed_findings` selects Fix confirmed findings
-**And**: `run_verify_fixes` selects Verify fixes
-**And**: `resolve_finalize_blockers` selects Final checks
-**And**: `finalize` selects Finalize checkpoint
-**And**: `cleanup_git_worktree` selects Finalize checkpoint
-**And**: none of those internal action names are rendered as raw user-facing checklist labels
+**Given**: an active review session that finalizes during `review-gauntlet run`
+**And**: the latest pointer safely references the current generated checkpoint directory
+**And**: another checkpoint directory has dirty files that are not part of the latest generated checkpoint
+**When**: the run workflow reaches checkpoint commit handling
+**Then**: the run workflow does not stage or commit the unrelated checkpoint directory
+**And**: the run result surfaces a structured checkpoint commit blocker for the unrelated checkpoint files
 
-#### Scenario: Run TUI falls back for missing or unknown actions
+#### Scenario: Standalone finalize behavior remains unchanged
 
-**Given**: an active session status omits `next_required_action` or contains an unknown value
-**When**: the TUI renders the session snapshot
-**Then**: the current checklist row is derived from coverage, finding counts, blockers, finalization state, and failure state
-**And**: existing fallback behavior for incomplete coverage, findings, final checks, finalization, and failure states is preserved
+**Given**: an active review session eligible for finalization
+**When**: the developer runs `review-gauntlet finalize --format json`
+**Then**: the command writes latest checkpoint files according to existing finalize semantics
+**And**: the standalone finalize command does not create the run-only checkpoint commit
+
+#### Scenario: Merge finalization is not double-committed
+
+**Given**: an active Git-worktree-backed review session eligible for merge finalization
+**When**: the developer runs `review-gauntlet finalize --merge --format json`
+**Then**: the existing session-worktree commit and merge behavior remains authoritative
+**And**: the normal-run checkpoint commit path does not create an additional duplicate checkpoint commit
 
 ### Requirement: Finalize SHALL validate completion without running review work
 

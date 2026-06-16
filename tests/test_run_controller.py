@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import threading
 from datetime import UTC, datetime, timedelta, tzinfo
 from pathlib import Path
@@ -9,7 +10,7 @@ from typing import cast
 import pytest
 
 import review_gauntlet.run_controller as run_controller_module
-from review_gauntlet.checkpoint import CheckpointCommitResult
+from review_gauntlet.checkpoint import CheckpointCommitResult, write_latest_checkpoint
 from review_gauntlet.config import CommandAdapterConfig
 from review_gauntlet.review_cells import CellState, ReviewCell
 from review_gauntlet.run_controller import (
@@ -22,6 +23,35 @@ from review_gauntlet.run_controller import (
     command_display_label,
 )
 from review_gauntlet.session_store import SessionStore
+
+
+def _git(root: Path, *args: str) -> str:
+    return subprocess.run(
+        ["git", *args], cwd=root, check=True, capture_output=True, text=True
+    ).stdout.strip()
+
+
+def _init_repo(root: Path) -> None:
+    _git(root, "init")
+    _git(root, "config", "user.email", "test@example.com")
+    _git(root, "config", "user.name", "Test User")
+    (root / "README.md").write_text("# docs\n", encoding="utf-8")
+    (root / ".gitignore").write_text(
+        "\n".join(
+            (
+                ".review-gauntlet/*",
+                "!.review-gauntlet/checkpoints/",
+                ".review-gauntlet/checkpoints/*",
+                "!.review-gauntlet/checkpoints/RGC-*/",
+                "!.review-gauntlet/checkpoints/RGC-*/*",
+                "!.review-gauntlet/checkpoints/latest",
+                "",
+            )
+        ),
+        encoding="utf-8",
+    )
+    _git(root, "add", "README.md", ".gitignore")
+    _git(root, "commit", "-m", "initial")
 
 
 def _store(tmp_path: Path) -> SessionStore:
@@ -366,6 +396,88 @@ def test_run_controller_attempts_checkpoint_commit_after_finalization(
         "checkpoint_commit_finished",
         "finalized",
     ]
+
+
+def test_run_controller_commits_checkpoint_when_finalizing_agent_stdout_is_non_json(
+    tmp_path: Path,
+) -> None:
+    _init_repo(tmp_path)
+    store = SessionStore(tmp_path)
+    session_id = store.create_session(
+        {
+            "session_id": "RGS-test",
+            "root": str(tmp_path),
+            "target": {"all_files": True},
+        },
+        (
+            ReviewCell(
+                id="cell-1",
+                file_path="README.md",
+                rule_id="docs-accuracy",
+                slice_id="docs",
+                state=CellState.REVIEWED,
+                content_digest="digest",
+            ),
+        ),
+    )
+    (tmp_path / "review-gauntlet.json").write_text(
+        json.dumps({"adapter": {"type": "command", "command": "fake-agent", "args": []}}),
+        encoding="utf-8",
+    )
+    _git(tmp_path, "add", "review-gauntlet.json")
+    _git(tmp_path, "commit", "-m", "add run config")
+    checkpoint: dict[str, object] = {}
+
+    def command(
+        _config: CommandAdapterConfig, _root: Path, _state_dir: Path, _prompt: str
+    ) -> SessionCommandResult:
+        nonlocal checkpoint
+        checkpoint = write_latest_checkpoint(
+            store,
+            tmp_path,
+            session_id,
+            {"coverage": {"reviewed": 1}, "finding_state_counts": {}, "run_count": 1},
+        )
+        with store.connect() as conn:
+            conn.execute(
+                "update sessions set state = 'finalized' where session_id = ?", (session_id,)
+            )
+        store.active_path.unlink()
+        return SessionCommandResult(
+            argv=["fake-agent"], cwd=None, returncode=0, stdout="finalized in prose", stderr=""
+        )
+
+    controller = RunController(
+        root=tmp_path,
+        store=store,
+        config_path=None,
+        max_steps=1,
+        ready_prompt=lambda _store, _root: "finalize session",
+        status_snapshot=lambda _store, _root: {
+            "coverage": {"reviewed": 1},
+            "finding_state_counts": {},
+            "can_finalize": True,
+            "finalize_blockers": [],
+            "next_required_action": "finalize",
+        },
+        command_runner=command,
+    )
+
+    result = controller.run()
+
+    assert result["completed"] is True
+    cc = cast(dict[str, object], result["checkpoint_commit"])
+    assert cc["checkpoint_committed"] is True
+    assert cc["checkpoint_commit_reason"] == "committed"
+    committed_paths = _git(tmp_path, "show", "--name-only", "--format=", "HEAD").splitlines()
+    assert committed_paths == [
+        f"{checkpoint['checkpoint_dir']}/events.json",
+        f"{checkpoint['checkpoint_dir']}/findings.json",
+        f"{checkpoint['checkpoint_dir']}/status.json",
+        f"{checkpoint['checkpoint_dir']}/summary.md",
+        ".review-gauntlet/checkpoints/latest",
+    ]
+    assert _git(tmp_path, "status", "--porcelain") == ""
 
 
 def test_checkpoint_generated_files_from_stdout_ignores_non_json() -> None:

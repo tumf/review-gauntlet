@@ -15,6 +15,7 @@ from review_gauntlet.session_store import SessionStore
 from review_gauntlet.targets import HeadMode, TargetKind, TargetSpec, target_digest
 
 CHECKPOINT_SCHEMA_VERSION = 1
+STANDARD_CHECKPOINT_ARTIFACTS = ("status.json", "findings.json", "events.json", "summary.md")
 TERMINAL_DECISION_STATES = {FindingState.WAIVED.value, FindingState.ACCEPTED_RISK.value}
 
 
@@ -356,8 +357,7 @@ def write_latest_checkpoint(
     if backup_dir.exists():
         shutil.rmtree(backup_dir)
     generated_files = [
-        str((checkpoint_dir / name).relative_to(root))
-        for name in ("status.json", "findings.json", "events.json", "summary.md")
+        str((checkpoint_dir / name).relative_to(root)) for name in STANDARD_CHECKPOINT_ARTIFACTS
     ]
     return {
         "checkpoint_id": checkpoint_id,
@@ -546,13 +546,37 @@ def commit_latest_checkpoint(
 
 
 def _allowed_checkpoint_commit_paths(
-    _root: Path, generated_files: tuple[str, ...]
+    root: Path, generated_files: tuple[str, ...]
 ) -> tuple[str, ...]:
     allowed = {".review-gauntlet/checkpoints/latest"}
+    allowed.update(_safe_latest_checkpoint_artifact_paths(root))
     for path in generated_files:
         if _is_allowed_checkpoint_artifact_path(path):
             allowed.add(path)
     return tuple(sorted(allowed))
+
+
+def _safe_latest_checkpoint_artifact_paths(root: Path) -> tuple[str, ...]:
+    pointer = latest_checkpoint_pointer(root)
+    if pointer.is_symlink() or pointer.is_dir() or not pointer.is_file():
+        return ()
+    try:
+        checkpoint_id = pointer.read_text(encoding="utf-8").strip()
+    except OSError:
+        return ()
+    if not _is_path_safe_checkpoint_id(checkpoint_id):
+        return ()
+    checkpoint_dir = pointer.parent / checkpoint_id
+    if not checkpoint_dir.is_dir() or checkpoint_dir.is_symlink():
+        return ()
+    try:
+        checkpoint_dir.resolve().relative_to(pointer.parent.resolve())
+    except ValueError:
+        return ()
+    return tuple(
+        (checkpoint_dir / filename).relative_to(root).as_posix()
+        for filename in STANDARD_CHECKPOINT_ARTIFACTS
+    )
 
 
 def _is_allowed_checkpoint_artifact_path(path: str) -> bool:
@@ -564,12 +588,9 @@ def _is_allowed_checkpoint_artifact_path(path: str) -> bool:
         return True
     if len(parts) == 4 and parts[:2] == (".review-gauntlet", "checkpoints"):
         checkpoint_id, filename = parts[2], parts[3]
-        return _is_path_safe_checkpoint_id(checkpoint_id) and filename in {
-            "status.json",
-            "findings.json",
-            "events.json",
-            "summary.md",
-        }
+        return (
+            _is_path_safe_checkpoint_id(checkpoint_id) and filename in STANDARD_CHECKPOINT_ARTIFACTS
+        )
     return False
 
 
