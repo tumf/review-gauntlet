@@ -8,8 +8,11 @@ import pytest
 from review_gauntlet.cli import main
 from review_gauntlet.git_worktree import (
     _base_dirty_paths,  # pyright: ignore[reportPrivateUsage]
+    _commit_session_changes,  # pyright: ignore[reportPrivateUsage]
+    _git_worktree_metadata,  # pyright: ignore[reportPrivateUsage]
     _unique_session_branch,  # pyright: ignore[reportPrivateUsage]
     _validate_session_id,  # pyright: ignore[reportPrivateUsage]
+    cleanup_session_worktree,
     merge_preflight_blockers,
     run_worktree_setup,
 )
@@ -141,11 +144,25 @@ def test_run_worktree_setup_returns_warning_on_oserror(
     result = run_worktree_setup(tmp_path, enabled=True, timeout_seconds=5)
 
     assert result.ran is True
-    assert result.returncode is None
+    assert result.returncode == -1
     assert result.skipped_reason is None
     assert result.warning is not None
     assert "could not be executed" in result.warning
     assert "Permission denied" in result.warning
+
+
+def test_run_worktree_setup_reports_not_executable(tmp_path: Path) -> None:
+    setup = tmp_path / ".wt" / "setup"
+    setup.parent.mkdir(parents=True, exist_ok=True)
+    setup.write_text("#!/bin/sh\necho ok\n", encoding="utf-8")
+    setup.chmod(0o644)
+
+    result = run_worktree_setup(tmp_path, enabled=True, timeout_seconds=5)
+
+    assert result.ran is False
+    assert result.skipped_reason == "script is not executable"
+    assert result.returncode is None
+    assert result.warning is None
 
 
 def test_init_git_worktree_records_metadata_and_preserves_worktree_target(
@@ -254,6 +271,21 @@ def test_merge_preflight_reports_conflict_without_mutating_session(
     assert (tmp_path / ".review-gauntlet" / "active-session.json").exists()
     assert (tmp_path / worktree_path).is_dir()
     assert _git(tmp_path, "branch", "--list", session_branch)
+
+
+def test_merge_preflight_rejects_worktree_path_traversal(tmp_path: Path) -> None:
+    _init_repo(tmp_path)
+    meta: dict[str, object] = {
+        "base_branch": "main",
+        "base_commit": _git(tmp_path, "rev-parse", "HEAD"),
+        "session_branch": "review-gauntlet/test",
+        "worktree_path": "../../escape",
+    }
+
+    blockers = merge_preflight_blockers(tmp_path, meta)
+
+    assert any("escapes repository root" in b for b in blockers)
+    assert len(blockers) == 1
 
 
 def test_run_git_worktree_session_executes_agent_in_session_worktree_and_keeps_state_in_base(
@@ -491,3 +523,173 @@ class TestBaseDirtyPathsRename:
         dirty = _base_dirty_paths(tmp_path)
 
         assert "new_name.py" in dirty
+
+
+# --- RGF-0495: cleanup_session_worktree path-traversal guard ---
+
+
+class TestCleanupSessionWorktreePathTraversal:
+    def test_rejects_worktree_path_escaping_root(self, tmp_path: Path) -> None:
+        _init_repo(tmp_path)
+        meta: dict[str, object] = {
+            "worktree_path": "../../escape",
+            "session_branch": "review-gauntlet/test",
+        }
+        result = cleanup_session_worktree(tmp_path, meta)
+        assert not result.cleaned_up
+        assert any("escapes repository root" in b for b in result.cleanup_blockers)
+
+    def test_rejects_absolute_path_outside_root(self, tmp_path: Path) -> None:
+        _init_repo(tmp_path)
+        meta: dict[str, object] = {
+            "worktree_path": "/tmp/evil",
+            "session_branch": "review-gauntlet/test",
+        }
+        result = cleanup_session_worktree(tmp_path, meta)
+        assert not result.cleaned_up
+        assert any("escapes repository root" in b for b in result.cleanup_blockers)
+
+    def test_rejects_missing_worktree_path(self, tmp_path: Path) -> None:
+        _init_repo(tmp_path)
+        meta: dict[str, object] = {"session_branch": "review-gauntlet/test"}
+        result = cleanup_session_worktree(tmp_path, meta)
+        assert not result.cleaned_up
+        assert any("missing or invalid worktree_path" in b for b in result.cleanup_blockers)
+
+    def test_rejects_missing_session_branch(self, tmp_path: Path) -> None:
+        _init_repo(tmp_path)
+        meta: dict[str, object] = {"worktree_path": ".review-gauntlet/worktrees/s1"}
+        result = cleanup_session_worktree(tmp_path, meta)
+        assert not result.cleaned_up
+        assert any("missing or invalid session_branch" in b for b in result.cleanup_blockers)
+
+
+# --- RGF-0496: _git_worktree_metadata validation ---
+
+
+class TestGitWorktreeMetadata:
+    def test_returns_none_when_git_worktree_key_missing(self) -> None:
+        assert _git_worktree_metadata({}) is None
+
+    def test_returns_none_when_git_worktree_not_dict(self) -> None:
+        assert _git_worktree_metadata({"git_worktree": "not-a-dict"}) is None
+
+    def test_returns_none_when_not_enabled(self) -> None:
+        meta = {
+            "git_worktree": {
+                "enabled": False,
+                "base_branch": "main",
+                "base_commit": "abc123",
+                "session_branch": "review-gauntlet/s1",
+                "worktree_path": ".review-gauntlet/worktrees/s1",
+            }
+        }
+        assert _git_worktree_metadata(meta) is None
+
+    def test_returns_none_when_required_key_missing(self) -> None:
+        meta = {
+            "git_worktree": {
+                "enabled": True,
+                "base_branch": "main",
+                "base_commit": "abc123",
+                # session_branch missing
+                "worktree_path": ".review-gauntlet/worktrees/s1",
+            }
+        }
+        assert _git_worktree_metadata(meta) is None
+
+    def test_returns_none_when_required_key_empty_string(self) -> None:
+        meta = {
+            "git_worktree": {
+                "enabled": True,
+                "base_branch": "main",
+                "base_commit": "",
+                "session_branch": "review-gauntlet/s1",
+                "worktree_path": ".review-gauntlet/worktrees/s1",
+            }
+        }
+        assert _git_worktree_metadata(meta) is None
+
+    def test_returns_none_when_required_key_non_string(self) -> None:
+        meta = {
+            "git_worktree": {
+                "enabled": True,
+                "base_branch": 123,
+                "base_commit": "abc123",
+                "session_branch": "review-gauntlet/s1",
+                "worktree_path": ".review-gauntlet/worktrees/s1",
+            }
+        }
+        assert _git_worktree_metadata(meta) is None
+
+    def test_returns_dict_when_valid(self) -> None:
+        inner = {
+            "enabled": True,
+            "base_branch": "main",
+            "base_commit": "abc123",
+            "session_branch": "review-gauntlet/s1",
+            "worktree_path": ".review-gauntlet/worktrees/s1",
+        }
+        result = _git_worktree_metadata({"git_worktree": inner})
+        assert result is not None
+        assert result["base_branch"] == "main"
+
+
+class TestCommitSessionChangesPathTraversal:
+    def test_rejects_path_escaping_worktree(self, tmp_path: Path) -> None:
+        wt = tmp_path / "worktree"
+        wt.mkdir()
+        _git(wt, "init")
+        _git(wt, "commit", "--allow-empty", "-m", "init")
+        (wt / "safe.txt").write_text("ok", encoding="utf-8")
+
+        with pytest.raises(ValueError, match="commit path escapes session worktree"):
+            _commit_session_changes(wt, session_id="s1", commit_paths=("../etc/passwd",))
+
+    def test_rejects_symlink_escape(self, tmp_path: Path) -> None:
+        wt = tmp_path / "worktree"
+        wt.mkdir()
+        _git(wt, "init")
+        _git(wt, "commit", "--allow-empty", "-m", "init")
+        outside = tmp_path / "secret.txt"
+        outside.write_text("secret", encoding="utf-8")
+        (wt / "link").symlink_to(outside)
+
+        with pytest.raises(ValueError, match="commit path escapes session worktree"):
+            _commit_session_changes(wt, session_id="s1", commit_paths=("link",))
+
+    def test_accepts_valid_paths(self, tmp_path: Path) -> None:
+        wt = tmp_path / "worktree"
+        wt.mkdir()
+        _git(wt, "init")
+        _git(wt, "commit", "--allow-empty", "-m", "init")
+        (wt / "file.txt").write_text("ok", encoding="utf-8")
+
+        _commit_session_changes(wt, session_id="s1", commit_paths=("file.txt",))
+        log = _git(wt, "log", "--oneline")
+        assert "Finalize review-gauntlet session s1" in log
+
+    def test_empty_commit_paths_is_noop(self, tmp_path: Path) -> None:
+        wt = tmp_path / "worktree"
+        wt.mkdir()
+        _git(wt, "init")
+        _git(wt, "commit", "--allow-empty", "-m", "init")
+        before = _git(wt, "rev-parse", "HEAD")
+
+        _commit_session_changes(wt, session_id="s1", commit_paths=())
+
+        assert _git(wt, "rev-parse", "HEAD") == before
+
+    def test_no_dirty_staged_files_skips_commit(self, tmp_path: Path) -> None:
+        wt = tmp_path / "worktree"
+        wt.mkdir()
+        _git(wt, "init")
+        _git(wt, "commit", "--allow-empty", "-m", "init")
+        (wt / "file.txt").write_text("ok", encoding="utf-8")
+        _git(wt, "add", "file.txt")
+        _git(wt, "commit", "-m", "add file")
+        before = _git(wt, "rev-parse", "HEAD")
+
+        _commit_session_changes(wt, session_id="s1", commit_paths=("file.txt",))
+
+        assert _git(wt, "rev-parse", "HEAD") == before

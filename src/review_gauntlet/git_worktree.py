@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -91,8 +93,6 @@ def git(root: Path, *args: str, check: bool = True, timeout: float = 10) -> str:
 
 
 def _validate_session_id(session_id: str) -> None:
-    import re
-
     if not re.fullmatch(r"[a-zA-Z0-9_-]+", session_id):
         raise ValueError(
             f"session_id must contain only alphanumerics, hyphens, and underscores: {session_id!r}"
@@ -134,6 +134,12 @@ def run_worktree_setup(
             script_path=script_path_text,
             skipped_reason="missing",
         )
+    if not os.access(script_path, os.X_OK):
+        return WorktreeSetupResult(
+            ran=False,
+            script_path=script_path_text,
+            skipped_reason="script is not executable",
+        )
     try:
         completed = subprocess.run(
             [str(script_path)],
@@ -154,6 +160,7 @@ def run_worktree_setup(
         return WorktreeSetupResult(
             ran=True,
             script_path=script_path_text,
+            returncode=-1,
             warning=f"worktree setup could not be executed: {exc}",
         )
     warning = None
@@ -242,6 +249,9 @@ def merge_preflight_blockers(root: Path, git_meta: dict[str, object]) -> list[st
     session_branch = str(git_meta.get("session_branch", ""))
     worktree_path = str(git_meta.get("worktree_path", ""))
     session_worktree = (root / worktree_path).resolve()
+    if not session_worktree.is_relative_to(root.resolve()):
+        blockers.append(f"worktree_path escapes repository root: {worktree_path}")
+        return blockers
     base_exists = _ref_exists(root, base_branch)
     if not base_exists:
         blockers.append(f"base branch is missing: {base_branch}")
@@ -303,11 +313,14 @@ def cleanup_session_worktree(root: Path, git_meta: dict[str, object]) -> GitWork
     blockers: list[str] = []
     removed: str | None = None
     deleted: str | None = None
-    try:
-        git(root, "worktree", "remove", worktree_path)
+    if resolved.is_dir():
+        try:
+            git(root, "worktree", "remove", worktree_path)
+            removed = worktree_path
+        except GitCommandError as exc:
+            blockers.append(str(exc))
+    else:
         removed = worktree_path
-    except GitCommandError as exc:
-        blockers.append(str(exc))
     try:
         git(root, "branch", "-d", session_branch)
         deleted = session_branch
@@ -385,6 +398,11 @@ def _commit_session_changes(
 ) -> None:
     if not commit_paths:
         return
+    resolved_wt = session_worktree.resolve()
+    for p in commit_paths:
+        resolved_p = (session_worktree / p).resolve()
+        if not resolved_p.is_relative_to(resolved_wt):
+            raise ValueError(f"commit path escapes session worktree: {p}")
     git(session_worktree, "add", "--", *commit_paths)
     dirty = git(session_worktree, "diff", "--cached", "--name-only")
     if not dirty:

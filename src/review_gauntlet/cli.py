@@ -2030,7 +2030,11 @@ def _cmd_mark(args: argparse.Namespace, store: SessionStore) -> None:
         "accepted-risk": FindingState.ACCEPTED_RISK,
         "fixed": FindingState.FIXED_PENDING_VERIFICATION,
     }
-    metadata = {"owner": args.owner, "until": args.until} if args.state in metadata_states else {}
+    metadata = (
+        {k: v for k, v in {"owner": args.owner, "until": args.until}.items() if v}
+        if args.state in metadata_states
+        else {}
+    )
     store.mark_finding(args.finding_id, mapping[args.state], args.reason, metadata)
     _emit({"finding_id": args.finding_id, "state": mapping[args.state].value}, args.format)
 
@@ -2176,6 +2180,7 @@ def _matches_finding_path_filter(path: str, path_filter: str) -> bool:
 def _normalize_finding_path(path: str) -> str:
     if not path or not path.strip():
         raise ValueError("finding path filter must not be empty")
+    path = path.strip()
     suffix = "/" if path.replace("\\", "/").endswith("/") else ""
     try:
         normalized = normalize_repository_relative_path(path)
@@ -2253,12 +2258,16 @@ def _finalize(
             return status
         _copy_checkpoint_artifacts_to_session_worktree(root, session_worktree, checkpoint)
         _remove_base_checkpoint_artifacts_before_merge(root, checkpoint)
+        generated = cast(list[str], checkpoint["generated_files"])
+        for gf in generated:
+            resolved_gf = (root / gf).resolve()
+            if not resolved_gf.is_relative_to(root.resolve()):
+                raise ValueError(f"generated file escapes repository root: {gf}")
         merge_result = merge_session_worktree(
             root,
             metadata,
             session_id=session_id,
-            commit_paths=tuple(cast(list[str], checkpoint["generated_files"]))
-            + (".review-gauntlet/checkpoints/latest",),
+            commit_paths=tuple(generated) + (".review-gauntlet/checkpoints/latest",),
         )
         status.update(
             {
@@ -2298,8 +2307,12 @@ def _copy_checkpoint_artifacts_to_session_worktree(
 ) -> None:
     generated_files = cast(list[str], checkpoint["generated_files"])
     for relative in [*generated_files, ".review-gauntlet/checkpoints/latest"]:
-        source = root / relative
-        destination = session_worktree / relative
+        source = (root / relative).resolve()
+        destination = (session_worktree / relative).resolve()
+        if not source.is_relative_to(root.resolve()):
+            raise ValueError(f"generated file escapes repository root: {relative}")
+        if not destination.is_relative_to(session_worktree.resolve()):
+            raise ValueError(f"generated file escapes session worktree: {relative}")
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, destination)
 
