@@ -1,0 +1,1072 @@
+{
+  "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+  "events": [
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:04:50",
+      "event_id": 974,
+      "finding_id": "RGF-0497",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Added is_relative_to validation for source and destination paths in _copy_checkpoint_artifacts_to_session_worktree",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:04:51",
+      "event_id": 975,
+      "finding_id": "RGF-0505",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Added is_relative_to validation for source and destination paths in _copy_checkpoint_artifacts_to_session_worktree (same fix as RGF-0497)",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:04:52",
+      "event_id": 976,
+      "finding_id": "RGF-0499",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Added is_relative_to validation for generated_files paths before passing to merge_session_worktree",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:04:57",
+      "event_id": 977,
+      "finding_id": "RGF-0498",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Cell IDs are UUIDs (RGC-hex format), never falsy strings like '0'. The str() or None pattern works correctly for this domain.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:04:59",
+      "event_id": 978,
+      "finding_id": "RGF-0506",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Standard Python deferred closure pattern. The type annotation 'controller: RunController' makes intent explicit. The closure is only invoked via controller.run() which requires controller to be assigned first.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:05:01",
+      "event_id": 979,
+      "finding_id": "RGF-0507",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Reporter callbacks are internal code that should not throw. The executor shutdown(wait=True) on non-interrupt exceptions is intentional - it ensures all futures complete before propagating. Cancelling on arbitrary exceptions could leave partial state.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:05:08",
+      "event_id": 980,
+      "finding_id": "RGF-0501",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Valid: _summarize_text lacks unit tests for boundary conditions. Tests need to be added in test files (out of scope for this file-scoped agent run).",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:05:12",
+      "event_id": 981,
+      "finding_id": "RGF-0502",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Valid: _finalize_blockers_are_commit_resolvable lacks unit tests for policy logic. Tests need to be added in test files (out of scope for this file-scoped agent run).",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:05:12",
+      "event_id": 982,
+      "finding_id": "RGF-0500",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Valid: _resolve_session_cwd security logic lacks unit tests. Tests need to be added in test files (out of scope for this file-scoped agent run).",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:05:12",
+      "event_id": 983,
+      "finding_id": "RGF-0504",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Valid: checkpoint copy/remove functions lack unit tests for path-traversal guard. Tests need to be added in test files (out of scope for this file-scoped agent run).",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:05:13",
+      "event_id": 984,
+      "finding_id": "RGF-0503",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Valid: _expired_terminal_decision_count lacks unit tests. Tests need to be added in test files (out of scope for this file-scoped agent run).",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:07:56",
+      "event_id": 985,
+      "finding_id": "RGF-0488",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Added os.access(X_OK) check before executing .wt/setup script",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:07:57",
+      "event_id": 986,
+      "finding_id": "RGF-0494",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Set returncode=-1 in OSError branch for consistency with timeout branch",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:07:58",
+      "event_id": 987,
+      "finding_id": "RGF-0492",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Added is_relative_to path traversal check in merge_preflight_blockers",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:07:59",
+      "event_id": 988,
+      "finding_id": "RGF-0489",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Added path traversal validation in _commit_session_changes for all commit_paths",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:08:00",
+      "event_id": 989,
+      "finding_id": "RGF-0493",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Added path traversal validation in _commit_session_changes (same fix as RGF-0489)",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:08:05",
+      "event_id": 990,
+      "finding_id": "RGF-0495",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Valid: path-traversal guard in cleanup_session_worktree lacks unit test coverage for security-relevant code",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:08:06",
+      "event_id": 991,
+      "finding_id": "RGF-0496",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Valid: _git_worktree_metadata has no direct unit tests for edge cases like missing keys, empty strings, non-dict input",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:08:10",
+      "event_id": 992,
+      "finding_id": "RGF-0490",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Direct subprocess.run is intentional \u2014 git() helper does not expose returncode when check=False, which is needed here to distinguish merge-tree conflict from success",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:08:10",
+      "event_id": 993,
+      "finding_id": "RGF-0491",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Loop is bounded by actual git refs; adversarial pre-creation requires repo write access. session_id is validated to [a-zA-Z0-9_-]+",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:10:02",
+      "event_id": 994,
+      "finding_id": "RGF-0508",
+      "from_state": "untriaged",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "CPython GIL makes bool read/write atomic. Plain bool interrupt flags are idiomatic Python. threading.Event would add complexity without practical benefit in this single-writer pattern.",
+      "to_state": "accepted_risk"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:10:03",
+      "event_id": 995,
+      "finding_id": "RGF-0510",
+      "from_state": "untriaged",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "Same as RGF-0508: CPython GIL ensures atomicity for simple bool flags. This is standard interrupt-flag pattern in Python.",
+      "to_state": "accepted_risk"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:10:05",
+      "event_id": 996,
+      "finding_id": "RGF-0512",
+      "from_state": "untriaged",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "snapshot() is a monitoring/status method where eventual consistency is acceptable. Adding a lock around all mutable state reads would add complexity for negligible practical benefit in a status display path.",
+      "to_state": "accepted_risk"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:10:06",
+      "event_id": 997,
+      "finding_id": "RGF-0514",
+      "from_state": "untriaged",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "The status variable is read from a frozen dataclass field, then conditionally overridden to 'quiet'. The local rebinding is intentional and correct \u2014 no mutation of the frozen dataclass occurs.",
+      "to_state": "accepted_risk"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:10:08",
+      "event_id": 998,
+      "finding_id": "RGF-0509",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Not a real type inconsistency: _emit accepts **payload: object, so passing object is correct. The _run_result calls on L420-421 correctly use str(). The _emit call on L416 passes to EventSink which stores object values. No runtime type error possible.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:10:10",
+      "event_id": 999,
+      "finding_id": "RGF-0511",
+      "from_state": "untriaged",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "AgentOutputEntry is defined in the same file (L19-23) without slots=True. __dict__ works correctly on frozen dataclasses. The tight coupling within a single file means any future slots=True change would be immediately caught. Using dataclasses.asdict() would add overhead for no practical benefit.",
+      "to_state": "accepted_risk"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:10:11",
+      "event_id": 1000,
+      "finding_id": "RGF-0513",
+      "from_state": "untriaged",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "Same as RGF-0511: __dict__ on frozen dataclass without slots=True is correct. The dataclass is co-located in the same file. Hypothetical future breakage from slots=True would be caught immediately.",
+      "to_state": "accepted_risk"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:13:30",
+      "event_id": 1001,
+      "finding_id": "RGF-0497",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:13:30",
+      "event_id": 1002,
+      "finding_id": "RGF-0489",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:13:30",
+      "event_id": 1003,
+      "finding_id": "RGF-0494",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:13:30",
+      "event_id": 1004,
+      "finding_id": "RGF-0493",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:13:30",
+      "event_id": 1005,
+      "finding_id": "RGF-0492",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:13:30",
+      "event_id": 1006,
+      "finding_id": "RGF-0488",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:13:30",
+      "event_id": 1007,
+      "finding_id": "RGF-0505",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:13:30",
+      "event_id": 1008,
+      "finding_id": "RGF-0499",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:13:32",
+      "event_id": 1009,
+      "finding_id": "RGF-0500",
+      "from_state": "confirmed",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "test-evidence: _resolve_session_cwd needs unit tests for path traversal guard. Test files out of scope for this cli.py-only run.",
+      "to_state": "accepted_risk"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:13:33",
+      "event_id": 1010,
+      "finding_id": "RGF-0501",
+      "from_state": "confirmed",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "test-evidence: _summarize_text needs unit tests for off-by-one boundary. Test files out of scope for this cli.py-only run.",
+      "to_state": "accepted_risk"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:13:34",
+      "event_id": 1011,
+      "finding_id": "RGF-0502",
+      "from_state": "confirmed",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "test-evidence: _finalize_blockers_are_commit_resolvable needs unit tests. Test files out of scope for this cli.py-only run.",
+      "to_state": "accepted_risk"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:13:35",
+      "event_id": 1012,
+      "finding_id": "RGF-0503",
+      "from_state": "confirmed",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "test-evidence: _expired_terminal_decision_count needs integration tests. Test files out of scope for this cli.py-only run.",
+      "to_state": "accepted_risk"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:13:36",
+      "event_id": 1013,
+      "finding_id": "RGF-0504",
+      "from_state": "confirmed",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "test-evidence: _copy_checkpoint_artifacts and _remove_base_checkpoint_artifacts need unit tests. Test files out of scope for this cli.py-only run.",
+      "to_state": "accepted_risk"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:14:27",
+      "event_id": 1014,
+      "finding_id": "RGF-0523",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Changed _is_expired to return True (expired) on malformed metadata JSON. Corrupted metadata should not bypass expiry enforcement.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:14:29",
+      "event_id": 1015,
+      "finding_id": "RGF-0522",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "SQLite SQLITE_MAX_VARIABLE_NUMBER defaults to 999; sessions with 999+ findings are unrealistic in practice. The chunking overhead is not justified.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:14:30",
+      "event_id": 1016,
+      "finding_id": "RGF-0524",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "The coalesce-to-empty-string + 'or None' pattern is intentional and correct for the current schema. The SQL is controlled internally, not an external contract.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:14:32",
+      "event_id": 1017,
+      "finding_id": "RGF-0525",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "N+1 query on waived/accepted_risk findings: these are typically single-digit count per session. The performance impact is negligible for SQLite local DB access.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:14:34",
+      "event_id": 1018,
+      "finding_id": "RGF-0526",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "cell_start emitted before executor.submit is a design choice for progress reporting. The events are informational; the batched submission pattern is intentional for the ThreadPoolExecutor usage.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:14:35",
+      "event_id": 1019,
+      "finding_id": "RGF-0527",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "stdout/stderr interleaving by index is a best-effort tail display. There is no timestamp information available from subprocess.PIPE output. The round-robin approach is an acceptable approximation.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:17:17",
+      "event_id": 1020,
+      "finding_id": "RGF-0515",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "git status --porcelain v1 format is XY+space+path; offset 3 is the documented correct offset. The len<4 guard handles edge cases.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:17:18",
+      "event_id": 1021,
+      "finding_id": "RGF-0516",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Correct error handling. Commit preserved on session_branch, merged=False and finalize_blockers reported. Caller can retry. No data loss.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:17:19",
+      "event_id": 1022,
+      "finding_id": "RGF-0517",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "git branch -d refuses to delete a branch checked out in a worktree. Both errors collected in blockers, cleaned_up=False reported. Correct best-effort cleanup.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:17:20",
+      "event_id": 1023,
+      "finding_id": "RGF-0518",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Executing .wt/setup is the intended design. Function validates enabled flag, file existence, and executable permission. Documented setup hook.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:17:20",
+      "event_id": 1024,
+      "finding_id": "RGF-0519",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Same as RGF-0515: offset 3 correct for porcelain v1. Quoted paths with special chars would not match .review-gauntlet/ prefix so filtering works.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:17:21",
+      "event_id": 1025,
+      "finding_id": "RGF-0520",
+      "from_state": "untriaged",
+      "metadata": {
+        "owner": "",
+        "until": ""
+      },
+      "reason": "git merge-tree --write-tree requires Git 2.38+ (Oct 2022). On older git, command fails with misleading conflict blocker but merge is safely blocked. Acceptable given git 2.38 age.",
+      "to_state": "accepted_risk"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:17:22",
+      "event_id": 1026,
+      "finding_id": "RGF-0521",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Lazy import of re is valid Python pattern. Not a data-validation issue. Module cached after first call.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:18:24",
+      "event_id": 1027,
+      "finding_id": "RGF-0495",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Added TestCleanupSessionWorktreePathTraversal with 4 tests covering path traversal, absolute paths, missing worktree_path, and missing session_branch.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:18:25",
+      "event_id": 1028,
+      "finding_id": "RGF-0496",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Added TestGitWorktreeMetadata with 7 tests covering missing key, non-dict, disabled, missing required key, empty string, non-string type, and valid input.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:20:56",
+      "event_id": 1029,
+      "finding_id": "RGF-0523",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:20:56",
+      "event_id": 1030,
+      "finding_id": "RGF-0495",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:20:56",
+      "event_id": 1031,
+      "finding_id": "RGF-0496",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:22:15",
+      "event_id": 1032,
+      "finding_id": "RGF-0528",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Fail-safe design: returning True for unparseable metadata surfaces corrupted findings for human attention via stderr warning.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:22:20",
+      "event_id": 1033,
+      "finding_id": "RGF-0529",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Added path.strip() before normalization to handle leading/trailing whitespace in finding path filters.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:22:24",
+      "event_id": 1034,
+      "finding_id": "RGF-0530",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Filter out None/empty values from metadata dict so only user-provided owner/until are stored.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:23:23",
+      "event_id": 1035,
+      "finding_id": "RGF-0531",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Moved re import to module level, consistent with existing import style",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:23:24",
+      "event_id": 1036,
+      "finding_id": "RGF-0532",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Added is_dir() guard before worktree remove to make cleanup idempotent on retry",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:23:29",
+      "event_id": 1037,
+      "finding_id": "RGF-0533",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "git() helper returns only stdout; merge-tree and _ref_exists both need returncode, making raw subprocess.run the correct pattern here",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:25:34",
+      "event_id": 1038,
+      "finding_id": "RGF-0531",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:25:34",
+      "event_id": 1039,
+      "finding_id": "RGF-0532",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:25:34",
+      "event_id": 1040,
+      "finding_id": "RGF-0529",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:25:34",
+      "event_id": 1041,
+      "finding_id": "RGF-0530",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:26:36",
+      "event_id": 1042,
+      "finding_id": "RGF-0534",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Changed _is_expired to return False on unparseable metadata JSON - corrupted metadata should not block finalization",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:26:38",
+      "event_id": 1043,
+      "finding_id": "RGF-0535",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "CLI validates concurrency via _positive_int; function is internal despite no underscore prefix. ThreadPoolExecutor already raises a clear ValueError for invalid values.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:26:40",
+      "event_id": 1044,
+      "finding_id": "RGF-0536",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Cell IDs are RGC-prefixed strings; str() of a valid cell ID is never falsy. The or-None pattern correctly handles empty string from SQL COALESCE.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:28:31",
+      "event_id": 1045,
+      "finding_id": "RGF-0537",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Added TestCommitSessionChangesPathTraversal test class with 3 tests: path escape via .., symlink escape, and valid path acceptance",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:28:31",
+      "event_id": 1046,
+      "finding_id": "RGF-0538",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "git() helper returns str (stdout) and does not expose returncode. merge_preflight_blockers needs returncode to detect merge conflicts, so direct subprocess.run is the correct approach.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:31:04",
+      "event_id": 1047,
+      "finding_id": "RGF-0537",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:31:04",
+      "event_id": 1048,
+      "finding_id": "RGF-0534",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:31:56",
+      "event_id": 1049,
+      "finding_id": "RGF-0539",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "ValidationError is a subclass of ValueError (confirmed via MRO), so it is caught by 'except ValueError' at line 549",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:31:58",
+      "event_id": 1050,
+      "finding_id": "RGF-0541",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Returning False for corrupted metadata is the intentional safe default per RGF-0534 fix \u2014 treating unparseable metadata as not-expired prevents unrecoverable finalize blockers",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:32:00",
+      "event_id": 1051,
+      "finding_id": "RGF-0542",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "SQL COALESCE guarantees empty string for NULL, so str(row[...]) or None correctly produces None for empty and non-None for populated values; str(None) cannot occur",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:32:01",
+      "event_id": 1052,
+      "finding_id": "RGF-0540",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "finding_id is used only in parameterized SQL queries (no injection risk); non-existent IDs raise LookupError in _transition which is caught at line 552",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:34:12",
+      "event_id": 1053,
+      "finding_id": "RGF-0543",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Added test_run_worktree_setup_reports_not_executable covering the non-executable script branch at lines 137-142",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:34:16",
+      "event_id": 1054,
+      "finding_id": "RGF-0544",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Added test_empty_commit_paths_is_noop and test_no_dirty_staged_files_skips_commit covering the early-return paths at lines 399-400 and 407-409",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:34:19",
+      "event_id": 1055,
+      "finding_id": "RGF-0545",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Added test_merge_preflight_rejects_worktree_path_traversal directly testing the path-traversal guard at lines 251-254",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:37:18",
+      "event_id": 1056,
+      "finding_id": "RGF-0544",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:37:18",
+      "event_id": 1057,
+      "finding_id": "RGF-0543",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:37:18",
+      "event_id": 1058,
+      "finding_id": "RGF-0545",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:37:54",
+      "event_id": 1059,
+      "finding_id": "RGF-0548",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Defense-in-depth: the redundant is_relative_to check in merge_session_worktree is intentional. If merge_preflight_blockers is ever refactored or called conditionally, this guard still protects the critical path.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:37:56",
+      "event_id": 1060,
+      "finding_id": "RGF-0547",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Idempotent cleanup by design: when the worktree directory is already absent, treating it as removed allows cleanup to proceed to branch deletion. This is intentional behavior, not a bug.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:37:57",
+      "event_id": 1061,
+      "finding_id": "RGF-0546",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "TOCTOU race is theoretical: review-gauntlet sessions are single-process CLI operations. Concurrent session creation for the same session_id does not occur in practice. git worktree add -b failure would surface a clear error.",
+      "to_state": "accepted_risk"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:37:58",
+      "event_id": 1062,
+      "finding_id": "RGF-0549",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "The git helper operates on a small review-gauntlet worktree with a handful of files and no pre-commit hooks. The 10-second default is sufficient for this use case.",
+      "to_state": "accepted_risk"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:41:44",
+      "event_id": 1063,
+      "finding_id": "RGF-0555",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Executor is created at line 1230, try block starts at 1233, but no exception can occur between those lines (dict literal and bool assignment). The finally block at 1260 always shuts down the executor. No leak exists.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:41:46",
+      "event_id": 1064,
+      "finding_id": "RGF-0557",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "The broad ValueError catch at line 550 is intentional \u2014 it converts user-facing validation errors (invalid session ID, bad path, etc.) into clean CLI failures. Internal programming errors would raise different exception types (TypeError, AttributeError, etc.).",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:41:48",
+      "event_id": 1065,
+      "finding_id": "RGF-0550",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "The reason parameter is written to a SQLite TEXT column. Practically, review-gauntlet sessions are agent-driven with controlled inputs. Adding a length limit would be an over-constraint for the current usage pattern.",
+      "to_state": "accepted_risk"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:41:53",
+      "event_id": 1066,
+      "finding_id": "RGF-0553",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "str(row) or None pattern is fragile \u2014 if COALESCE is removed and value is SQL NULL, str(None) produces 'None' (truthy string). Should use explicit conditional.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:41:54",
+      "event_id": 1067,
+      "finding_id": "RGF-0556",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Duplicate of RGF-0553 \u2014 same issue on the same line, same code pattern.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:41:56",
+      "event_id": 1068,
+      "finding_id": "RGF-0554",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Test coverage gap for _finalize_blockers_are_commit_resolvable. The function is exercised indirectly through integration tests of the finalize flow. Adding a unit test is desirable but not blocking.",
+      "to_state": "accepted_risk"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:41:57",
+      "event_id": 1069,
+      "finding_id": "RGF-0551",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Test coverage gap for _persist_session_command_artifacts. The function is exercised indirectly through session command integration tests. Adding a dedicated unit test is desirable but not blocking.",
+      "to_state": "accepted_risk"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:41:59",
+      "event_id": 1070,
+      "finding_id": "RGF-0552",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Test coverage gap for _copy_checkpoint_artifacts_to_session_worktree and _remove_base_checkpoint_artifacts_before_merge. Path-traversal guards were added in this review cycle and verified through manual inspection. Dedicated tests are desirable but not blocking.",
+      "to_state": "accepted_risk"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:42:18",
+      "event_id": 1071,
+      "finding_id": "RGF-0553",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Changed str(row[latest_cell_id]) or None to explicit conditional: str(row[latest_cell_id]) if row[latest_cell_id] else None",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:43:50",
+      "event_id": 1072,
+      "finding_id": "RGF-0553",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:44:07",
+      "event_id": 1073,
+      "finding_id": "RGF-0561",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Design concern about SQL in CLI module. Valid refactoring suggestion but not a correctness issue. The query is parameterized and safe.",
+      "to_state": "accepted_risk"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:44:08",
+      "event_id": 1074,
+      "finding_id": "RGF-0559",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "The _tui_rendered private attribute pattern is an established internal convention in this CLI. While fragile, it works correctly and a refactor would be out of scope for this review.",
+      "to_state": "accepted_risk"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:44:08",
+      "event_id": 1075,
+      "finding_id": "RGF-0558",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Thread join timeout of 1 second after subprocess kill. The output_lock prevents data races on the line lists. Worst case is slightly truncated output, which is acceptable for a killed-process scenario.",
+      "to_state": "accepted_risk"
+    },
+    {
+      "checkpoint_id": "RGC-460b06f5b237-RGS-57d21dd1e9ab",
+      "created_at": "2026-06-16 10:44:08",
+      "event_id": 1076,
+      "finding_id": "RGF-0560",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Direct SQL for session state update in finalize. Valid refactoring suggestion but the finalize flow is tested end-to-end and the state transition is correct.",
+      "to_state": "accepted_risk"
+    }
+  ],
+  "schema_version": 1
+}
