@@ -325,7 +325,7 @@ def test_run_controller_completes_when_command_finalizes_session(tmp_path: Path)
     assert result["reason"] == "completed"
     assert result["step_count"] == 1
     assert snapshot.agent_status == "finalized"
-    assert snapshot.agent_lifecycle.status == "completed"
+    assert snapshot.agent_lifecycle.status == "finalized"
     assert prompts == ["ready prompt"]
     assert "agent_started" in events_during_command
     assert "agent_finished" not in events_during_command
@@ -1094,4 +1094,4 @@ def test_run_controller_post_loop_completion_session_disappears_on_final_step(
     assert result["completed"] is True
     assert result["reason"] == "completed"
     assert snapshot.agent_status == "finalized"
-    assert snapshot.agent_lifecycle.status == "completed"
+    assert snapshot.agent_lifecycle.status == "finalized"

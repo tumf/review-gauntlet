@@ -486,7 +486,7 @@ class RunController:
 
     def _mark_finalized(self) -> None:
         self._agent_status = "finalized"
-        self._agent_lifecycle = AgentLifecycle(status="completed")
+        self._agent_lifecycle = AgentLifecycle(status="finalized")
         self._agent_step_started_at = None
         self._agent_timeout_seconds = None
         self._agent_output_progress = None
