@@ -246,7 +246,6 @@ _NEXT_ACTION_GATE_INDEX = {
     "run_verify_fixes": 4,
     "resolve_finalize_blockers": 5,
     "finalize": 6,
-    "cleanup_git_worktree": 6,
 }
 
 

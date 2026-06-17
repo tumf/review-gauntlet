@@ -84,6 +84,25 @@ def test_cli_completion_uses_usage_error_code(argv: list[str]) -> None:
     assert exc_info.value.code == 64
 
 
+def _assert_usage_error(argv: list[str]) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        main(argv)
+
+    assert exc_info.value.code == 64
+
+
+def test_cli_init_git_worktree_rejected() -> None:
+    _assert_usage_error(["init", ".", "--git-worktree"])
+
+
+def test_cli_init_no_setup_rejected() -> None:
+    _assert_usage_error(["init", ".", "--no-setup"])
+
+
+def test_cli_finalize_merge_rejected() -> None:
+    _assert_usage_error(["finalize", ".", "--merge"])
+
+
 def test_validate_verdict_accepts_valid_payload(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -475,23 +494,23 @@ def test_cli_status_help_shows_boolean_default(capsys: pytest.CaptureFixture[str
     assert "(default: false)" in output
 
 
-def test_cli_finalize_help_exposes_merge(capsys: pytest.CaptureFixture[str]) -> None:
+def test_cli_finalize_help_omits_merge(capsys: pytest.CaptureFixture[str]) -> None:
     output = _help_output(["finalize"], capsys)
 
-    assert "--merge" in output
-    assert "Merge and clean up a Git-worktree-backed session" in output
-    assert "(default: false)" in output
+    assert "--merge" not in output
+    assert "Merge and clean up" not in output
+    assert "Allow uncommitted non-review files in the working tree" in output
 
 
 def test_cli_init_help_shows_boolean_defaults(capsys: pytest.CaptureFixture[str]) -> None:
     output = _help_output(["init"], capsys)
 
     assert "Review workspace/worktree changes as the target" in output
-    assert "Create an isolated Git linked worktree" in output
-    assert "--git-worktree" in output
+    assert "Create an isolated Git linked worktree" not in output
+    assert "--git-worktree" not in output
+    assert "--no-setup" not in output
     assert "(default: false)" in output
     assert "Review all files (default: false)" in output
-    assert "--git-worktree" in output
     assert "--from" in output
     assert "--to" in output
     assert "--commit" in output
