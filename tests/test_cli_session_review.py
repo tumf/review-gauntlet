@@ -5,7 +5,7 @@ import subprocess
 import sys
 import threading
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -778,11 +778,13 @@ def test_resource_exhaustion_startup_failure_persists_sibling_successes(
     ordered_cells = [str(row["cell_id"]) for row in SessionStore(tmp_path).list_cells()]
     failing_cell = ordered_cells[0]
     _command_config(tmp_path, "import json; print(json.dumps({'comments':[]}))")
-    original_popen = subprocess.Popen
+    original_popen = cast(Any, subprocess.Popen)
 
-    def raise_emfile_for_one_cell(argv: Any, *args: Any, **kwargs: Any) -> Any:
-        if isinstance(argv, list) and failing_cell in "\n".join(str(part) for part in argv):
-            raise OSError(errno.EMFILE, "Too many open files")
+    def raise_emfile_for_one_cell(argv: object, *args: object, **kwargs: object) -> object:
+        if isinstance(argv, list):
+            argv_parts = cast(list[object], argv)
+            if failing_cell in "\n".join(str(part) for part in argv_parts):
+                raise OSError(errno.EMFILE, "Too many open files")
         return original_popen(argv, *args, **kwargs)
 
     monkeypatch.setattr(

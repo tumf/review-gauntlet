@@ -404,7 +404,7 @@ def test_command_adapter_generic_os_startup_failure_preserves_details(
     assert failure["startup_error_reason"] == "os_error"
     assert failure["exception_type"] == "PermissionError"
     assert failure["errno"] == errno.EACCES
-    assert "Permission denied" in failure["detail"]
+    assert "Permission denied" in str(failure["detail"])
     assert "hint" not in failure
 
 
