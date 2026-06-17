@@ -70,32 +70,26 @@ def create_run_app(controller: RunController) -> object:
         $dashboard-surface: #151923;
         $dashboard-surface-muted: #11151d;
         Screen { layout: vertical; background: $dashboard-bg; }
-        #body { height: 1fr; padding: 1; background: $dashboard-bg; }
+        #body { height: 1fr; padding: 0 1; background: $dashboard-bg; }
         #session_header {
             border: round $primary;
             border-title-color: $brand;
             border-title-style: bold;
-            padding: 1;
+            padding: 0 1;
             height: auto;
             background: $dashboard-surface;
         }
-        #header_status { text-style: bold; }
-        #header_meta { color: $text-muted; }
-        .panel-active #header_status { color: $success; }
-        .panel-blocked #header_status { color: $warning; }
-        .panel-failed #header_status { color: $error; }
-        .panel-finalized #header_status { color: $success; }
-        #summary { height: auto; }
-        #agent_panel_container, #session_panel_container {
-            width: 1fr;
-        }
-        #agent_panel_container { height: auto; }
-        #session_panel_container { height: 100%; }
+        #header_status_line { text-style: bold; height: auto; }
+        #header_agent_line { color: $text-muted; height: auto; }
+        .panel-active #header_status_line { color: $success; }
+        .panel-blocked #header_status_line { color: $warning; }
+        .panel-failed #header_status_line { color: $error; }
+        .panel-finalized #header_status_line { color: $success; }
         .panel {
             border: round $surface-lighten-2;
             border-title-color: $text-muted;
             border-title-style: bold;
-            padding: 1;
+            padding: 0 1;
             height: auto;
             background: $dashboard-surface;
         }
@@ -103,8 +97,19 @@ def create_run_app(controller: RunController) -> object:
         .panel-blocked { border: round $warning; border-title-color: $warning; }
         .panel-failed { border: round $error; border-title-color: $error; }
         .panel-finalized { border: round $success; border-title-color: $success; }
-        #activity_panel { height: 1fr; }
-        #activity_timeline { height: 1fr; }
+        #coverage_row { height: auto; }
+        #rules_panel_container, #files_panel_container {
+            width: 1fr;
+            height: 1fr;
+        }
+        #rules_panel, #files_panel { height: 1fr; overflow-y: auto; }
+        #bottom_row { height: 1fr; }
+        #findings_panel_container, #activity_panel_container {
+            width: 1fr;
+            height: 1fr;
+        }
+        #findings_panel { height: 1fr; overflow-y: auto; }
+        #activity_timeline { height: 1fr; overflow-y: auto; }
         #controls {
             color: $text-muted;
             height: auto;
@@ -143,43 +148,41 @@ def create_run_app(controller: RunController) -> object:
                 session_header = Vertical(id="session_header", classes=view.state_class)
                 session_header.border_title = header_title_text()
                 with session_header:
-                    yield Static(header_status_text(view), id="header_status")
-                    yield Static(header_meta_text(view), id="header_meta")
-                yield titled_panel(
-                    PANEL_TITLES["finalize_path"],
-                    Static(finalize_path_text(view), id="finalize_path"),
-                    id="finalize_path_panel",
-                    classes=f"panel {view.state_class}",
-                )
+                    yield Static(header_status_text(view), id="header_status_line")
+                    yield Static(header_agent_text(view), id="header_agent_line")
                 yield titled_panel(
                     PANEL_TITLES["queue"],
                     Static(queue_text(view), id="queue_panel"),
                     id="queue_panel_container",
                     classes=f"panel {view.state_class}",
                 )
-                yield titled_panel(
-                    detail_panel_title(view),
-                    Static(active_detail_text(view), id="detail_panel"),
-                    id="detail_panel_container",
-                    classes="panel",
-                )
-                with Horizontal(id="summary"):
+                with Horizontal(id="coverage_row"):
                     yield titled_panel(
-                        PANEL_TITLES["agent"],
-                        Static(agent_summary_text(view), id="agent_panel"),
-                        id="agent_panel_container",
+                        PANEL_TITLES["rules"],
+                        Static(rule_coverage_text(view), id="rules_panel"),
+                        id="rules_panel_container",
+                        classes="panel",
                     )
                     yield titled_panel(
-                        PANEL_TITLES["session"],
-                        Static(session_summary_text(view), id="session_panel"),
-                        id="session_panel_container",
+                        PANEL_TITLES["files"],
+                        Static(file_hotlist_text(view), id="files_panel"),
+                        id="files_panel_container",
+                        classes="panel",
                     )
-                yield titled_panel(
-                    PANEL_TITLES["activity"],
-                    Static(activity_text(view), id="activity_timeline"),
-                    id="activity_panel",
-                )
+                with Horizontal(id="bottom_row"):
+                    yield titled_panel(
+                        PANEL_TITLES["findings"],
+                        Static(finding_projection_text(view), id="findings_panel"),
+                        id="findings_panel_container",
+                        classes="panel",
+                    )
+                    yield titled_panel(
+                        PANEL_TITLES["activity"],
+                        Static(activity_text(view), id="activity_timeline"),
+                        id="activity_panel_container",
+                    )
                 yield Static(footer_text(), id="controls")
+                yield Static("", id="legend")
 
         def on_mount(self) -> None:
             self.refresh_view()
@@ -251,24 +254,27 @@ def create_run_app(controller: RunController) -> object:
             flashes = self._tui_render_state.flashes
             try:
                 session_header = self.query_one("#session_header", Vertical)
-                header_status = self.query_one("#header_status", Static)
-                header_meta = self.query_one("#header_meta", Static)
-                finalize_path_panel = self.query_one("#finalize_path_panel", Vertical)
-                finalize_path = self.query_one("#finalize_path", Static)
+                header_status_line = self.query_one("#header_status_line", Static)
+                header_agent_line = self.query_one("#header_agent_line", Static)
                 queue_panel_container = self.query_one("#queue_panel_container", Vertical)
                 queue_panel = self.query_one("#queue_panel", Static)
-                detail_panel_container = self.query_one("#detail_panel_container", Vertical)
-                detail_panel = self.query_one("#detail_panel", Static)
-                agent_panel_container = self.query_one("#agent_panel_container", Vertical)
-                session_panel_container = self.query_one("#session_panel_container", Vertical)
-                agent_panel = self.query_one("#agent_panel", Static)
-                session_panel = self.query_one("#session_panel", Static)
-                activity_panel = self.query_one("#activity_panel", Vertical)
+                rules_panel_container = self.query_one("#rules_panel_container", Vertical)
+                rules_panel = self.query_one("#rules_panel", Static)
+                files_panel_container = self.query_one("#files_panel_container", Vertical)
+                files_panel = self.query_one("#files_panel", Static)
+                findings_panel_container = self.query_one("#findings_panel_container", Vertical)
+                findings_panel = self.query_one("#findings_panel", Static)
                 activity_timeline = self.query_one("#activity_timeline", Static)
+                activity_panel_container = self.query_one("#activity_panel_container", Vertical)
+                legend = self.query_one("#legend", Static)
             except NoMatches:
                 return
-            header_status.update(render_tui_lines(sections["header_status"], flashes, mode="rich"))
-            header_meta.update(render_tui_lines(sections["header_meta"], flashes, mode="rich"))
+            header_status_line.update(
+                render_tui_lines(sections["header_status"], flashes, mode="rich")
+            )
+            header_agent_line.update(
+                render_tui_lines(sections["header_agent"], flashes, mode="rich")
+            )
             for state_class in (
                 "panel",
                 "panel-active",
@@ -278,19 +284,25 @@ def create_run_app(controller: RunController) -> object:
             ):
                 enabled = state_class == "panel" or state_class == view.state_class
                 session_header.set_class(state_class == view.state_class, state_class)
-                finalize_path_panel.set_class(enabled, state_class)
                 queue_panel_container.set_class(enabled, state_class)
-                detail_panel_container.set_class(enabled, state_class)
-                agent_panel_container.set_class(enabled, state_class)
-                session_panel_container.set_class(enabled, state_class)
-                activity_panel.set_class(enabled, state_class)
-            finalize_path.update(render_tui_lines(sections["finalize_path"], flashes, mode="rich"))
+                activity_panel_container.set_class(enabled, state_class)
+            queue_panel_container.display = bool(sections["queue"])
             queue_panel.update(render_tui_lines(sections["queue"], flashes, mode="rich"))
-            detail_panel_container.border_title = detail_panel_title(view)
-            detail_panel.update(active_detail_text(view))
-            agent_panel.update(render_tui_lines(sections["agent"], flashes, mode="rich"))
-            session_panel.update(render_tui_lines(sections["session"], flashes, mode="rich"))
+            rules_panel_container.border_title = _rules_panel_title(view.active_view)
+            rules_panel.update(_render_rules_panel(view, flashes))
+            files_panel_container.border_title = _files_panel_title(view.active_view)
+            files_panel.update(_render_files_panel(view, flashes))
+            findings_panel_container.border_title = _findings_panel_title(view.active_view)
+            if view.active_view == "agent":
+                findings_panel.update(agent_summary_text(view))
+            else:
+                f_limit = 16 if view.active_view == "findings" else 5
+                findings_panel.update(
+                    render_tui_lines(findings_tui_lines(view, limit=f_limit), flashes, mode="rich")
+                )
             activity_timeline.update(render_tui_lines(sections["activity"], flashes, mode="rich"))
+            legend.update(render_tui_lines(_color_legend_tui_lines(), flashes, mode="rich"))
+            activity_panel_container.display = view.active_view != "agent"
 
     return RunApp(controller)
 
@@ -338,6 +350,35 @@ _AGENT_STATUS_LABELS = {
     "max_steps_exhausted": "max steps exhausted",
     "failed": "failed",
 }
+_PRIORITY_COLORS: dict[str, str] = {
+    "P0": "bold #ef4444",
+    "P1": "#f59e0b",
+    "P2": "#60a5fa",
+    "P3": "#6b7280",
+}
+_FINDING_STATE_COLORS: dict[str, str] = {
+    "untriaged": "#f59e0b",
+    "reopened": "#f59e0b",
+    "confirmed": "bold #ef4444",
+    "fixed_pending_verification": "#60a5fa",
+    "closed": "#6b7280",
+}
+_ACTIVITY_LABEL_COLORS: dict[str, str] = {
+    "stdout": "#34d399",
+    "stderr": "#f59e0b",
+    "event": "#60a5fa",
+}
+_STATE_COLORS: dict[str, str] = {
+    "stale": "#f59e0b",
+    "pending": "#60a5fa",
+    "reviewed": "#6b7280",
+    "covered": "#6b7280",
+    "done": "#6b7280",
+    "superseded": "#4b5563",
+}
+_RULE_ID_COLOR = "#a78bfa"
+_FINDING_ID_COLOR = "#93c5fd"
+_FIND_COUNT_COLOR = "#c084fc"
 _NEXT_ACTION_GATE_INDEX = {
     "run_review": 1,
     "triage_findings": 2,
@@ -410,6 +451,7 @@ class TuiField:
     key: str
     display: str
     compare: object
+    color: str | None = None
 
 
 @dataclass(frozen=True)
@@ -868,7 +910,43 @@ def header_title_text() -> str:
 
 
 def header_status_text(view: RunViewState) -> str:
-    return f"{view.status_summary} · {view.gate_label} · {view.active_gate.title}"
+    blocker = " · finalize BLOCKED" if view.state_class == "panel-blocked" else ""
+    cov = view.coverage
+    bar = _progress_bar(cov.completed, cov.total)
+    parts = [f"Coverage {cov.percent}% {bar} {cov.completed}/{cov.total}"]
+    if cov.pending:
+        parts.append(f"pend {cov.pending}")
+    if cov.stale:
+        parts.append(f"stale {cov.stale}")
+    coverage = "   ".join(parts)
+    return (
+        f"{view.session_short_id} · {view.status_summary}{blocker} · {view.gate_label}   {coverage}"
+    )
+
+
+def header_agent_text(view: RunViewState) -> str:
+    summary = view.agent_summary
+    parts = [f"Agent    {summary.command}"]
+    if view.step_label:
+        parts.append(view.step_label)
+    parts.append(summary.output)
+    parts.append(f"timeout {summary.timeout}")
+    return " · ".join(parts)
+
+
+def header_coverage_text(view: RunViewState) -> str:
+    cov = view.coverage
+    bar = _progress_bar(cov.completed, cov.total)
+    parts = [
+        f"Coverage {cov.percent}% {bar}  {cov.completed}/{cov.total}",
+    ]
+    if cov.pending:
+        parts.append(f"pending {cov.pending}")
+    if cov.stale:
+        parts.append(f"stale {cov.stale}")
+    if view.open_findings:
+        parts.append(f"open {view.open_findings}")
+    return "   ".join(parts)
 
 
 def header_meta_text(view: RunViewState) -> str:
@@ -876,7 +954,13 @@ def header_meta_text(view: RunViewState) -> str:
 
 
 def header_text(view: RunViewState) -> str:
-    return "\n".join([header_title_text(), header_status_text(view), header_meta_text(view)])
+    return "\n".join(
+        [
+            header_title_text(),
+            header_status_text(view),
+            header_agent_text(view),
+        ]
+    )
 
 
 def progress_text(snapshot: RunSnapshot, *, activity_frame: int = 0) -> str:
@@ -909,11 +993,8 @@ def update_tui_render_state(
 def tui_render_sections(view: RunViewState) -> dict[str, tuple[TuiLine, ...]]:
     return {
         "header_status": header_status_tui_lines(view),
-        "header_meta": header_meta_tui_lines(view),
-        "finalize_path": finalize_path_tui_lines(view),
+        "header_agent": header_agent_tui_lines(view),
         "queue": queue_tui_lines(view),
-        "agent": agent_summary_tui_lines(view),
-        "session": session_summary_tui_lines(view),
         "activity": activity_tui_lines(view),
     }
 
@@ -933,21 +1014,62 @@ def render_tui_lines(
             if line_index:
                 rendered.append("\n")
             for field in line.fields:
-                style = _FLASH_STYLE if field.key in flash_keys else None
+                style: str | None = None
+                if field.key in flash_keys:
+                    style = _FLASH_STYLE
+                elif field.color is not None:
+                    style = field.color
                 rendered.append(field.display, style=style)
         return rendered
     return "\n".join("".join(field.display for field in line.fields) for line in lines)
 
 
 def header_status_tui_lines(view: RunViewState) -> tuple[TuiLine, ...]:
+    blocker = " · finalize BLOCKED" if view.state_class == "panel-blocked" else ""
+    cov = view.coverage
+    bar = _progress_bar(cov.completed, cov.total)
+    coverage_parts = [f"{cov.percent}% {bar} {cov.completed}/{cov.total}"]
+    if cov.pending:
+        coverage_parts.append(f"pend {cov.pending}")
+    if cov.stale:
+        coverage_parts.append(f"stale {cov.stale}")
+    coverage_text = "   ".join(coverage_parts)
     return (
         TuiLine(
             (
-                _field("header.status.summary", view.status_summary),
-                _literal(" · ", key="header.status.sep.1"),
-                _field("header.status.gate", view.gate_label, compare=view.active_gate.index),
-                _literal(" · ", key="header.status.sep.2"),
-                _field("header.status.active_gate", view.active_gate.title),
+                _field("header.session", view.session_short_id),
+                _literal(" · ", key="header.sep.s1"),
+                _field("header.status", view.status_summary),
+                _field("header.blocker", blocker, compare=blocker),
+                _literal(" · ", key="header.sep.s2"),
+                _field("header.gate", view.gate_label, compare=view.active_gate.index),
+                _literal("   ", key="header.sep.s3"),
+                _field("header.cov", coverage_text, compare=(cov.percent, cov.total)),
+            )
+        ),
+    )
+
+
+def header_agent_tui_lines(view: RunViewState) -> tuple[TuiLine, ...]:
+    summary = view.agent_summary
+    parts: list[str] = [summary.command]
+    if view.step_label:
+        parts.append(view.step_label)
+    parts.append(summary.output)
+    parts.append(f"timeout {summary.timeout}")
+    return (
+        TuiLine(
+            (
+                _literal("Agent    ", key="header.agent.label"),
+                _field(
+                    "header.agent.body",
+                    " · ".join(parts),
+                    compare=(
+                        view.agent_summary.command,
+                        view.step_label,
+                        _agent_output_compare(view.agent_summary.output),
+                    ),
+                ),
             )
         ),
     )
@@ -992,10 +1114,10 @@ def finalize_path_tui_lines(view: RunViewState) -> tuple[TuiLine, ...]:
     return tuple(lines)
 
 
-def queue_tui_lines(view: RunViewState, *, limit: int = 6) -> tuple[TuiLine, ...]:
+def queue_tui_lines(view: RunViewState, *, limit: int = 4) -> tuple[TuiLine, ...]:
     entries = actionable_queue_entries(view, limit=limit)
     if not entries:
-        return (TuiLine((_field("queue.empty", "no actionable cells"),)),)
+        return ()
     lines: list[TuiLine] = []
     for index, entry in enumerate(entries, start=1):
         prefix = f"queue.{entry.cell_id}"
@@ -1003,10 +1125,24 @@ def queue_tui_lines(view: RunViewState, *, limit: int = 6) -> tuple[TuiLine, ...
             TuiLine(
                 (
                     _field(f"{prefix}.rank", f"{index:>2}. ", compare=index),
-                    _field(f"{prefix}.priority", f"{entry.priority_label} "),
-                    _field(f"{prefix}.state", f"{entry.state:<8}", compare=entry.state),
+                    _colored_field(
+                        f"{prefix}.priority",
+                        f"{entry.priority_label} ",
+                        _PRIORITY_COLORS.get(entry.priority_label, ""),
+                    ),
+                    _colored_field(
+                        f"{prefix}.state",
+                        f"{entry.state:<8}",
+                        _STATE_COLORS.get(entry.state, ""),
+                        compare=entry.state,
+                    ),
                     _literal(" ", key=f"{prefix}.state_space"),
-                    _field(f"{prefix}.rule", f"{entry.rule_id:<18}", compare=entry.rule_id),
+                    _colored_field(
+                        f"{prefix}.rule",
+                        f"{entry.rule_id:<18}",
+                        _RULE_ID_COLOR,
+                        compare=entry.rule_id,
+                    ),
                     _literal(" ", key=f"{prefix}.rule_space"),
                     _field(f"{prefix}.file", _summarize_text(entry.file_path, limit=44)),
                     _literal(" · ", key=f"{prefix}.why_sep"),
@@ -1091,9 +1227,57 @@ def activity_tui_lines(view: RunViewState) -> tuple[TuiLine, ...]:
                 (
                     _field(f"activity.{identity}.time", event.time, compare="timestamp"),
                     _literal(" ", key=f"activity.{identity}.time_space"),
-                    _field(f"activity.{identity}.label", event.label, compare=event.label),
+                    _colored_field(
+                        f"activity.{identity}.label",
+                        event.label,
+                        _ACTIVITY_LABEL_COLORS.get(event.label, ""),
+                    ),
                     _field(
                         f"activity.{identity}.detail", suffix, compare=(event.label, event.detail)
+                    ),
+                )
+            )
+        )
+    return tuple(lines)
+
+
+def findings_tui_lines(view: RunViewState, *, limit: int = 5) -> tuple[TuiLine, ...]:
+    findings = tuple(finding for finding in view.coverage_projection.findings if finding.actionable)
+    if not findings:
+        return ()
+    lines: list[TuiLine] = []
+    for finding in findings[:limit]:
+        prefix = f"finding.{finding.finding_id}"
+        state_color = _FINDING_STATE_COLORS.get(finding.state, "")
+        lines.append(
+            TuiLine(
+                (
+                    _colored_field(
+                        f"{prefix}.id",
+                        f"{finding.finding_id:<12}",
+                        _FINDING_ID_COLOR,
+                        compare=finding.finding_id,
+                    ),
+                    _colored_field(
+                        f"{prefix}.state",
+                        f"{finding.state:<28}",
+                        state_color,
+                        compare=finding.state,
+                    ),
+                    _colored_field(
+                        f"{prefix}.rule",
+                        f"{finding.rule_id:<18}",
+                        _RULE_ID_COLOR,
+                        compare=finding.rule_id,
+                    ),
+                    _field(
+                        f"{prefix}.file",
+                        _summarize_text(finding.file_path, limit=36),
+                    ),
+                    _literal(" · ", key=f"{prefix}.sep"),
+                    _field(
+                        f"{prefix}.content",
+                        _summarize_text(finding.content, limit=72),
                     ),
                 )
             )
@@ -1139,6 +1323,14 @@ def activity_tui_render(
 
 def _field(key: str, display: str, *, compare: object | None = None) -> TuiField:
     return TuiField(key=key, display=display, compare=display if compare is None else compare)
+
+
+def _colored_field(
+    key: str, display: str, color: str, *, compare: object | None = None
+) -> TuiField:
+    return TuiField(
+        key=key, display=display, color=color, compare=display if compare is None else compare
+    )
 
 
 def _literal(display: str, *, key: str) -> TuiField:
@@ -1199,23 +1391,21 @@ def _activity_identity(event: TimelineEvent) -> str:
 
 
 def titled_section(title: str, body: str) -> str:
-    return f"{title}\n{body}" if body else title
+    return f"{title}\n{body}" if body else ""
 
 
 def compact_dashboard_text(snapshot: RunSnapshot, events: tuple[RunEvent, ...] = ()) -> str:
     view = dashboard_state(snapshot, events)
-    return "\n".join(
-        [
-            header_text(view),
-            titled_section(PANEL_TITLES["finalize_path"], finalize_path_text(view)),
-            titled_section(PANEL_TITLES["queue"], queue_text(view)),
-            active_detail_text(view),
-            titled_section(PANEL_TITLES["agent"], agent_summary_text(view)),
-            titled_section(PANEL_TITLES["session"], session_summary_text(view)),
-            titled_section(PANEL_TITLES["activity"], activity_text(view)),
-            footer_text(),
-        ]
-    )
+    parts = [
+        header_text(view),
+        titled_section(PANEL_TITLES["queue"], queue_text(view)),
+        titled_section(PANEL_TITLES["rules"], rule_coverage_text(view)),
+        titled_section(PANEL_TITLES["files"], file_hotlist_text(view)),
+        titled_section(PANEL_TITLES["findings"], finding_projection_text(view)),
+        titled_section(PANEL_TITLES["activity"], activity_text(view)),
+        footer_text(),
+    ]
+    return "\n".join(part for part in parts if part)
 
 
 def finalize_path_text(view: RunViewState) -> str:
@@ -1251,23 +1441,137 @@ def actionable_queue_entries(
     return entries[:limit] if limit is not None else entries
 
 
-def queue_text(view: RunViewState, *, limit: int = 6) -> str:
+def queue_text(view: RunViewState, *, limit: int = 4) -> str:
     return render_tui_lines(queue_tui_lines(view, limit=limit))
 
 
-def rule_coverage_text(view: RunViewState, *, limit: int = 8) -> str:
+def rule_coverage_text(view: RunViewState, *, limit: int = 5) -> str:
     if not view.coverage_projection.rules:
         return "no rule coverage details"
     return "\n".join(_format_rule_summary(rule) for rule in view.coverage_projection.rules[:limit])
 
 
-def file_hotlist_text(view: RunViewState, *, limit: int = 8) -> str:
+def rules_tui_lines(view: RunViewState, *, limit: int = 5) -> tuple[TuiLine, ...]:
+    rules = view.coverage_projection.rules[:limit]
+    if not rules:
+        return ()
+    lines: list[TuiLine] = []
+    for rule in rules:
+        prefix = f"rule.{rule.rule_id}"
+        pend_color = _STATE_COLORS.get("pending", "")
+        stale_color = _STATE_COLORS.get("stale", "")
+        lines.append(
+            TuiLine(
+                (
+                    _colored_field(
+                        f"{prefix}.priority",
+                        rule.priority_label,
+                        _PRIORITY_COLORS.get(rule.priority_label, ""),
+                        compare=rule.priority_label,
+                    ),
+                    _literal(" ", key=f"{prefix}.p_space"),
+                    _colored_field(
+                        f"{prefix}.id",
+                        f"{rule.rule_id:<18}",
+                        _RULE_ID_COLOR,
+                        compare=rule.rule_id,
+                    ),
+                    _field(
+                        f"{prefix}.reviewed",
+                        f"{rule.reviewed}/{rule.total}",
+                        compare=rule.reviewed,
+                    ),
+                    _literal(" · ", key=f"{prefix}.sep1"),
+                    _colored_field(
+                        f"{prefix}.pend",
+                        str(rule.pending),
+                        pend_color,
+                        compare=rule.pending,
+                    ),
+                    _literal("/", key=f"{prefix}.slash1"),
+                    _colored_field(
+                        f"{prefix}.stale",
+                        str(rule.stale),
+                        stale_color,
+                        compare=rule.stale,
+                    ),
+                    _literal("/", key=f"{prefix}.slash2"),
+                    _colored_field(
+                        f"{prefix}.findings",
+                        str(rule.actionable_findings),
+                        _FIND_COUNT_COLOR,
+                        compare=rule.actionable_findings,
+                    ),
+                )
+            )
+        )
+    return tuple(lines)
+
+
+def file_hotlist_text(view: RunViewState, *, limit: int = 5) -> str:
     if not view.coverage_projection.files:
         return "no file hot spots"
     return "\n".join(_format_file_summary(file) for file in view.coverage_projection.files[:limit])
 
 
-def finding_projection_text(view: RunViewState, *, limit: int = 8) -> str:
+def files_tui_lines(view: RunViewState, *, limit: int = 5) -> tuple[TuiLine, ...]:
+    files = view.coverage_projection.files[:limit]
+    if not files:
+        return ()
+    lines: list[TuiLine] = []
+    for f_entry in files:
+        prefix = f"file.{_activity_identity(TimelineEvent('', f_entry.file_path, ''))}"
+        highest = f_entry.highest_priority_label
+        pend_color = _STATE_COLORS.get("pending", "")
+        stale_color = _STATE_COLORS.get("stale", "")
+        lines.append(
+            TuiLine(
+                (
+                    _colored_field(
+                        f"{prefix}.priority",
+                        highest,
+                        _PRIORITY_COLORS.get(highest, ""),
+                        compare=highest,
+                    ),
+                    _literal(" ", key=f"{prefix}.p_space"),
+                    _field(
+                        f"{prefix}.path",
+                        _summarize_text(f_entry.file_path, limit=44),
+                        compare=f_entry.file_path,
+                    ),
+                    _field(
+                        f"{prefix}.reviewed",
+                        f" {f_entry.reviewed}/{f_entry.total}",
+                        compare=f_entry.reviewed,
+                    ),
+                    _literal(" · ", key=f"{prefix}.sep1"),
+                    _colored_field(
+                        f"{prefix}.pend",
+                        str(f_entry.pending),
+                        pend_color,
+                        compare=f_entry.pending,
+                    ),
+                    _literal("/", key=f"{prefix}.slash1"),
+                    _colored_field(
+                        f"{prefix}.stale",
+                        str(f_entry.stale),
+                        stale_color,
+                        compare=f_entry.stale,
+                    ),
+                    _literal("/", key=f"{prefix}.slash2"),
+                    _colored_field(
+                        f"{prefix}.findings",
+                        str(f_entry.actionable_findings),
+                        _FIND_COUNT_COLOR,
+                        compare=f_entry.actionable_findings,
+                    ),
+                )
+            )
+        )
+    return tuple(lines)
+
+
+def finding_projection_text(view: RunViewState, *, limit: int = 5) -> str:
     findings = tuple(finding for finding in view.coverage_projection.findings if finding.actionable)
     if not findings:
         return "no open actionable findings"
@@ -1286,16 +1590,73 @@ def cells_text(
     return "\n".join(_format_cell_entry(entry) for entry in entries[:limit])
 
 
+def _rules_panel_title(active_view: str) -> str:
+    return {
+        "overview": PANEL_TITLES["rules"],
+        "files": PANEL_TITLES["files"],
+        "rules": PANEL_TITLES["rules"],
+        "cells": "Cells",
+        "findings": "",
+        "agent": "",
+    }.get(active_view, PANEL_TITLES["rules"])
+
+
+def _files_panel_title(active_view: str) -> str:
+    return {
+        "overview": PANEL_TITLES["files"],
+        "files": "Selected file detail",
+        "rules": "Selected rule detail",
+        "cells": "",
+        "findings": "",
+        "agent": "",
+    }.get(active_view, PANEL_TITLES["files"])
+
+
+def _findings_panel_title(active_view: str) -> str:
+    return {
+        "overview": PANEL_TITLES["findings"],
+        "files": "",
+        "rules": "",
+        "cells": "",
+        "findings": PANEL_TITLES["findings"],
+        "agent": PANEL_TITLES["agent"],
+    }.get(active_view, PANEL_TITLES["findings"])
+
+
+def _render_rules_panel(view: RunViewState, flashes: dict[str, TuiFlash]) -> Any:
+    if view.active_view == "files":
+        return render_tui_lines(files_tui_lines(view, limit=16), flashes, mode="rich")
+    if view.active_view == "rules":
+        return render_tui_lines(rules_tui_lines(view, limit=16), flashes, mode="rich")
+    if view.active_view == "cells":
+        return cells_text(view, limit=20)
+    if view.active_view in ("findings", "agent"):
+        return ""
+    return render_tui_lines(rules_tui_lines(view, limit=5), flashes, mode="rich")
+
+
+def _render_files_panel(view: RunViewState, flashes: dict[str, TuiFlash]) -> Any:
+    if view.active_view == "files":
+        return "select a file to see rule states"
+    if view.active_view == "rules":
+        return "select a rule to see file states"
+    if view.active_view in ("cells", "findings", "agent"):
+        return ""
+    return render_tui_lines(files_tui_lines(view, limit=5), flashes, mode="rich")
+
+
 def overview_text(view: RunViewState, *, width: int = 120) -> str:
     section_names = responsive_overview_sections(width)
     rendered: list[str] = []
     for name in section_names:
         if name == "status":
             rendered.append(header_text(view))
-        elif name == "coverage":
-            rendered.append(titled_section(PANEL_TITLES["session"], session_summary_text(view)))
         elif name == "blockers":
-            rendered.append(titled_section(PANEL_TITLES["finalize_path"], finalize_path_text(view)))
+            if view.state_class == "panel-blocked":
+                active_gate = view.active_gate
+                rendered.append(
+                    titled_section("Finalize blocked", f"{active_gate.title}: {active_gate.detail}")
+                )
         elif name == "queue":
             rendered.append(titled_section(PANEL_TITLES["queue"], queue_text(view)))
         elif name == "rules":
@@ -1306,29 +1667,20 @@ def overview_text(view: RunViewState, *, width: int = 120) -> str:
             rendered.append(titled_section(PANEL_TITLES["findings"], finding_projection_text(view)))
         elif name == "activity":
             rendered.append(titled_section(PANEL_TITLES["activity"], activity_text(view)))
-    return "\n".join(rendered)
+    return "\n".join(part for part in rendered if part)
 
 
 def responsive_overview_sections(width: int) -> tuple[str, ...]:
     if width >= 140:
-        return ("status", "coverage", "blockers", "queue", "rules", "files", "findings", "activity")
+        return ("status", "blockers", "queue", "rules", "files", "findings", "activity")
     if width >= 100:
-        return ("status", "coverage", "blockers", "queue", "rules", "files", "activity")
-    return ("status", "coverage", "blockers", "queue", "activity")
-
-
-def detail_panel_title(view: RunViewState) -> str:
-    return {
-        "overview": "Overview projections",
-        "files": PANEL_TITLES["files"],
-        "rules": PANEL_TITLES["rules"],
-        "cells": "Cells",
-        "findings": PANEL_TITLES["findings"],
-        "agent": PANEL_TITLES["agent"],
-    }.get(view.active_view, "Overview projections")
+        return ("status", "blockers", "queue", "rules", "files", "activity")
+    return ("status", "blockers", "queue", "activity")
 
 
 def active_detail_text(view: RunViewState) -> str:
+    if view.active_view == "overview":
+        return ""
     if view.active_view == "files":
         return file_hotlist_text(view, limit=12)
     if view.active_view == "rules":
@@ -1339,13 +1691,7 @@ def active_detail_text(view: RunViewState) -> str:
         return finding_projection_text(view, limit=12)
     if view.active_view == "agent":
         return agent_summary_text(view)
-    return "\n\n".join(
-        [
-            titled_section(PANEL_TITLES["rules"], rule_coverage_text(view, limit=4)),
-            titled_section(PANEL_TITLES["files"], file_hotlist_text(view, limit=4)),
-            titled_section(PANEL_TITLES["findings"], finding_projection_text(view, limit=4)),
-        ]
-    )
+    return ""
 
 
 def _entry_is_actionable(entry: QueueEntry) -> bool:
@@ -1478,9 +1824,21 @@ def _events_text(events: tuple[RunEvent, ...]) -> str:  # pyright: ignore[report
 
 
 def footer_text() -> str:
+    return "q stop | r refresh | 1-5 views | Ctrl-C interrupt"
+
+
+def _color_legend_tui_lines() -> tuple[TuiLine, ...]:
     return (
-        "1 overview | 2 files | 3 rules | 4 cells | 5 findings | a agent | "
-        "q stop after current step | r refresh | h help | Ctrl-C interrupt"
+        TuiLine(
+            (
+                _literal("legend  ", key="legend.label"),
+                _colored_field("legend.pend", "pend", _STATE_COLORS.get("pending", "")),
+                _literal(" / ", key="legend.s1"),
+                _colored_field("legend.stale", "stale", _STATE_COLORS.get("stale", "")),
+                _literal(" / ", key="legend.s2"),
+                _colored_field("legend.find", "find", _FIND_COUNT_COLOR),
+            )
+        ),
     )
 
 

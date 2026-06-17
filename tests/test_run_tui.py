@@ -25,7 +25,6 @@ from review_gauntlet.run_controller import (
     SessionCommandResult,
 )
 from review_gauntlet.run_tui import (
-    PANEL_TITLES,
     actionable_finding_summary,
     activity_text,
     agent_activity_text,
@@ -70,11 +69,6 @@ def _styled_fragments(rendered: object) -> tuple[str, ...]:
     plain = cast(str, text.plain)
     spans = text.spans
     return tuple(plain[span.start : span.end] for span in spans)
-
-
-def _styled_fragments_styles(rendered: object) -> tuple[object, ...]:
-    text = cast(Any, rendered)
-    return tuple(span.style for span in text.spans)
 
 
 def test_should_use_tui_selection_rules() -> None:
@@ -175,10 +169,10 @@ def test_dashboard_header_contains_human_run_state_and_short_session() -> None:
 
     assert "Review Gauntlet" in text
     assert "RGS-prog…7890" in text
-    assert "RUNNING · gate 1/6 · Review coverage" in text
+    assert "RGS-prog…7890 · RUNNING · gate 1/6" in text
     assert "elapsed 02:05" not in text
-    assert "agent step 4" not in text
-    assert "agent agent" in text
+    assert "agent step 4" in text
+    assert "no output yet" in text
     assert "current cells" not in text
 
 
@@ -206,10 +200,9 @@ def test_header_omits_timeout_and_agent_summary_keeps_quiet_timeout_artifact_liv
     operation = run_tui.current_operation_text(view)
     activity = activity_text(view)
 
-    assert "quiet 7s" in header
-    assert "timeout" not in header
-    assert "53s" not in header
-    assert "last output 7s ago" not in header
+    assert "quiet 7s" not in header
+    assert "last output 7s ago" in header
+    assert "timeout in 53s" in header
     assert "agent alive no output" not in activity
     assert "waiting for run activity" in activity
     assert "artifact .review-gauntlet/runs/run-1/activity.jsonl" in operation
@@ -288,13 +281,12 @@ def test_session_coverage_flash_marks_only_changed_completed_count_fragment() ->
     state = _advance_flash_state(state, dashboard_state(first, ()), now=0.0)
     second_view = dashboard_state(second, ())
     state = _advance_flash_state(state, second_view, now=0.25)
-    rendered = run_tui.session_summary_tui_render(second_view, state.flashes, mode="rich")
+    rendered = run_tui.render_tui_lines(
+        run_tui.header_status_tui_lines(second_view), state.flashes, mode="rich"
+    )
 
-    assert "session.coverage.completed" in _flash_keys(state)
-    assert "session.coverage.total" not in _flash_keys(state)
-    assert _styled_fragments(rendered) == ("1",)
-    assert _styled_fragments_styles(rendered) == ("bold #fef3c7 on #3f3520",)
-    assert cast(Any, rendered).plain.splitlines()[0] == "Coverage  50%   1 / 2"
+    assert "header.cov" in _flash_keys(state)
+    assert "50% [████████████░░░░░░░░░░░░] 1/2   pend 1" in rendered.plain
 
 
 def test_agent_step_flash_marks_only_changed_step_value_fragment() -> None:
@@ -305,11 +297,12 @@ def test_agent_step_flash_marks_only_changed_step_value_fragment() -> None:
     state = _advance_flash_state(state, dashboard_state(first, ()), now=0.0)
     second_view = dashboard_state(second, ())
     state = _advance_flash_state(state, second_view, now=0.25)
-    rendered = run_tui.session_summary_tui_render(second_view, state.flashes, mode="rich")
+    rendered = run_tui.render_tui_lines(
+        run_tui.header_agent_tui_lines(second_view), state.flashes, mode="rich"
+    )
 
-    assert _flash_keys(state) == {"session.agent_step.value"}
-    assert _styled_fragments(rendered) == ("2",)
-    assert "Agent step 2" in cast(Any, rendered).plain
+    assert _flash_keys(state) == {"header.agent.body"}
+    assert "agent step 2" in rendered.plain
 
 
 def test_meaningful_state_kind_and_timeout_kind_transitions_flash_once() -> None:
@@ -362,9 +355,7 @@ def test_meaningful_state_kind_and_timeout_kind_transitions_flash_once() -> None
     state = _advance_flash_state(state, dashboard_state(running, ()), now=0.0)
     state = _advance_flash_state(state, dashboard_state(quiet_countdown, ()), now=0.25)
 
-    assert "header.meta.liveness" in _flash_keys(state)
-    assert "agent.status.value" in _flash_keys(state)
-    assert "agent.timeout.value" in _flash_keys(state)
+    assert "header.agent.body" in _flash_keys(state)
 
     state = _advance_flash_state(state, dashboard_state(quiet_countdown_drift, ()), now=2.0)
 
@@ -407,16 +398,10 @@ def test_finalize_findings_and_activity_flash_at_value_or_new_row_granularity() 
 
     second_view = dashboard_state(second, added_events)
     state = _advance_flash_state(state, second_view, now=0.5)
-    finalize_rendered = run_tui.finalize_path_tui_render(second_view, state.flashes, mode="rich")
-    session_rendered = run_tui.session_summary_tui_render(second_view, state.flashes, mode="rich")
     activity_rendered = run_tui.activity_tui_render(second_view, state.flashes, mode="rich")
 
-    assert "session.findings.open" in _flash_keys(state)
-    assert "finalize.gate.2.state" in _flash_keys(state)
-    assert "finalize.gate.2.detail" in _flash_keys(state)
+    assert "header.gate" in _flash_keys(state)
     assert "activity.event-failed-command_failed.detail" in _flash_keys(state)
-    assert "1" in _styled_fragments(session_rendered)
-    assert "running" in _styled_fragments(finalize_rendered)
     assert " - failed command_failed" in _styled_fragments(activity_rendered)
 
 
@@ -439,7 +424,8 @@ def test_liveness_omits_quiet_heartbeat_rows_across_animation_frames() -> None:
 
         assert "agent alive no output" not in activity
         assert "waiting for run activity" in activity
-        assert "quiet 9s" in run_tui.header_text(view)
+        assert "last output 9s ago" in run_tui.header_text(view)
+        assert "quiet 9s" not in run_tui.header_text(view)
         assert "status  quiet 9s" in run_tui.agent_summary_text(view)
         assert "output  last output 9s ago" in run_tui.agent_summary_text(view)
 
@@ -512,14 +498,13 @@ def test_compact_dashboard_text_uses_shared_panel_titles() -> None:
     )
     compact = compact_dashboard_text(snapshot)
 
-    for title in PANEL_TITLES.values():
+    for title in ("Review Gauntlet", "Rule coverage", "File hotlist", "Findings", "Activity"):
         assert title in compact
 
-    assert compact.index("Review Gauntlet") < compact.index("Finalize checklist")
-    assert compact.index("Finalize checklist") < compact.index("Agent")
-    assert compact.index("Agent") < compact.index("Session")
-    assert compact.index("Session") < compact.index("Activity")
-    assert "Next to finalize" not in compact
+    assert compact.index("Review Gauntlet") < compact.index("Rule coverage")
+    assert compact.index("Rule coverage") < compact.index("File hotlist")
+    assert compact.index("File hotlist") < compact.index("Findings")
+    assert compact.index("Findings") < compact.index("Activity")
 
 
 @pytest.mark.parametrize(
@@ -637,8 +622,7 @@ def test_finalized_snapshot_without_session_state_marks_checkpoint_done() -> Non
     assert checkpoint_gate.title == "Finalize checkpoint"
     assert checkpoint_gate.state == "done"
     assert checkpoint_gate.detail == "complete"
-    assert "FINALIZED · gate 6/6 · Finalize checkpoint" in rendered
-    assert "✓ Finalize checkpoint      done    complete" in rendered
+    assert "none · FINALIZED · gate 6/6" in rendered
 
 
 @pytest.mark.parametrize(
@@ -726,16 +710,16 @@ def test_compact_dashboard_text_keeps_required_sections() -> None:
     compact = compact_dashboard_text(snapshot)
 
     assert "Review Gauntlet" in compact
-    assert "Finalize checklist" in compact
+    assert "Finalize checklist" not in compact
     assert "Next to finalize" not in compact
     assert "Session metrics" not in compact
     assert "Current operation" not in compact
     assert "Finalize path" not in compact
-    assert "Agent" in compact
-    assert "Session" in compact
-    assert "Review coverage" in compact
+    assert "Agent\n" not in compact
+    assert "Session" not in compact
+    assert "Rule coverage" in compact
     assert "Activity" in compact
-    assert "q stop after current step" in compact
+    assert "q stop |" in compact
 
 
 def test_new_dashboard_checklist_rows_and_blocker_classification_hide_internal_names() -> None:
@@ -763,7 +747,7 @@ def test_new_dashboard_checklist_rows_and_blocker_classification_hide_internal_n
         ]
     )
 
-    assert "RUNNING · gate 5/6 · Final checks" in text
+    assert "RGS-rede…7890 · RUNNING · gate 5/6" in text
     assert "Current   final checks" in text
     assert "Next to finalize" not in text
     for title in (
@@ -819,8 +803,7 @@ def test_finalize_checklist_uses_next_required_action_for_active_gate(
 
     assert view.active_gate.index == gate_index
     assert view.active_gate.title == gate_title
-    assert f"RUNNING · gate {gate_index}/6 · {gate_title}" in rendered
-    assert f"Current   {gate_title.lower()}" in rendered
+    assert f"RGS-next…tion · RUNNING · gate {gate_index}/6" in rendered
     if "_" in next_required_action:
         assert next_required_action not in rendered
 
@@ -849,8 +832,7 @@ def test_finalize_checklist_uses_next_required_action_for_active_gate_with_stale
 
     assert view.active_gate.index == 4
     assert view.active_gate.title == "Verify fixes"
-    assert "RUNNING · gate 4/6 · Verify fixes" in rendered
-    assert "Current   verify fixes" in rendered
+    assert "RGS-next…tale · RUNNING · gate 4/6" in rendered
     assert "Review coverage" in checklist
     assert "3 / 5 reviewed, 2 pending" in checklist
     assert "run_verify_fixes" not in rendered
@@ -875,7 +857,7 @@ def test_unknown_next_required_action_preserves_derived_active_gate() -> None:
 
     assert view.active_gate.index == 1
     assert view.active_gate.title == "Review coverage"
-    assert "RUNNING · gate 1/6 · Review coverage" in rendered
+    assert "RGS-unkn…tion · RUNNING · gate 1/6" in rendered
     assert "custom_internal_action" not in rendered
 
 
@@ -1235,10 +1217,11 @@ def test_timeout_with_finalize_blockers_remains_blocked_without_manual_finalize_
 def test_footer_lists_only_implemented_controls() -> None:
     footer = footer_text()
 
-    assert "q stop after current step" in footer
+    assert "q stop |" in footer
     assert "r refresh" in footer
-    assert "h help" in footer
+    assert "1-5 views" in footer
     assert "Ctrl-C interrupt" in footer
+    assert "h help" not in footer
     assert "prompt" not in footer
     assert "artifacts" not in footer
 
@@ -1261,22 +1244,22 @@ def test_run_tui_source_uses_border_titles_and_semantic_title_styles() -> None:
 def test_summary_panel_containers_have_scoped_equal_height_layout_rule() -> None:
     source = Path("src/review_gauntlet/run_tui.py").read_text(encoding="utf-8")
 
-    assert "#agent_panel_container, #session_panel_container" in source
+    assert "#rules_panel_container, #files_panel_container" in source
     assert "#agent_panel { width: 1fr; }" not in source
     assert "#session_panel { width: 1fr; }" not in source
     assert "#finalize_path_panel { height: 1fr; }" not in source
-    assert "#activity_panel { height: 1fr; }" in source
+    assert "#findings_panel_container, #activity_panel_container" in source
+    assert "#activity_panel_container { height: 1fr; }" not in source
 
     header_rule = source.split("#session_header {", maxsplit=1)[1].split("}", maxsplit=1)[0]
     assert "border: round $primary;" in header_rule
     assert "height: auto;" in header_rule
 
-    summary_rule = source.split("#agent_panel_container, #session_panel_container", maxsplit=1)[1]
-    summary_rule = summary_rule.split(".panel {", maxsplit=1)[0]
+    summary_rule = source.split("#rules_panel_container, #files_panel_container", maxsplit=1)[1]
+    summary_rule = summary_rule.split("#bottom_row", maxsplit=1)[0]
     assert "width: 1fr;" in summary_rule
-    assert "#agent_panel_container { height: auto; }" in summary_rule
-    assert "#session_panel_container { height: 100%; }" in summary_rule
-    assert "height: 1fr;" not in summary_rule
+    assert "height: 1fr;" in summary_rule
+    assert "#rules_panel, #files_panel" in summary_rule
 
     panel_rule = source.split(".panel {", maxsplit=1)[1].split("}", maxsplit=1)[0]
     assert "height: auto;" in panel_rule
@@ -1325,10 +1308,10 @@ def test_run_tui_source_styles_header_border_title_with_brand_accent_and_state_s
     assert "#session_header {" in source
     assert "border-title-color: $brand;" in source
     assert "border-title-style: bold;" in source
-    assert ".panel-active #header_status { color: $success; }" in source
-    assert ".panel-blocked #header_status { color: $warning; }" in source
-    assert ".panel-failed #header_status { color: $error; }" in source
-    assert ".panel-finalized #header_status { color: $success; }" in source
+    assert ".panel-active #header_status_line { color: $success; }" in source
+    assert ".panel-blocked #header_status_line { color: $warning; }" in source
+    assert ".panel-failed #header_status_line { color: $error; }" in source
+    assert ".panel-finalized #header_status_line { color: $success; }" in source
 
 
 def test_run_tui_source_defines_explicit_dark_dashboard_backgrounds() -> None:
@@ -1337,7 +1320,7 @@ def test_run_tui_source_defines_explicit_dark_dashboard_backgrounds() -> None:
     assert "$dashboard-bg: #0f1117;" in source
     assert "$dashboard-surface: #151923;" in source
     assert "Screen { layout: vertical; background: $dashboard-bg; }" in source
-    assert "#body { height: 1fr; padding: 1; background: $dashboard-bg; }" in source
+    assert "#body { height: 1fr; padding: 0 1; background: $dashboard-bg; }" in source
     assert "#session_header {" in source
     assert "background: $dashboard-surface;" in source
     assert ".panel {" in source
@@ -1494,15 +1477,15 @@ def test_overview_renders_projections_without_full_matrix_grid() -> None:
 def test_responsive_overview_sections_prioritize_narrow_operational_status() -> None:
     assert run_tui.responsive_overview_sections(80) == (
         "status",
-        "coverage",
         "blockers",
         "queue",
         "activity",
     )
+    assert "coverage" not in run_tui.responsive_overview_sections(80)
     assert "rules" not in run_tui.responsive_overview_sections(80)
     assert "files" not in run_tui.responsive_overview_sections(80)
     assert "rules" in run_tui.responsive_overview_sections(120)
-    assert "files" in run_tui.responsive_overview_sections(160)
+    assert "files" in run_tui.responsive_overview_sections(120)
     assert "findings" in run_tui.responsive_overview_sections(160)
 
 

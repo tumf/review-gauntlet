@@ -1372,6 +1372,8 @@ class RunSnapshotReadinessProvider:
     def __init__(self, *, include_coverage_projection: bool = False) -> None:
         self._include_coverage_projection = include_coverage_projection
         self._status_context: _StatusContext | None = None
+        self._projection_ttl_seconds = 2.0
+        self._projection_cache: tuple[float, object] | None = None
 
     def status_snapshot(self, store: SessionStore, root: Path) -> dict[str, object]:
         self._status_context = None
@@ -1379,9 +1381,16 @@ class RunSnapshotReadinessProvider:
         self._status_context = context
         status = _status_from_context(context)
         if self._include_coverage_projection:
-            status["coverage_projection"] = build_session_coverage_projection(
-                store, context.session_id, root
-            )
+            now = time.monotonic()
+            if (
+                self._projection_cache
+                and now - self._projection_cache[0] < self._projection_ttl_seconds
+            ):
+                status["coverage_projection"] = self._projection_cache[1]
+            else:
+                projection = build_session_coverage_projection(store, context.session_id, root)
+                self._projection_cache = (now, projection)
+                status["coverage_projection"] = projection
         return status
 
     def ready_prompt(self, store: SessionStore, root: Path) -> str | None:
