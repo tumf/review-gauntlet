@@ -25,4 +25,4 @@ Expected archive gate: `cflx openspec validate handle-subprocess-resource-exhaus
 ## Acceptance #1 Failure Follow-up
 - [x] tests/test_cli_session_review.py:784 — pyright reportUnknownArgumentType/reportUnknownVariableType: iterating argv:Any yields Unknown-typed part; needs list[str] type guard or cast
 - [x] tests/test_cli_session_review.py:786 — pyright reportUnknownArgumentType: original_popen(argv, *args, **kwargs) passes Any|list[Unknown]; needs cast or type annotation on original_popen
-- [x] tests/test_command_review_adapter.py:407 — pyright reportOperatorIssue: 'Permission denied' in failure['detail'] where detail is object; needs str() or cast(str, ...)
+- [x] tests/test_command_review_adapter.py:407 — pyright reportOperatorIssue: 'Permission denied' in failure['detail'] where detail is object; needs str() or cast(str, ...) (verification: unit - `make typecheck` and `make check` passed during acceptance follow-up.)

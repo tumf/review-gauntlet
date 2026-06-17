@@ -83,8 +83,15 @@ The `review-gauntlet` CLI SHALL include meaningful parser defaults in subcommand
 **Then**: stdout includes help for `root` indicating `default: .`
 **And**: stdout includes help for `--format` indicating `default: text`
 **And**: stdout includes help for `--budget` indicating `default: 50`
-**And**: stdout includes help for `--concurrency` indicating `default: 8`
+**And**: stdout includes help for `--concurrency` indicating `default: 3`
 **And**: stdout includes help for `--audience` indicating `default: human`
+
+#### Scenario: Verify-fixes help shows concurrency default
+
+**Given**: an installed or development invocation of the `review-gauntlet` CLI
+**When**: the developer runs `review-gauntlet verify-fixes --help`
+**Then**: stdout includes help for `--concurrency` indicating `default: 3`
+**And**: stdout includes help for `--format` indicating `default: text`
 
 #### Scenario: Help shows repeatable and boolean defaults
 
@@ -99,7 +106,7 @@ The `review-gauntlet` CLI SHALL include meaningful parser defaults in subcommand
 
 **Given**: the existing `review-gauntlet` subcommands and flags
 **When**: developers run supported subcommands with or without explicit flag values
-**Then**: their accepted arguments, parser defaults, usage-error exits, output formats, shell completion option discovery, and session behavior remain unchanged by the help text additions
+**Then**: their accepted arguments, parser defaults, usage-error exits, output formats, shell completion option discovery, and session behavior remain unchanged by the help text additions, except that review and verify-fixes now default concurrency to `3`
 
 ### Requirement: Clone-free config preset initialization SHALL be available
 
