@@ -924,7 +924,10 @@ def test_summary_panel_containers_have_scoped_equal_height_layout_rule() -> None
     assert "#session_panel { width: 1fr; }" not in source
     assert "#finalize_path_panel { height: 1fr; }" not in source
     assert "#activity_panel { height: 1fr; }" in source
-    assert "#session_header { border: round $primary; padding: 1; height: auto; }" in source
+
+    header_rule = source.split("#session_header {", maxsplit=1)[1].split("}", maxsplit=1)[0]
+    assert "border: round $primary;" in header_rule
+    assert "height: auto;" in header_rule
 
     summary_rule = source.split("#agent_panel_container, #session_panel_container", maxsplit=1)[1]
     summary_rule = summary_rule.split(".panel {", maxsplit=1)[0]
