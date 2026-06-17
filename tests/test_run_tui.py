@@ -913,6 +913,26 @@ def test_run_tui_source_uses_border_titles_and_semantic_title_styles() -> None:
     assert "$accent" not in source
 
 
+def test_summary_panel_containers_have_scoped_equal_height_layout_rule() -> None:
+    source = Path("src/review_gauntlet/run_tui.py").read_text(encoding="utf-8")
+
+    assert "#agent_panel_container, #session_panel_container" in source
+    assert "#agent_panel { width: 1fr; }" not in source
+    assert "#session_panel { width: 1fr; }" not in source
+    assert "#finalize_path_panel { height: 1fr; }" not in source
+    assert "#activity_panel { height: 1fr; }" in source
+    assert "#session_header { border: round $primary; padding: 1; height: auto; }" in source
+
+    summary_rule = source.split("#agent_panel_container, #session_panel_container", maxsplit=1)[1]
+    summary_rule = summary_rule.split(".panel {", maxsplit=1)[0]
+    assert "width: 1fr;" in summary_rule
+    assert "height: 1fr;" in summary_rule
+
+    panel_rule = source.split(".panel {", maxsplit=1)[1].split("}", maxsplit=1)[0]
+    assert "height: auto;" in panel_rule
+    assert "height: 1fr;" not in panel_rule
+
+
 def test_header_title_carries_brand_sparkle_and_name() -> None:
     title = run_tui.header_title_text()
 
