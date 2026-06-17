@@ -57,6 +57,11 @@ def _styled_fragments(rendered: object) -> tuple[str, ...]:
     return tuple(plain[span.start : span.end] for span in spans)
 
 
+def _styled_fragments_styles(rendered: object) -> tuple[object, ...]:
+    text = cast(Any, rendered)
+    return tuple(span.style for span in text.spans)
+
+
 def test_should_use_tui_selection_rules() -> None:
     assert should_use_tui(output_format="text", no_tui=False, stdout_is_tty=True) is True
     assert should_use_tui(output_format="json", no_tui=False, stdout_is_tty=True) is False
@@ -273,6 +278,7 @@ def test_session_coverage_flash_marks_only_changed_completed_count_fragment() ->
     assert "session.coverage.completed" in _flash_keys(state)
     assert "session.coverage.total" not in _flash_keys(state)
     assert _styled_fragments(rendered) == ("1",)
+    assert _styled_fragments_styles(rendered) == ("bold #11151d on #facc15",)
     assert cast(Any, rendered).plain.splitlines()[0] == "Coverage  50%   1 / 2"
 
 
@@ -1222,7 +1228,9 @@ def test_summary_panel_containers_have_scoped_equal_height_layout_rule() -> None
     summary_rule = source.split("#agent_panel_container, #session_panel_container", maxsplit=1)[1]
     summary_rule = summary_rule.split(".panel {", maxsplit=1)[0]
     assert "width: 1fr;" in summary_rule
-    assert "height: 1fr;" in summary_rule
+    assert "#agent_panel_container { height: auto; }" in summary_rule
+    assert "#session_panel_container { height: 100%; }" in summary_rule
+    assert "height: 1fr;" not in summary_rule
 
     panel_rule = source.split(".panel {", maxsplit=1)[1].split("}", maxsplit=1)[0]
     assert "height: auto;" in panel_rule

@@ -75,8 +75,9 @@ def create_run_app(controller: RunController) -> object:
         #summary { height: auto; }
         #agent_panel_container, #session_panel_container {
             width: 1fr;
-            height: 1fr;
         }
+        #agent_panel_container { height: auto; }
+        #session_panel_container { height: 100%; }
         .panel {
             border: round $surface-lighten-2;
             border-title-color: $text-muted;
@@ -238,7 +239,7 @@ FINDING_STATES = (
 )
 _SPINNER_FRAMES = ("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
 _BAR_WIDTH = 24
-_FLASH_STYLE = "reverse bold #11151d on #facc15"
+_FLASH_STYLE = "bold #11151d on #facc15"
 _FLASH_DURATION_SECONDS = 0.9
 _FIELD_RENDER_MODE = Literal["plain", "rich"]
 _FAILED_AGENT_STATUSES = frozenset(
