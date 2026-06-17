@@ -18,6 +18,7 @@ from review_gauntlet.run_controller import (
 )
 from review_gauntlet.run_tui import (
     PANEL_TITLES,
+    actionable_finding_summary,
     activity_text,
     agent_activity_text,
     calculate_progress_metrics,
@@ -83,6 +84,26 @@ def test_progress_metrics_never_exceed_total() -> None:
 
     assert metrics.completed == metrics.total
     assert metrics.percent == 100
+
+
+def test_actionable_finding_summary_derives_open_count_without_open_key() -> None:
+    summary = actionable_finding_summary(
+        {"untriaged": 2, "confirmed": 1, "fixed_pending_verification": 1}
+    )
+
+    assert summary.open == 4
+    assert summary.triage == 2
+    assert summary.fix == 1
+    assert summary.verify == 1
+
+
+def test_actionable_finding_summary_preserves_zero_actionable_behavior() -> None:
+    summary = actionable_finding_summary({"closed": 5, "open": 99})
+
+    assert summary.open == 0
+    assert summary.triage == 0
+    assert summary.fix == 0
+    assert summary.verify == 0
 
 
 def test_elapsed_time_formatting() -> None:
@@ -205,7 +226,7 @@ def test_coverage_and_findings_render_dashboard_metrics_without_old_markers() ->
     assert "current cells" not in coverage
     assert "! pending" not in coverage
     assert "! stale" not in coverage
-    assert "open 0" in findings
+    assert "open 3" in findings
     assert "untriaged 2" in findings
     assert "confirmed 0" in findings
     assert "reopened 0" in findings
@@ -669,6 +690,57 @@ def test_finalize_checklist_state_derivation_across_gates() -> None:
     assert final_blocked[4].state == "blocked"
     assert final_blocked[4].detail == "working tree has uncommitted changes"
     assert all(gate.state == "done" for gate in finalized)
+
+
+def test_session_summary_derives_open_findings_and_action_breakdown_without_open_key() -> None:
+    snapshot = RunSnapshot(
+        session_id="RGS-actionable-findings",
+        coverage={"reviewed": 1},
+        findings={"reopened": 1, "untriaged": 2, "confirmed": 1, "fixed_pending_verification": 1},
+        next_ready_prompt="triage untriaged findings",
+        step=2,
+        agent_status="running",
+        command_argv=("agent",),
+        elapsed_seconds=0,
+        command_label="agent",
+    )
+
+    view = dashboard_state(snapshot, ())
+    session = run_tui.session_summary_text(view)
+    details = findings_text(snapshot)
+
+    assert view.open_findings == 5
+    assert "Findings  open 5   triage 3 | fix 1 | verify 1" in session
+    assert "open 5" in details
+    assert "reopened 1" in details
+    assert "untriaged 2" in details
+    assert "confirmed 1" in details
+    assert "fixed-pending 1" in details
+
+
+def test_session_summary_keeps_zero_actionable_findings_without_work_breakdown() -> None:
+    snapshot = RunSnapshot(
+        session_id="RGS-no-actionable-findings",
+        coverage={"reviewed": 1},
+        findings={"closed": 3, "open": 7},
+        next_ready_prompt="finalize session",
+        step=1,
+        agent_status="idle",
+        command_argv=(),
+        elapsed_seconds=0,
+    )
+
+    view = dashboard_state(snapshot, ())
+    session = run_tui.session_summary_text(view)
+    details = findings_text(snapshot)
+
+    assert view.open_findings == 0
+    assert "Findings  open 0" in session
+    assert "triage" not in session
+    assert "fix" not in session
+    assert "verify" not in session
+    assert "open 0" in details
+    assert "closed 3" in details
 
 
 def test_agent_session_summary_and_activity_rows_are_human_facing_and_sanitized() -> None:
