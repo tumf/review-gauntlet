@@ -841,7 +841,7 @@ def test_cli_run_interactive_text_missing_textual_falls_back_with_warning(
 
     captured = capsys.readouterr()
     assert "TUI support is not installed; falling back to text mode." in captured.err
-    assert 'Install with: uv tool install "review-gauntlet[tui]"' in captured.err
+    assert "Reinstall review-gauntlet to restore bundled TUI dependencies." in captured.err
     assert "completed: True" in captured.out
 
 

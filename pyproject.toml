@@ -24,10 +24,6 @@ classifiers = [
 dependencies = [
     "pydantic>=2.13.4",
     "pydantic-settings>=2.14.1",
-]
-
-[project.optional-dependencies]
-tui = [
     "rich>=13",
     "textual>=0.89",
 ]
@@ -50,9 +46,7 @@ dev = [
     "pyright>=1.1.410",
     "pytest>=9.0.3",
     "pytest-cov>=7.1.0",
-    "rich>=13",
     "ruff>=0.15.16",
-    "textual>=0.89",
 ]
 
 [tool.bumpversion]
