@@ -278,7 +278,7 @@ def test_session_coverage_flash_marks_only_changed_completed_count_fragment() ->
     assert "session.coverage.completed" in _flash_keys(state)
     assert "session.coverage.total" not in _flash_keys(state)
     assert _styled_fragments(rendered) == ("1",)
-    assert _styled_fragments_styles(rendered) == ("bold #11151d on #facc15",)
+    assert _styled_fragments_styles(rendered) == ("bold #fef3c7 on #3f3520",)
     assert cast(Any, rendered).plain.splitlines()[0] == "Coverage  50%   1 / 2"
 
 

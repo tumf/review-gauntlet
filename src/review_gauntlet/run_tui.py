@@ -239,7 +239,7 @@ FINDING_STATES = (
 )
 _SPINNER_FRAMES = ("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
 _BAR_WIDTH = 24
-_FLASH_STYLE = "bold #11151d on #facc15"
+_FLASH_STYLE = "bold #fef3c7 on #3f3520"
 _FLASH_DURATION_SECONDS = 0.9
 _FIELD_RENDER_MODE = Literal["plain", "rich"]
 _FAILED_AGENT_STATUSES = frozenset(
@@ -422,10 +422,10 @@ def actionable_finding_summary(findings: dict[str, object]) -> ActionableFinding
 def format_elapsed_time(seconds: float) -> str:
     total_seconds = 0 if not math.isfinite(seconds) else max(0, int(seconds))
     hours, remainder = divmod(total_seconds, 3600)
-    minutes, seconds = divmod(remainder, 60)
+    minutes, secs = divmod(remainder, 60)
     if hours:
-        return f"{hours:d}:{minutes:02d}:{seconds:02d}"
-    return f"{minutes:02d}:{seconds:02d}"
+        return f"{hours:d}:{minutes:02d}:{secs:02d}"
+    return f"{minutes:02d}:{secs:02d}"
 
 
 def short_session_id(session_id: str | None) -> str:
@@ -1193,6 +1193,7 @@ def sanitize_agent_output_line(value: object, *, limit: int = 120) -> str:
     text = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", str(value))
     text = text.replace("\r", "\n")
     text = " ".join(_plain_text(text).split())
+    text = text[: limit * 4]
     secret_patterns = (
         r"\b[A-Z0-9_]*(?:TOKEN|SECRET|KEY|PASSWORD)=\S+",
         r"\b(?:authorization|x-api-key)\s*:\s*\S+(?:\s+\S+)?",
@@ -1279,7 +1280,11 @@ def _agent_text(snapshot: RunSnapshot) -> str:  # pyright: ignore[reportUnusedFu
 
 
 def _plain_text(value: object) -> str:
-    return "".join(_plain_character(character) for character in str(value)).replace("[", r"\[")
+    return "".join(_plain_character(character) for character in str(value))
+
+
+def _rich_safe_text(value: object) -> str:
+    return _plain_text(value).replace("[", r"\[")
 
 
 def _plain_character(character: str) -> str:
