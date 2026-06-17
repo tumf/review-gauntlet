@@ -1,3 +1,4 @@
+import errno
 import json
 import sqlite3
 from pathlib import Path
@@ -7,6 +8,7 @@ import pytest
 
 from review_gauntlet.__about__ import __version__
 from review_gauntlet.cli import (
+    _finalize_reasons,  # pyright: ignore[reportPrivateUsage]
     _run_session_command_step,  # pyright: ignore[reportPrivateUsage]
     main,
 )
@@ -712,7 +714,94 @@ def test_cli_status_json_after_init(tmp_path: Path, capsys: pytest.CaptureFixtur
     assert data["can_finalize"] is False
 
 
+def _raise_emfile_git(_root: Path, *args: str) -> str:
+    raise OSError(errno.EMFILE, "Too many open files")
+
+
+def test_finalize_reasons_blocks_when_git_status_check_hits_emfile(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from review_gauntlet import checkpoint as checkpoint_module
+    from review_gauntlet.session_store import SessionStore
+    from review_gauntlet.targets import HeadMode, TargetKind, TargetSpec
+
+    (tmp_path / ".git").mkdir()
+    store = SessionStore(tmp_path)
+    session_id = store.create_session(
+        {
+            "session_id": "RGS-test",
+            "root": str(tmp_path),
+            "target": TargetSpec(kind=TargetKind.ALL, head_mode=HeadMode.MOVING).model_dump(
+                mode="json"
+            ),
+        },
+        (),
+    )
+    monkeypatch.setattr(checkpoint_module, "_git", _raise_emfile_git)
+
+    reasons = _finalize_reasons({}, {}, store, session_id, tmp_path)
+
+    assert any("git status checks unavailable" in reason for reason in reasons)
+    assert any("startup_error_reason=resource_exhaustion" in reason for reason in reasons)
+    assert any(f"errno={errno.EMFILE}" in reason for reason in reasons)
+
+
+def test_cli_status_json_blocks_when_git_status_check_hits_emfile(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from review_gauntlet import checkpoint as checkpoint_module
+
+    (tmp_path / ".git").mkdir()
+    (tmp_path / "README.md").write_text("# docs\n", encoding="utf-8")
+    main(["init", str(tmp_path), "--worktree", "--format", "json"])
+    capsys.readouterr()
+    monkeypatch.setattr(checkpoint_module, "_git", _raise_emfile_git)
+
+    main(["status", str(tmp_path), "--format", "json"])
+
+    data = json.loads(capsys.readouterr().out)
+    assert data["can_finalize"] is False
+    assert data["next_required_action"] == "run_review"
+    blockers = data["finalize_blockers"]
+    assert any("git status checks unavailable" in blocker for blocker in blockers)
+    assert any("startup_error_reason=resource_exhaustion" in blocker for blocker in blockers)
+
+
+def test_cli_finalize_emfile_blocks_without_writing_checkpoint(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from review_gauntlet import checkpoint as checkpoint_module
+    from review_gauntlet.review_cells import CellState
+    from review_gauntlet.session_store import SessionStore
+    from review_gauntlet.targets import target_digest
+
+    (tmp_path / ".git").mkdir()
+    (tmp_path / "README.md").write_text("# docs\n", encoding="utf-8")
+    main(["init", str(tmp_path), "--worktree", "--format", "json"])
+    session_id = json.loads(capsys.readouterr().out)["session_id"]
+    store = SessionStore(tmp_path)
+    for row in store.list_cells(str(session_id)):
+        store.update_cell_state(str(session_id), str(row["cell_id"]), CellState.REVIEWED)
+    store.create_run(str(session_id), target_digest(tmp_path))
+    monkeypatch.setattr(checkpoint_module, "_git", _raise_emfile_git)
+
+    with pytest.raises(SystemExit) as exc_info:
+        main(["finalize", str(tmp_path), "--format", "json"])
+
+    data = json.loads(capsys.readouterr().out)
+    assert exc_info.value.code == 1
+    assert data["can_finalize"] is False
+    assert data["session_state"] == "active"
+    assert any(
+        "startup_error_reason=resource_exhaustion" in blocker
+        for blocker in data["finalize_blockers"]
+    )
+    assert not (tmp_path / ".review-gauntlet" / "checkpoints").exists()
+    assert (tmp_path / ".review-gauntlet" / "active-session.json").exists()
+
+
 def _successful_run_result() -> dict[str, object]:
+
     return {
         "completed": True,
         "reason": "completed",

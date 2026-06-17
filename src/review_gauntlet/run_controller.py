@@ -12,6 +12,7 @@ from typing import cast
 from review_gauntlet.checkpoint import CheckpointCommitResult, commit_latest_checkpoint
 from review_gauntlet.config import CommandAdapterConfig, load_config
 from review_gauntlet.session_store import SessionStore
+from review_gauntlet.subprocess_failures import subprocess_startup_failure_blocker
 
 RUN_INTERRUPTED_ERROR = "run interrupted by user"
 RUN_INTERRUPTED_REASON = "interrupted"
@@ -217,12 +218,26 @@ class RunController:
         status: dict[str, object]
         try:
             session_id = self.store.active_session_id()
-            status = self._status_snapshot(self.store, self.root)
-            ready = self._ready_prompt(self.store, self.root)
         except LookupError:
             session_id = None
             status = {"coverage": {}, "findings": {}}
             ready = None
+        else:
+            try:
+                status = self._status_snapshot(self.store, self.root)
+            except OSError as exc:
+                status = _status_unavailable_snapshot(exc)
+                ready = None
+            else:
+                try:
+                    ready = self._ready_prompt(self.store, self.root)
+                except LookupError:
+                    session_id = None
+                    status = {"coverage": {}, "findings": {}}
+                    ready = None
+                except OSError as exc:
+                    ready = None
+                    status = _with_finalize_blocker(status, _readiness_unavailable_blocker(exc))
         return RunSnapshot(
             session_id=session_id,
             coverage=_object_dict(status.get("coverage", {})),
@@ -507,6 +522,31 @@ class RunController:
             return self.store.active_session_id()
         except LookupError:
             return None
+
+
+def _status_unavailable_snapshot(error: OSError) -> dict[str, object]:
+    blocker = subprocess_startup_failure_blocker("git status checks", ("git", "status"), error)
+    return {
+        "coverage": {},
+        "findings": {},
+        "can_finalize": False,
+        "finalize_blockers": (blocker,),
+        "next_required_action": "resolve_finalize_blockers",
+    }
+
+
+def _readiness_unavailable_blocker(error: OSError) -> str:
+    return subprocess_startup_failure_blocker("git status checks", ("git", "status"), error)
+
+
+def _with_finalize_blocker(status: dict[str, object], blocker: str) -> dict[str, object]:
+    blockers = [*_string_tuple(status.get("finalize_blockers", ())), blocker]
+    return {
+        **status,
+        "can_finalize": False,
+        "finalize_blockers": tuple(dict.fromkeys(blockers)),
+        "next_required_action": "resolve_finalize_blockers",
+    }
 
 
 def command_display_label(config: CommandAdapterConfig) -> str:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import errno
 import json
 import subprocess
 import threading
@@ -891,7 +892,80 @@ def test_run_controller_refresh_snapshot_exposes_status(tmp_path: Path) -> None:
     assert snapshot.next_ready_prompt == "ready prompt"
 
 
+def test_run_controller_snapshot_blocks_readiness_emfile_without_raising(
+    tmp_path: Path,
+) -> None:
+    store = _store(tmp_path)
+
+    def raise_emfile_ready(_store: SessionStore, _root: Path) -> str | None:
+        raise OSError(errno.EMFILE, "Too many open files")
+
+    controller = RunController(
+        root=tmp_path,
+        store=store,
+        config_path=None,
+        max_steps=1,
+        ready_prompt=raise_emfile_ready,
+        status_snapshot=lambda _store, _root: {
+            "coverage": {"reviewed": 1},
+            "finding_state_counts": {},
+            "can_finalize": True,
+            "finalize_blockers": [],
+            "next_required_action": "finalize",
+        },
+        command_runner=lambda _config, _root, _state_dir, _prompt: SessionCommandResult(
+            argv=[], cwd=None, returncode=0, stdout="", stderr=""
+        ),
+    )
+
+    snapshot = controller.snapshot()
+
+    assert snapshot.session_id == "RGS-test"
+    assert snapshot.coverage == {"reviewed": 1}
+    assert snapshot.next_ready_prompt is None
+    assert snapshot.can_finalize is False
+    assert snapshot.next_required_action == "resolve_finalize_blockers"
+    assert any("git status checks unavailable" in blocker for blocker in snapshot.finalize_blockers)
+    assert any(
+        "startup_error_reason=resource_exhaustion" in blocker
+        for blocker in snapshot.finalize_blockers
+    )
+
+
+def test_run_controller_snapshot_status_emfile_returns_blocked_snapshot(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+
+    def raise_emfile_status(_store: SessionStore, _root: Path) -> dict[str, object]:
+        raise OSError(errno.EMFILE, "Too many open files")
+
+    controller = RunController(
+        root=tmp_path,
+        store=store,
+        config_path=None,
+        max_steps=1,
+        ready_prompt=lambda _store, _root: "ready prompt",
+        status_snapshot=raise_emfile_status,
+        command_runner=lambda _config, _root, _state_dir, _prompt: SessionCommandResult(
+            argv=[], cwd=None, returncode=0, stdout="", stderr=""
+        ),
+    )
+
+    snapshot = controller.snapshot()
+
+    assert snapshot.session_id == "RGS-test"
+    assert snapshot.coverage == {}
+    assert snapshot.findings == {}
+    assert snapshot.next_ready_prompt is None
+    assert snapshot.can_finalize is False
+    assert snapshot.next_required_action == "resolve_finalize_blockers"
+    assert any(
+        "startup_error_reason=resource_exhaustion" in blocker
+        for blocker in snapshot.finalize_blockers
+    )
+
+
 def test_run_controller_snapshot_uses_finding_state_counts_fallback(tmp_path: Path) -> None:
+
     store = _store(tmp_path)
     controller = RunController(
         root=tmp_path,

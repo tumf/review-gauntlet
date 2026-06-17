@@ -78,7 +78,11 @@ from review_gauntlet.run_tui import (
     textual_available,
 )
 from review_gauntlet.session_store import SessionStore
-from review_gauntlet.subprocess_failures import subprocess_startup_failure_details
+from review_gauntlet.subprocess_failures import (
+    is_resource_exhaustion_startup_error,
+    subprocess_startup_failure_blocker,
+    subprocess_startup_failure_details,
+)
 from review_gauntlet.targets import (
     TargetSpec,
     changed_files_for_target,
@@ -1623,6 +1627,13 @@ def _summarize_text(value: str, *, limit: int = 120) -> str:
 _TARGET_DIGEST_DRIFT_REASON = "target digest has changed since the last review run"
 _DIRTY_REVIEW_UNIVERSE_PREFIX = "review-universe files are dirty relative to HEAD"
 _DIRTY_NON_REVIEW_PREFIX = "working tree has uncommitted non-review files: "
+_GIT_STATUS_CHECKS_UNAVAILABLE = "git status checks"
+_GIT_REVIEW_UNIVERSE_ARGV = ("git", "diff", "--name-only", "--cached")
+_GIT_WORKING_TREE_ARGV = ("git", "status", "--porcelain")
+
+
+def _git_status_unavailable_blocker(error: OSError, argv: tuple[str, ...]) -> str:
+    return subprocess_startup_failure_blocker(_GIT_STATUS_CHECKS_UNAVAILABLE, argv, error)
 
 
 def _effective_current_target_coverage(
@@ -2269,12 +2280,27 @@ def _finalize(
             blockers = cast(list[str], status["finalize_blockers"])
             if str(exc) not in blockers:
                 status["finalize_blockers"] = [*blockers, str(exc)]
+        except OSError as exc:
+            blockers = cast(list[str], status["finalize_blockers"])
+            blocker = _git_status_unavailable_blocker(exc, _GIT_REVIEW_UNIVERSE_ARGV)
+            if blocker not in blockers:
+                status["finalize_blockers"] = [*blockers, blocker]
         return status
     try:
         checkpoint = write_latest_checkpoint(store, root, str(status["session_id"]), status)
     except DirtyReviewUniverseError as exc:
         status["can_finalize"] = False
         status["finalize_blockers"] = [*cast(list[str], status["finalize_blockers"]), str(exc)]
+        status["next_required_action"] = "resolve_finalize_blockers"
+        return status
+    except OSError as exc:
+        if not is_resource_exhaustion_startup_error(exc):
+            raise
+        status["can_finalize"] = False
+        status["finalize_blockers"] = [
+            *cast(list[str], status["finalize_blockers"]),
+            _git_status_unavailable_blocker(exc, _GIT_REVIEW_UNIVERSE_ARGV),
+        ]
         status["next_required_action"] = "resolve_finalize_blockers"
         return status
     with store.connect() as conn:
@@ -2316,12 +2342,19 @@ def _finalize_reasons(
         assert_review_universe_clean(root)
     except DirtyReviewUniverseError as exc:
         reasons.append(str(exc))
+    except OSError as exc:
+        reasons.append(_git_status_unavailable_blocker(exc, _GIT_REVIEW_UNIVERSE_ARGV))
     if not allow_non_review_dirty:
-        wtd = classify_working_tree_dirty(root)
-        if wtd.non_review_paths:
-            reasons.append(
-                "working tree has uncommitted non-review files: " + ", ".join(wtd.non_review_paths)
-            )
+        try:
+            wtd = classify_working_tree_dirty(root)
+        except OSError as exc:
+            reasons.append(_git_status_unavailable_blocker(exc, _GIT_WORKING_TREE_ARGV))
+        else:
+            if wtd.non_review_paths:
+                reasons.append(
+                    "working tree has uncommitted non-review files: "
+                    + ", ".join(wtd.non_review_paths)
+                )
     last_reviewed_digest = store.last_run_target_digest(session_id)
     if last_reviewed_digest is None:
         reasons.append("no review run has been completed")

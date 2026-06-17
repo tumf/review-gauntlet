@@ -29,3 +29,25 @@ def subprocess_startup_failure_details(argv: Sequence[str], error: OSError) -> d
     else:
         details["startup_error_reason"] = "os_error"
     return details
+
+
+def is_resource_exhaustion_startup_error(error: OSError) -> bool:
+    return error.errno in _RESOURCE_EXHAUSTION_ERRNOS
+
+
+def subprocess_startup_failure_blocker(operation: str, argv: Sequence[str], error: OSError) -> str:
+    """Return a human-readable blocker with structured startup-failure fields."""
+    details = subprocess_startup_failure_details(argv, error)
+    parts = [
+        f"{operation} unavailable: subprocess startup failed",
+        f"startup_error_reason={details['startup_error_reason']}",
+    ]
+    if error.errno is not None:
+        parts.append(f"errno={error.errno}")
+    hint = details.get("hint")
+    if isinstance(hint, str):
+        parts.append(f"hint={hint}")
+    detail = str(error)
+    if detail:
+        parts.append(f"detail={detail}")
+    return "; ".join(parts)
