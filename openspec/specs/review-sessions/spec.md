@@ -163,69 +163,24 @@ When the same finding is detected while it is `fixed_pending_verification`, the 
 
 ### Requirement: Status and findings commands SHALL expose actionable session state
 
-`status` and `finalize` SHALL tolerate malformed persisted finding-event metadata without crashing. Malformed terminal-decision metadata SHALL be surfaced conservatively as a blocker so completion cannot hide invalid waiver or accepted-risk state.
+Review Gauntlet SHALL NOT create, remove, merge, or otherwise operate Git linked worktrees. `review-gauntlet finalize` closes a complete active review session into deterministic latest-only checkpoint files; the removed `--merge` flag no longer exists. The checkpoint-only git commit in the run workflow continues to guard against unrelated dirty worktree changes (files outside `.review-gauntlet` that are dirty relative to `HEAD`), but the term "dirty worktree" here refers to uncommitted files in the base repository working directory, not a Git linked worktree.
 
-`review-gauntlet finalize` SHALL close a complete active review session into deterministic latest-only checkpoint files that are suitable for Git diff review and safe as the next review base. Finalization SHALL only write checkpoint files when completion blockers are absent, when review-universe files are clean relative to `HEAD`, and when current `HEAD` can be resolved to a commit. The checkpoint SHALL be derived from the existing durable session ledger, SHALL include review coverage, findings, triage events, and review-base metadata, and SHALL NOT replace the ledger as the source of truth before successful finalization.
+#### Scenario: Finalize does not expose a merge flag
 
-Dirty review-universe blockers SHALL identify that review-universe files are dirty relative to `HEAD` without including individual dirty file paths in `finalize_blockers`.
+**Given**: an installed `review-gauntlet` CLI
+**When**: the developer runs `review-gauntlet finalize --merge`
+**Then**: the command exits with a usage error (exit code 64)
+**And**: the error message does not suggest `--merge` as a valid option
+**And**: no checkpoint files, branch merges, or worktree cleanup are attempted
 
-When `review-gauntlet run` detects that an agent step successfully finalized the active session, the run workflow SHALL attempt a checkpoint-only git commit for the generated latest checkpoint artifacts before reporting final completion. The checkpoint commit SHALL stage only `.review-gauntlet/checkpoints/latest` and the concrete `status.json`, `findings.json`, `events.json`, and `summary.md` files under the generated checkpoint directory referenced by the current latest pointer. The run workflow SHALL NOT stage or commit product/source files, ledger files, run logs, unrelated review artifacts, stale checkpoint generations, or unrelated dirty worktree changes. If agent stdout does not contain a parseable complete generated-files list, the checkpoint commit helper SHALL derive the allowed generated checkpoint files from the current safe latest pointer. If checkpoint artifacts have no diff, the run workflow SHALL report a successful checkpoint-commit no-op. If unrelated dirty worktree state prevents a safe checkpoint-only commit, the run workflow SHALL surface a structured blocker instead of silently claiming full completion. Standalone `review-gauntlet finalize` and `finalize --merge` SHALL keep their existing commit and merge semantics.
+#### Scenario: Stale git_worktree metadata does not affect run
 
-#### Scenario: Run finalization commits checkpoint artifacts when agent stdout is not JSON
-
-**Given**: an active review session with complete reviewed coverage and all live findings closed
-**And**: the command adapter invoked by `review-gauntlet run` finalizes the session successfully
-**And**: the adapter stdout is not parseable JSON
-**And**: the latest pointer safely references the generated checkpoint directory
-**And**: generated latest checkpoint files differ from `HEAD`
-**And**: no unrelated dirty worktree files are present
+**Given**: an active session whose metadata contains `git_worktree.enabled: true` and a `worktree_path` from a pre-removal session
 **When**: the developer runs `review-gauntlet run --format json`
-**Then**: the run workflow creates a git commit containing `.review-gauntlet/checkpoints/latest`
-**And**: the commit contains the latest checkpoint directory's `status.json`, `findings.json`, `events.json`, and `summary.md`
-**And**: the JSON result reports that checkpoint commit was attempted and created
-**And**: the JSON result includes the checkpoint commit SHA
-
-#### Scenario: Run checkpoint commit derives missing generated files from latest pointer
-
-**Given**: an active review session that finalizes during `review-gauntlet run`
-**And**: the adapter stdout omits some or all generated checkpoint artifact paths
-**And**: `.review-gauntlet/checkpoints/latest` is a normal file containing a path-safe checkpoint id
-**And**: the referenced checkpoint directory contains `status.json`, `findings.json`, `events.json`, and `summary.md`
-**When**: the run workflow reaches checkpoint commit handling
-**Then**: the checkpoint commit allowlist includes the pointer file and the four standard files under the referenced checkpoint directory
-**And**: the run workflow can commit those files without requiring agent-reported generated paths
-
-#### Scenario: Run checkpoint commit does not trust unsafe latest pointers
-
-**Given**: an active review session that finalizes during `review-gauntlet run`
-**And**: the adapter stdout omits generated checkpoint artifact paths
-**And**: `.review-gauntlet/checkpoints/latest` is missing, is a symlink, is a directory, references a nested path, references parent traversal, or references a checkpoint id that is not path-safe
-**When**: the run workflow reaches checkpoint commit handling
-**Then**: the unsafe latest pointer is not used to expand the checkpoint commit allowlist
-**And**: dirty generated files that are not explicitly safe remain visible as checkpoint commit blockers
-
-#### Scenario: Run checkpoint commit keeps unrelated checkpoint generations blocked
-
-**Given**: an active review session that finalizes during `review-gauntlet run`
-**And**: the latest pointer safely references the current generated checkpoint directory
-**And**: another checkpoint directory has dirty files that are not part of the latest generated checkpoint
-**When**: the run workflow reaches checkpoint commit handling
-**Then**: the run workflow does not stage or commit the unrelated checkpoint directory
-**And**: the run result surfaces a structured checkpoint commit blocker for the unrelated checkpoint files
-
-#### Scenario: Standalone finalize behavior remains unchanged
-
-**Given**: an active review session eligible for finalization
-**When**: the developer runs `review-gauntlet finalize --format json`
-**Then**: the command writes latest checkpoint files according to existing finalize semantics
-**And**: the standalone finalize command does not create the run-only checkpoint commit
-
-#### Scenario: Merge finalization is not double-committed
-
-**Given**: an active Git-worktree-backed review session eligible for merge finalization
-**When**: the developer runs `review-gauntlet finalize --merge --format json`
-**Then**: the existing session-worktree commit and merge behavior remains authoritative
-**And**: the normal-run checkpoint commit path does not create an additional duplicate checkpoint commit
+**Then**: the agent is invoked with `{repo_root}` expanding to the base repository root
+**And**: the default agent cwd is the base repository root
+**And**: no `worktree_error` is raised
+**And**: the run proceeds or blocks normally based on the current session state
 
 ### Requirement: Finalize SHALL validate completion without running review work
 
@@ -652,143 +607,6 @@ The `review-gauntlet config` command group SHALL validate configuration files an
 **Then**: stdout displays the final merged configuration
 **And**: the output reflects project config precedence over global config
 
-### Requirement: Git worktree sessions SHALL isolate review work by session
-
-`review-gauntlet init --git-worktree` SHALL create a Git-worktree-backed review session without changing existing target-selection semantics. The existing `init --worktree` flag SHALL continue to mean workspace-diff target selection. `--git-worktree` SHALL be composable with existing target modes, including `--worktree`.
-
-A Git-worktree-backed session SHALL record enough durable metadata to later verify and finalize the session branch: base branch, base commit, session branch, worktree path, and whether Git worktree mode is enabled. Branch names and worktree paths SHALL be generated from path-safe session identifiers and scoped to Review Gauntlet-owned namespaces by default.
-
-For Git-worktree-backed `review-gauntlet run` sessions, external command adapter steps SHALL use the linked session worktree as the agent-facing repository root while preserving the base repository `.review-gauntlet` directory as the durable review state and artifact location.
-
-#### Scenario: Init creates a session branch and linked worktree
-
-**Given**: a developer is in a Git repository on branch `main` with a resolvable `HEAD`
-**When**: they run `review-gauntlet init --git-worktree --format json`
-**Then**: a unique session branch under a Review Gauntlet-owned branch namespace is created
-**And**: a linked Git worktree for that session branch is created under a Review Gauntlet-owned worktree directory
-**And**: the session metadata records `git_worktree.enabled: true`, `base_branch`, `base_commit`, `session_branch`, and `worktree_path`
-**And**: stdout includes the session branch and worktree path evidence
-
-#### Scenario: Existing worktree target semantics are preserved
-
-**Given**: a repository with staged, unstaged, or untracked workspace changes
-**When**: the developer runs `review-gauntlet init --worktree --format json`
-**Then**: Review Gauntlet selects the workspace-diff review target as before
-**And**: no Git linked worktree is created solely because `--worktree` was provided
-
-#### Scenario: Workspace-diff targeting composes with Git worktree isolation
-
-**Given**: a repository with staged, unstaged, or untracked workspace changes
-**When**: the developer runs `review-gauntlet init --worktree --git-worktree --format json`
-**Then**: the review target is the workspace-diff target
-**And**: a session branch and linked Git worktree are created for the session
-**And**: the session metadata records both the workspace-diff target and Git-worktree session metadata
-
-#### Scenario: Run executes the agent inside the linked session worktree
-
-**Given**: an active session created with `review-gauntlet init --git-worktree`
-**And**: the configured command adapter has no explicit `cwd`
-**When**: the developer runs `review-gauntlet run --format json`
-**Then**: the external command adapter is invoked with cwd equal to the linked session worktree root
-**And**: source file reads and edits performed by the adapter target the session branch worktree rather than the base worktree
-**And**: command stdout, stderr, activity artifacts, and session ledger state remain under the base repository `.review-gauntlet` directory
-
-#### Scenario: Run templates distinguish agent root from state directory
-
-**Given**: an active session created with `review-gauntlet init --git-worktree`
-**And**: the configured command adapter uses `{repo_root}` and `{state_dir}` templates
-**When**: the developer runs `review-gauntlet run --format json`
-**Then**: `{repo_root}` expands to the linked session worktree root
-**And**: `{state_dir}` expands to the base repository `.review-gauntlet` state directory
-**And**: the two paths are not collapsed to the same directory solely because Git worktree mode is enabled
-
-#### Scenario: Adapter cwd is constrained inside the session worktree
-
-**Given**: an active session created with `review-gauntlet init --git-worktree`
-**And**: the configured command adapter declares a relative `cwd`
-**When**: the developer runs `review-gauntlet run --format json`
-**Then**: the relative cwd is resolved from the linked session worktree root
-**And**: the command fails before adapter execution if the resolved cwd escapes the linked session worktree
-
-#### Scenario: Non Git-worktree run keeps existing command root behavior
-
-**Given**: an active session that was not created with `--git-worktree`
-**When**: the developer runs `review-gauntlet run --format json`
-**Then**: the external command adapter uses the base repository root as the agent-facing root
-**And**: `{repo_root}` continues to expand to the base repository root
-**And**: configured adapter cwd remains constrained inside the base repository root
-
-### Requirement: Finalize merge SHALL merge and clean up Git worktree sessions
-
-`review-gauntlet finalize --merge` SHALL be the completion path for Git-worktree-backed sessions. It SHALL first enforce all normal finalization blockers. When those blockers are absent, it SHALL write checkpoint artifacts, commit intended session branch changes including checkpoint artifacts, merge the session branch into the recorded base branch, finalize the session, clear the active session marker, remove the linked session worktree, and delete the session branch.
-
-`finalize --merge` SHALL produce structured output that distinguishes checkpoint success, merge success, and cleanup success. Merge blockers SHALL leave the active session, session branch, and session worktree available for repair. Cleanup failures after a successful merge SHALL NOT pretend the merge failed, but SHALL report cleanup blockers and a follow-up cleanup action.
-
-#### Scenario: Finalize merge completes checkpoint, merge, and cleanup
-
-**Given**: an active Git-worktree-backed review session with complete reviewed coverage and all live findings closed
-**And**: review-universe files are clean relative to session branch `HEAD`
-**And**: the recorded base branch exists, is clean, and still points at the recorded base commit
-**When**: the developer runs `review-gauntlet finalize --merge --format json`
-**Then**: checkpoint artifacts are written for the session
-**And**: the checkpoint artifacts and intended session changes are committed on the session branch
-**And**: the session branch is merged into the recorded base branch
-**And**: the result includes `merged: true`, the recorded base branch, the session branch, and the resulting merge commit
-**And**: the active session marker is removed or invalidated
-**And**: the linked session worktree is removed
-**And**: the session branch is deleted
-**And**: the result includes `cleaned_up: true` with removed worktree and deleted branch evidence
-
-#### Scenario: Finalize merge rejects non Git-worktree sessions
-
-**Given**: an active review session that was not created with `--git-worktree`
-**When**: the developer runs `review-gauntlet finalize --merge --format json`
-**Then**: the command fails with a structured blocker explaining that merge finalization requires a Git-worktree-backed session
-**And**: no checkpoint file is created solely because `--merge` was requested
-**And**: no branch merge or cleanup is attempted
-**And**: the active session marker remains usable for continuing review work
-
-#### Scenario: Merge blockers preserve repairable session state
-
-**Given**: an active Git-worktree-backed review session that otherwise satisfies normal finalization requirements
-**And**: the recorded base branch is missing, dirty, advanced beyond the recorded base commit, the session branch is missing, the session worktree is missing, or the session branch cannot merge cleanly
-**When**: the developer runs `review-gauntlet finalize --merge --format json`
-**Then**: the command fails with structured merge blockers
-**And**: the result includes `merged: false`
-**And**: no cleanup of the session branch or session worktree is performed
-**And**: the active session marker remains usable for continuing or repairing the session
-
-#### Scenario: Cleanup failure after merge is reported without hiding merge success
-
-**Given**: an active Git-worktree-backed review session eligible for `finalize --merge`
-**And**: the session branch is successfully merged into the recorded base branch
-**And**: removing the session worktree or deleting the session branch fails
-**When**: `review-gauntlet finalize --merge --format json` returns
-**Then**: the result includes `merged: true`
-**And**: the result includes `cleaned_up: false`
-**And**: the result includes cleanup blocker evidence
-**And**: the result includes `next_required_action: cleanup_git_worktree`
-**And**: the session is recorded as finalized rather than active
-
-### Requirement: CLI documentation SHALL distinguish target worktree from Git worktree isolation
-
-Review Gauntlet CLI help and documentation SHALL distinguish `init --worktree` as workspace-diff target selection from `init --git-worktree` as Git linked worktree session isolation. Documentation SHALL describe `finalize --merge` as the operation that merges and cleans up Git-worktree-backed sessions.
-
-#### Scenario: Help exposes both worktree concepts without ambiguity
-
-**Given**: an installed or development invocation of `review-gauntlet`
-**When**: the developer runs `review-gauntlet init --help`
-**Then**: help text describes `--worktree` as reviewing workspace changes
-**And**: help text describes `--git-worktree` as creating an isolated Git worktree and session branch
-
-#### Scenario: Documentation shows merge cleanup workflow
-
-**Given**: a developer reads repository usage documentation
-**When**: they follow the Git-worktree-backed session workflow
-**Then**: the documentation shows `review-gauntlet init --git-worktree`
-**And**: the documentation shows `review-gauntlet finalize --merge`
-**And**: the documentation explains that successful merge finalization removes the session worktree and deletes the session branch
-
 ### Requirement: Run agent failures SHALL display distinct failure reasons
 
 `review-gauntlet run` SHALL preserve and display distinct external-agent and orchestration failure reasons instead of collapsing them into misleading timeout or generic failure labels. Timeout wording SHALL be reserved for actual timeout failures, and configured timeout details SHALL be rendered concisely without duplicated or unset wording.
@@ -917,3 +735,36 @@ Review Gauntlet CLI help and documentation SHALL distinguish `init --worktree` a
 **Then**: the command does not raise `TypeError: 'NoneType' object is not subscriptable`
 **And**: the visible failure preserves the original ready-prompt or controller failure cause
 **And**: the command does not report successful completion
+
+### Requirement: Review Gauntlet SHALL NOT operate Git linked worktrees
+
+Review Gauntlet SHALL NOT create, remove, merge, or otherwise mutate Git linked worktrees as part of its session lifecycle. The CLI SHALL NOT accept `--git-worktree`, `--no-setup`, or `--merge` flags. `--worktree` remains exclusively a target-selection flag meaning "review the workspace diff".
+
+Session metadata and agent execution SHALL NOT interpret any `git_worktree` metadata key. If stale `git_worktree` metadata exists from a pre-removal session, Review Gauntlet SHALL proceed using the base repository root and SHALL NOT trigger any linked-worktree behavior.
+
+#### Scenario: Init without --git-worktree records no worktree metadata
+
+**Given**: a developer in a Git repository
+**When**: they run `review-gauntlet init --all --format json`
+**Then**: the JSON output does not include a `git_worktree` key
+**And**: the persisted session metadata does not include a `git_worktree` key
+
+#### Scenario: Init rejects unknown --git-worktree flag
+
+**Given**: a developer in a Git repository
+**When**: they run `review-gauntlet init --git-worktree`
+**Then**: the command exits with usage error (exit code 64)
+
+#### Scenario: Finalize rejects unknown --merge flag
+
+**Given**: a developer in a Git repository
+**When**: they run `review-gauntlet finalize --merge`
+**Then**: the command exits with usage error (exit code 64)
+
+#### Scenario: Run ignores stale git_worktree metadata
+
+**Given**: an active session whose metadata was created before `--git-worktree` removal and contains `git_worktree.enabled: true` with a `worktree_path`
+**When**: the developer runs `review-gauntlet run --format json`
+**Then**: the agent execution root is the base repository root
+**And**: no attempt is made to resolve or validate a linked worktree path
+**And**: no `worktree_error` reason is emitted
