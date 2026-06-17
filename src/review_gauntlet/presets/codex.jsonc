@@ -11,4 +11,10 @@
       "{prompt}"
     ]
   }
+  // Optional opt-in run hooks can be added by users, for example:
+  // ,"hooks": {
+  //   "finalized": [
+  //     {"command": "sh", "args": ["-c", "printf '%s\\n' \"$REVIEW_GAUNTLET_EVENT_JSON\""]}
+  //   ]
+  // }
 }

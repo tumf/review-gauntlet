@@ -43,6 +43,35 @@ SUPPORTED_TEMPLATE_VARIABLES = frozenset(
         "rule_id",
     }
 )
+HOOK_TEMPLATE_VARIABLES = frozenset(
+    {
+        "event_type",
+        "timestamp",
+        "repo_root",
+        "state_dir",
+        "session_id",
+        "step",
+        "reason",
+        "returncode",
+    }
+)
+SUPPORTED_HOOK_EVENTS = frozenset(
+    {
+        "run_started",
+        "step_started",
+        "agent_started",
+        "agent_finished",
+        "failed",
+        "blocked",
+        "checkpoint_commit_started",
+        "checkpoint_commit_finished",
+        "finalized",
+        "stop_requested",
+        "interrupt_requested",
+        "interrupted",
+    }
+)
+DEFAULT_HOOK_TIMEOUT_SECONDS = 30.0
 
 
 class ConfigError(ValueError):
@@ -65,6 +94,59 @@ class CommandOutputConfig(BaseModel):
         if self.mode == OutputMode.STDOUT_JSON and self.path is not None:
             raise ValueError("adapter.output.path is only supported for file-json output")
         return self
+
+
+class HookCommandConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    command: str
+    args: tuple[str, ...] = ()
+    timeout_seconds: float = DEFAULT_HOOK_TIMEOUT_SECONDS
+    cwd: str | None = None
+    env: dict[str, str] = Field(default_factory=dict)
+
+    @field_validator("command")
+    @classmethod
+    def validate_command(cls, value: str) -> str:
+        if not value or not value.strip():
+            raise ValueError("hook.command must be a non-empty executable name or path")
+        if any(char.isspace() for char in value):
+            raise ValueError("hook.command must be a single argv element, not a shell string")
+        _validate_hook_template_string(value)
+        return value
+
+    @field_validator("args")
+    @classmethod
+    def validate_args(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        for item in value:
+            _validate_hook_template_string(item)
+        return value
+
+    @field_validator("timeout_seconds")
+    @classmethod
+    def validate_timeout(cls, value: float) -> float:
+        if not math.isfinite(value) or value <= 0:
+            raise ValueError("hook.timeout_seconds must be a finite value greater than zero")
+        return value
+
+    @field_validator("cwd")
+    @classmethod
+    def validate_cwd(cls, value: str | None) -> str | None:
+        if value is not None:
+            _validate_hook_template_string(value)
+        return value
+
+    @field_validator("env")
+    @classmethod
+    def validate_env(cls, value: dict[str, str]) -> dict[str, str]:
+        for key, item in value.items():
+            if not ENV_NAME_PATTERN.fullmatch(key):
+                raise ValueError(
+                    "hook.env keys must be portable environment variable names "
+                    "matching [A-Za-z_][A-Za-z0-9_]*"
+                )
+            _validate_hook_template_string(item)
+        return value
 
 
 class CommandAdapterConfig(BaseModel):
@@ -138,6 +220,19 @@ class ReviewGauntletConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     adapter: CommandAdapterConfig
+    hooks: dict[str, tuple[HookCommandConfig, ...]] = Field(default_factory=dict)
+
+    @field_validator("hooks")
+    @classmethod
+    def validate_hooks(
+        cls, value: dict[str, tuple[HookCommandConfig, ...]]
+    ) -> dict[str, tuple[HookCommandConfig, ...]]:
+        unknown_events = sorted(set(value) - SUPPORTED_HOOK_EVENTS)
+        if unknown_events:
+            supported = ", ".join(sorted(SUPPORTED_HOOK_EVENTS))
+            unknown = ", ".join(unknown_events)
+            raise ValueError(f"unsupported hook event(s): {unknown}; supported events: {supported}")
+        return value
 
 
 def discover_config_path(root: Path, explicit: Path | None = None) -> Path | None:
@@ -295,10 +390,18 @@ def validate_config_text(text: str, *, source: str) -> ReviewGauntletConfig:
 
 
 def _validate_template_string(value: str) -> None:
+    _validate_template_string_with_variables(value, SUPPORTED_TEMPLATE_VARIABLES)
+
+
+def _validate_hook_template_string(value: str) -> None:
+    _validate_template_string_with_variables(value, HOOK_TEMPLATE_VARIABLES)
+
+
+def _validate_template_string_with_variables(value: str, variables: frozenset[str]) -> None:
     literal_removed = value.replace("{{", "").replace("}}", "")
     for match in TEMPLATE_PATTERN.finditer(literal_removed):
         name = match.group(1)
-        if name not in SUPPORTED_TEMPLATE_VARIABLES:
+        if name not in variables:
             raise ValueError(f"unsupported template variable {{{name}}}")
     brace_depth = 0
     index = 0
