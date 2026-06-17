@@ -252,6 +252,25 @@ Dirty review-universe blockers SHALL identify that review-universe files are dir
 **And**: `can_finalize` is `false`
 **And**: no raw traceback is printed as the final user-facing result
 
+#### Scenario: Ledger database unavailability blocks status finalization readiness
+
+**Given**: an active review session that otherwise may be close to finalizable
+**And**: `sqlite3.connect` against the session ledger raises `sqlite3.OperationalError` (e.g., due to file descriptor exhaustion or database lock)
+**When**: the developer runs `review-gauntlet status --format json`
+**Then**: stdout contains parseable JSON
+**And**: `finalize_blockers` includes a blocker indicating the ledger database access is unavailable
+**And**: `can_finalize` is `false`
+**And**: no raw traceback is printed as the final user-facing result
+
+#### Scenario: Ledger database unavailability blocks run readiness without TUI crash
+
+**Given**: a running TUI session with an active review session
+**And**: TUI refresh triggers `_ready_prompt` computation that raises `sqlite3.OperationalError`
+**When**: the TUI timer calls `RunController.snapshot()`
+**Then**: the snapshot is produced with `next_ready_prompt` set to `None`
+**And**: the TUI remains responsive without a fatal worker-thread crash
+**And**: the finalize checklist shows the blocked status
+
 #### Scenario: Git resource exhaustion blocks finalize without checkpoint writes
 
 **Given**: an active review session that otherwise may be close to finalizable
