@@ -309,6 +309,14 @@ class SessionSummary:
 
 
 @dataclass(frozen=True)
+class ActionableFindingSummary:
+    open: int
+    triage: int
+    fix: int
+    verify: int
+
+
+@dataclass(frozen=True)
 class FinalizeGate:
     index: int
     title: str
@@ -358,6 +366,15 @@ def calculate_progress_metrics(coverage: dict[str, object]) -> ProgressMetrics:
     percent = int((displayed_completed / total) * 100) if total else 0
     return ProgressMetrics(
         displayed_completed, total, percent, superseded, pending + stale, pending, stale
+    )
+
+
+def actionable_finding_summary(findings: dict[str, object]) -> ActionableFindingSummary:
+    triage = _count_value(findings.get("reopened", 0)) + _count_value(findings.get("untriaged", 0))
+    fix = _count_value(findings.get("confirmed", 0))
+    verify = _count_value(findings.get("fixed_pending_verification", 0))
+    return ActionableFindingSummary(
+        open=triage + fix + verify, triage=triage, fix=fix, verify=verify
     )
 
 
@@ -448,6 +465,7 @@ def dashboard_state(
     )
     liveness_detail = agent_liveness_detail(snapshot)
     coverage = calculate_progress_metrics(snapshot.coverage)
+    findings_summary = actionable_finding_summary(snapshot.findings)
     task = format_task_title(snapshot.next_ready_prompt)
     artifact_path = snapshot.agent_lifecycle.artifact_path
     return RunViewState(
@@ -461,11 +479,11 @@ def dashboard_state(
         active_gate=active_gate,
         gates=gates,
         coverage=coverage,
-        open_findings=_count_value(snapshot.findings.get("open", 0)),
+        open_findings=findings_summary.open,
         task=task,
         command_label=command_label,
         agent_summary=build_agent_summary(snapshot, command_label, liveness_detail, artifact_path),
-        session_summary=build_session_summary(snapshot, coverage, active_gate),
+        session_summary=build_session_summary(snapshot, coverage, active_gate, findings_summary),
         timeline_events=timeline_events + output_events,
         activity=agent_activity_text(
             _display_agent_status(snapshot), activity_frame=activity_frame
@@ -512,11 +530,20 @@ def build_agent_summary(
 
 
 def build_session_summary(
-    snapshot: RunSnapshot, coverage: ProgressMetrics, active_gate: FinalizeGate
+    snapshot: RunSnapshot,
+    coverage: ProgressMetrics,
+    active_gate: FinalizeGate,
+    findings_summary: ActionableFindingSummary,
 ) -> SessionSummary:
+    findings = f"open {findings_summary.open}"
+    if findings_summary.open:
+        findings = (
+            f"{findings}   triage {findings_summary.triage} | "
+            f"fix {findings_summary.fix} | verify {findings_summary.verify}"
+        )
     return SessionSummary(
         coverage=f"{coverage.percent}%   {coverage.completed} / {coverage.total}",
-        findings=f"open {_count_value(snapshot.findings.get('open', 0))}",
+        findings=findings,
         current=active_gate.title.lower(),
         agent_step=str(snapshot.step),
     )
@@ -779,10 +806,12 @@ def coverage_text(snapshot: RunSnapshot) -> str:
 
 
 def findings_text(snapshot: RunSnapshot) -> str:
+    summary = actionable_finding_summary(snapshot.findings)
     parts: list[str] = []
     for state in FINDING_STATES:
         label = state.replace("fixed_pending_verification", "fixed-pending")
-        parts.append(f"{label} {_count_value(snapshot.findings.get(state, 0))}")
+        count = summary.open if state == "open" else _count_value(snapshot.findings.get(state, 0))
+        parts.append(f"{label} {count}")
     return " | ".join(parts)
 
 
