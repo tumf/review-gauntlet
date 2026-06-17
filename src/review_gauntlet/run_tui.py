@@ -13,7 +13,7 @@ from review_gauntlet.__about__ import __version__
 from review_gauntlet.run_controller import AgentOutputEntry, RunController, RunEvent, RunSnapshot
 
 TUI_FALLBACK_WARNING = "TUI support is not installed; falling back to text mode."
-TUI_INSTALL_GUIDANCE = 'Install with: uv tool install "review-gauntlet[tui]"'
+TUI_INSTALL_GUIDANCE = "Reinstall review-gauntlet to restore bundled TUI dependencies."
 PANEL_TITLES = {
     "header": "Review Gauntlet",
     "finalize_path": "Finalize checklist",
@@ -1281,10 +1281,6 @@ def _agent_text(snapshot: RunSnapshot) -> str:  # pyright: ignore[reportUnusedFu
 
 def _plain_text(value: object) -> str:
     return "".join(_plain_character(character) for character in str(value))
-
-
-def _rich_safe_text(value: object) -> str:
-    return _plain_text(value).replace("[", r"\[")
 
 
 def _plain_character(character: str) -> str:
