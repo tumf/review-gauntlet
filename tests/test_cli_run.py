@@ -406,6 +406,7 @@ def test_run_does_not_mask_primary_exception_with_none_result(
 def test_run_json_emits_checkpoint_commit_metadata(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    _init_session(tmp_path, capsys)
     _write_config(tmp_path, "fake-agent", [])
 
     def fake_run(_self: object) -> dict[str, object]:
