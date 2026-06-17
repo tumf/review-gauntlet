@@ -907,17 +907,21 @@ def test_run_tui_source_uses_border_titles_and_semantic_title_styles() -> None:
     assert "Header" not in source
     assert "Footer" not in source
     assert "border_title" in source
+    assert "session_header.border_title = header_title_text()" in source
+    assert 'Static(header_title_text(), id="header_title")' not in source
+    assert 'id="header_title"' not in source
     assert "border-title-color" in source
     assert "border-title-style" in source
     assert "$warning" in source
     assert "$accent" not in source
 
 
-def test_header_title_carries_brand_sparkle_and_name() -> None:
+def test_header_title_carries_brand_sparkle_name_and_version() -> None:
     title = run_tui.header_title_text()
 
     assert "✻" in title
     assert "Review Gauntlet" in title
+    assert f"v{run_tui.__version__}" in title
 
 
 def test_header_first_line_is_brand_title_and_meta_omits_timeout() -> None:
@@ -946,13 +950,18 @@ def test_header_first_line_is_brand_title_and_meta_omits_timeout() -> None:
     assert "53s" not in meta
 
 
-def test_run_tui_source_styles_header_with_brand_accent_and_state_status() -> None:
+def test_run_tui_source_styles_header_border_title_with_brand_accent_and_state_status() -> None:
     source = Path("src/review_gauntlet/run_tui.py").read_text(encoding="utf-8")
 
     assert "$brand: #d97757;" in source
-    assert "#header_title { color: $brand;" in source
+    assert "#header_title" not in source
+    assert "#session_header {" in source
+    assert "border-title-color: $brand;" in source
+    assert "border-title-style: bold;" in source
     assert ".panel-active #header_status { color: $success; }" in source
+    assert ".panel-blocked #header_status { color: $warning; }" in source
     assert ".panel-failed #header_status { color: $error; }" in source
+    assert ".panel-finalized #header_status { color: $success; }" in source
 
 
 def test_run_tui_source_defines_explicit_dark_dashboard_backgrounds() -> None:

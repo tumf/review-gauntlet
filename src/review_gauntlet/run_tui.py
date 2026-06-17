@@ -7,6 +7,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime
 
+from review_gauntlet.__about__ import __version__
 from review_gauntlet.run_controller import AgentOutputEntry, RunController, RunEvent, RunSnapshot
 
 TUI_FALLBACK_WARNING = "TUI support is not installed; falling back to text mode."
@@ -57,11 +58,12 @@ def create_run_app(controller: RunController) -> object:
         #body { height: 1fr; padding: 1; background: $dashboard-bg; }
         #session_header {
             border: round $primary;
+            border-title-color: $brand;
+            border-title-style: bold;
             padding: 1;
             height: auto;
             background: $dashboard-surface;
         }
-        #header_title { color: $brand; text-style: bold; }
         #header_status { text-style: bold; }
         #header_meta { color: $text-muted; }
         .panel-active #header_status { color: $success; }
@@ -109,8 +111,9 @@ def create_run_app(controller: RunController) -> object:
                 self.snapshot, self.controller.events, activity_frame=self._activity_frame
             )
             with Vertical(id="body"):
-                with Vertical(id="session_header", classes=view.state_class):
-                    yield Static(header_title_text(), id="header_title")
+                session_header = Vertical(id="session_header", classes=view.state_class)
+                session_header.border_title = header_title_text()
+                with session_header:
                     yield Static(header_status_text(view), id="header_status")
                     yield Static(header_meta_text(view), id="header_meta")
                 yield titled_panel(
@@ -714,7 +717,7 @@ def _agent_status_label(status: str) -> str:
 
 
 def header_title_text() -> str:
-    return "✻ Review Gauntlet"
+    return f"✻ Review Gauntlet v{__version__}"
 
 
 def header_status_text(view: RunViewState) -> str:
