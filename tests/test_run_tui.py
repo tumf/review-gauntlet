@@ -39,6 +39,24 @@ from review_gauntlet.run_tui import (
 from review_gauntlet.session_store import SessionStore
 
 
+def _advance_flash_state(
+    state: run_tui.TuiRenderState, view: run_tui.RunViewState, *, now: float
+) -> run_tui.TuiRenderState:
+    sections = tuple(run_tui.tui_render_sections(view).values())
+    return run_tui.update_tui_render_state(state, sections, now=now, flash_duration_seconds=1.0)
+
+
+def _flash_keys(state: run_tui.TuiRenderState) -> set[str]:
+    return set(state.flashes)
+
+
+def _styled_fragments(rendered: object) -> tuple[str, ...]:
+    text = cast(Any, rendered)
+    plain = cast(str, text.plain)
+    spans = cast(Any, text.spans)
+    return tuple(plain[span.start : span.end] for span in spans)
+
+
 def test_should_use_tui_selection_rules() -> None:
     assert should_use_tui(output_format="text", no_tui=False, stdout_is_tty=True) is True
     assert should_use_tui(output_format="json", no_tui=False, stdout_is_tty=True) is False
@@ -179,6 +197,206 @@ def test_header_omits_timeout_and_agent_summary_keeps_quiet_timeout_artifact_liv
     assert "output  last output 7s ago" in operation
     assert "timeout in 53s" in operation
     assert "timeout timeout" not in operation
+
+
+def test_tui_value_change_model_ignores_volatile_time_and_spinner_drift() -> None:
+    first = RunSnapshot(
+        session_id="RGS-flash-stable",
+        coverage={"reviewed": 1},
+        findings={},
+        next_ready_prompt="finalize session",
+        step=1,
+        agent_status="running",
+        command_argv=("agent",),
+        elapsed_seconds=10,
+        command_label="agent",
+        agent_lifecycle=AgentLifecycle(
+            status="quiet",
+            last_output_age_seconds=7.0,
+            timeout_remaining_seconds=53.0,
+        ),
+    )
+    second = RunSnapshot(
+        session_id="RGS-flash-stable",
+        coverage={"reviewed": 1},
+        findings={},
+        next_ready_prompt="finalize session",
+        step=1,
+        agent_status="running",
+        command_argv=("agent",),
+        elapsed_seconds=99,
+        command_label="agent",
+        agent_lifecycle=AgentLifecycle(
+            status="quiet",
+            last_output_age_seconds=8.0,
+            timeout_remaining_seconds=52.0,
+        ),
+    )
+    state = run_tui.empty_tui_render_state()
+
+    state = _advance_flash_state(state, dashboard_state(first, (), activity_frame=0), now=0.0)
+    state = _advance_flash_state(state, dashboard_state(second, (), activity_frame=1), now=0.25)
+
+    assert _flash_keys(state) == set()
+
+
+def test_session_coverage_flash_marks_only_changed_completed_count_fragment() -> None:
+    first = RunSnapshot(
+        session_id="RGS-coverage-flash",
+        coverage={"pending": 2},
+        findings={},
+        next_ready_prompt="review pending cells",
+        step=1,
+        agent_status="running",
+        command_argv=("agent",),
+        elapsed_seconds=0,
+        command_label="agent",
+    )
+    second = RunSnapshot(
+        session_id="RGS-coverage-flash",
+        coverage={"reviewed": 1, "pending": 1},
+        findings={},
+        next_ready_prompt="review pending cells",
+        step=1,
+        agent_status="running",
+        command_argv=("agent",),
+        elapsed_seconds=0,
+        command_label="agent",
+    )
+    state = run_tui.empty_tui_render_state()
+
+    state = _advance_flash_state(state, dashboard_state(first, ()), now=0.0)
+    second_view = dashboard_state(second, ())
+    state = _advance_flash_state(state, second_view, now=0.25)
+    rendered = run_tui.session_summary_tui_render(second_view, state.flashes, mode="rich")
+
+    assert "session.coverage.completed" in _flash_keys(state)
+    assert "session.coverage.total" not in _flash_keys(state)
+    assert _styled_fragments(rendered) == ("1",)
+    assert cast(Any, rendered).plain.splitlines()[0] == "Coverage  50%   1 / 2"
+
+
+def test_agent_step_flash_marks_only_changed_step_value_fragment() -> None:
+    first = RunSnapshot("RGS-step-flash", {"reviewed": 1}, {}, None, 1, "running", (), 0)
+    second = RunSnapshot("RGS-step-flash", {"reviewed": 1}, {}, None, 2, "running", (), 0)
+    state = run_tui.empty_tui_render_state()
+
+    state = _advance_flash_state(state, dashboard_state(first, ()), now=0.0)
+    second_view = dashboard_state(second, ())
+    state = _advance_flash_state(state, second_view, now=0.25)
+    rendered = run_tui.session_summary_tui_render(second_view, state.flashes, mode="rich")
+
+    assert _flash_keys(state) == {"session.agent_step.value"}
+    assert _styled_fragments(rendered) == ("2",)
+    assert "Agent step 2" in cast(Any, rendered).plain
+
+
+def test_meaningful_state_kind_and_timeout_kind_transitions_flash_once() -> None:
+    running = RunSnapshot(
+        session_id="RGS-kind-flash",
+        coverage={"reviewed": 1},
+        findings={},
+        next_ready_prompt="finalize session",
+        step=1,
+        agent_status="running",
+        command_argv=("agent",),
+        elapsed_seconds=0,
+        command_label="agent",
+        agent_lifecycle=AgentLifecycle(status="running"),
+    )
+    quiet_countdown = RunSnapshot(
+        session_id="RGS-kind-flash",
+        coverage={"reviewed": 1},
+        findings={},
+        next_ready_prompt="finalize session",
+        step=1,
+        agent_status="running",
+        command_argv=("agent",),
+        elapsed_seconds=0,
+        command_label="agent",
+        agent_lifecycle=AgentLifecycle(
+            status="quiet",
+            last_output_age_seconds=6.0,
+            timeout_remaining_seconds=54.0,
+        ),
+    )
+    quiet_countdown_drift = RunSnapshot(
+        session_id="RGS-kind-flash",
+        coverage={"reviewed": 1},
+        findings={},
+        next_ready_prompt="finalize session",
+        step=1,
+        agent_status="running",
+        command_argv=("agent",),
+        elapsed_seconds=0,
+        command_label="agent",
+        agent_lifecycle=AgentLifecycle(
+            status="quiet",
+            last_output_age_seconds=7.0,
+            timeout_remaining_seconds=53.0,
+        ),
+    )
+    state = run_tui.empty_tui_render_state()
+
+    state = _advance_flash_state(state, dashboard_state(running, ()), now=0.0)
+    state = _advance_flash_state(state, dashboard_state(quiet_countdown, ()), now=0.25)
+
+    assert "header.meta.liveness" in _flash_keys(state)
+    assert "agent.status.value" in _flash_keys(state)
+    assert "agent.timeout.value" in _flash_keys(state)
+
+    state = _advance_flash_state(state, dashboard_state(quiet_countdown_drift, ()), now=2.0)
+
+    assert _flash_keys(state) == set()
+
+
+def test_finalize_findings_and_activity_flash_at_value_or_new_row_granularity() -> None:
+    first = RunSnapshot(
+        session_id="RGS-finalize-flash",
+        coverage={"reviewed": 1},
+        findings={},
+        next_ready_prompt="finalize session",
+        step=1,
+        agent_status="running",
+        command_argv=("agent",),
+        elapsed_seconds=0,
+        command_label="agent",
+    )
+    second = RunSnapshot(
+        session_id="RGS-finalize-flash",
+        coverage={"reviewed": 1},
+        findings={"open": 1, "untriaged": 1},
+        next_ready_prompt="triage untriaged findings",
+        step=1,
+        agent_status="running",
+        command_argv=("agent",),
+        elapsed_seconds=0,
+        command_label="agent",
+    )
+    first_events = (RunEvent("status_refreshed", "2026-06-15T12:00:00+00:00", {}),)
+    timestamp_only_events = (RunEvent("status_refreshed", "2026-06-15T12:00:01+00:00", {}),)
+    added_events = first_events + (
+        RunEvent("failed", "2026-06-15T12:00:02+00:00", {"reason": "command_failed"}),
+    )
+    state = run_tui.empty_tui_render_state()
+
+    state = _advance_flash_state(state, dashboard_state(first, first_events), now=0.0)
+    state = _advance_flash_state(state, dashboard_state(first, timestamp_only_events), now=0.25)
+    assert _flash_keys(state) == set()
+
+    second_view = dashboard_state(second, added_events)
+    state = _advance_flash_state(state, second_view, now=0.5)
+    finalize_rendered = run_tui.finalize_path_tui_render(second_view, state.flashes, mode="rich")
+    session_rendered = run_tui.session_summary_tui_render(second_view, state.flashes, mode="rich")
+    activity_rendered = run_tui.activity_tui_render(second_view, state.flashes, mode="rich")
+
+    assert "session.findings.open" in _flash_keys(state)
+    assert "finalize.gate.2.state" in _flash_keys(state)
+    assert "finalize.gate.2.detail" in _flash_keys(state)
+    assert "activity.event-failed-command_failed.detail" in _flash_keys(state)
+    assert "1" in _styled_fragments(session_rendered)
+    assert "running" in _styled_fragments(finalize_rendered)
+    assert " - failed command_failed" in _styled_fragments(activity_rendered)
 
 
 def test_liveness_omits_quiet_heartbeat_rows_across_animation_frames() -> None:

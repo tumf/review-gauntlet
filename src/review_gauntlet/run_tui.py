@@ -4,8 +4,10 @@ from __future__ import annotations
 import importlib.util
 import math
 import re
+import time
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Literal
 
 from review_gauntlet.__about__ import __version__
 from review_gauntlet.run_controller import AgentOutputEntry, RunController, RunEvent, RunSnapshot
@@ -106,6 +108,7 @@ def create_run_app(controller: RunController) -> object:
             self.controller = run_controller
             self.snapshot = run_controller.snapshot()
             self._activity_frame = 0
+            self._tui_render_state = empty_tui_render_state()
             self._completed_result: dict[str, object] | None = None
 
         def compose(self) -> ComposeResult:
@@ -180,6 +183,11 @@ def create_run_app(controller: RunController) -> object:
             view = dashboard_state(
                 self.snapshot, self.controller.events, activity_frame=self._activity_frame
             )
+            sections = tui_render_sections(view)
+            self._tui_render_state = update_tui_render_state(
+                self._tui_render_state, tuple(sections.values())
+            )
+            flashes = self._tui_render_state.flashes
             try:
                 session_header = self.query_one("#session_header", Vertical)
                 header_status = self.query_one("#header_status", Static)
@@ -194,8 +202,8 @@ def create_run_app(controller: RunController) -> object:
                 activity_timeline = self.query_one("#activity_timeline", Static)
             except NoMatches:
                 return
-            header_status.update(header_status_text(view))
-            header_meta.update(header_meta_text(view))
+            header_status.update(render_tui_lines(sections["header_status"], flashes, mode="rich"))
+            header_meta.update(render_tui_lines(sections["header_meta"], flashes, mode="rich"))
             for state_class in (
                 "panel",
                 "panel-active",
@@ -209,10 +217,10 @@ def create_run_app(controller: RunController) -> object:
                 agent_panel_container.set_class(enabled, state_class)
                 session_panel_container.set_class(enabled, state_class)
                 activity_panel.set_class(enabled, state_class)
-            finalize_path.update(finalize_path_text(view))
-            agent_panel.update(agent_summary_text(view))
-            session_panel.update(session_summary_text(view))
-            activity_timeline.update(activity_text(view))
+            finalize_path.update(render_tui_lines(sections["finalize_path"], flashes, mode="rich"))
+            agent_panel.update(render_tui_lines(sections["agent"], flashes, mode="rich"))
+            session_panel.update(render_tui_lines(sections["session"], flashes, mode="rich"))
+            activity_timeline.update(render_tui_lines(sections["activity"], flashes, mode="rich"))
 
     return RunApp(controller)
 
@@ -230,6 +238,9 @@ FINDING_STATES = (
 )
 _SPINNER_FRAMES = ("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
 _BAR_WIDTH = 24
+_FLASH_STYLE = "reverse bold #11151d on #facc15"
+_FLASH_DURATION_SECONDS = 0.9
+_FIELD_RENDER_MODE = Literal["plain", "rich"]
 _FAILED_AGENT_STATUSES = frozenset(
     {
         "failed",
@@ -322,6 +333,35 @@ class FinalizeGate:
     title: str
     state: str
     detail: str
+
+
+@dataclass(frozen=True)
+class TuiField:
+    key: str
+    display: str
+    compare: object
+
+
+@dataclass(frozen=True)
+class TuiLine:
+    fields: tuple[TuiField, ...]
+
+
+@dataclass(frozen=True)
+class TuiFlash:
+    key: str
+    expires_at: float
+
+
+@dataclass(frozen=True)
+class TuiRenderState:
+    previous: dict[str, object]
+    flashes: dict[str, TuiFlash]
+    initialized: bool = False
+
+
+def empty_tui_render_state() -> TuiRenderState:
+    return TuiRenderState(previous={}, flashes={}, initialized=False)
 
 
 @dataclass(frozen=True)
@@ -763,6 +803,295 @@ def header_text(view: RunViewState) -> str:
 
 def progress_text(snapshot: RunSnapshot, *, activity_frame: int = 0) -> str:
     return header_text(dashboard_state(snapshot, (), activity_frame=activity_frame))
+
+
+def update_tui_render_state(
+    state: TuiRenderState,
+    sections: tuple[tuple[TuiLine, ...], ...],
+    *,
+    now: float | None = None,
+    flash_duration_seconds: float = _FLASH_DURATION_SECONDS,
+) -> TuiRenderState:
+    current_time = time.monotonic() if now is None else now
+    current = _field_compare_map(sections)
+    flashes = {
+        key: flash
+        for key, flash in state.flashes.items()
+        if flash.expires_at > current_time and key in current
+    }
+    if state.initialized:
+        for key, value in current.items():
+            if (key in state.previous and state.previous[key] != value) or (
+                key not in state.previous and _is_activity_value_key(key)
+            ):
+                flashes[key] = TuiFlash(key=key, expires_at=current_time + flash_duration_seconds)
+    return TuiRenderState(previous=current, flashes=flashes, initialized=True)
+
+
+def tui_render_sections(view: RunViewState) -> dict[str, tuple[TuiLine, ...]]:
+    return {
+        "header_status": header_status_tui_lines(view),
+        "header_meta": header_meta_tui_lines(view),
+        "finalize_path": finalize_path_tui_lines(view),
+        "agent": agent_summary_tui_lines(view),
+        "session": session_summary_tui_lines(view),
+        "activity": activity_tui_lines(view),
+    }
+
+
+def render_tui_lines(
+    lines: tuple[TuiLine, ...],
+    flashes: dict[str, TuiFlash] | None = None,
+    *,
+    mode: _FIELD_RENDER_MODE = "plain",
+) -> object:
+    flash_keys = frozenset(flashes or {})
+    if mode == "rich":
+        from rich.text import Text
+
+        rendered = Text()
+        for line_index, line in enumerate(lines):
+            if line_index:
+                rendered.append("\n")
+            for field in line.fields:
+                style = _FLASH_STYLE if field.key in flash_keys else None
+                rendered.append(field.display, style=style)
+        return rendered
+    return "\n".join("".join(field.display for field in line.fields) for line in lines)
+
+
+def header_status_tui_lines(view: RunViewState) -> tuple[TuiLine, ...]:
+    return (
+        TuiLine(
+            (
+                _field("header.status.summary", view.status_summary),
+                _literal(" · ", key="header.status.sep.1"),
+                _field("header.status.gate", view.gate_label, compare=view.active_gate.index),
+                _literal(" · ", key="header.status.sep.2"),
+                _field("header.status.active_gate", view.active_gate.title),
+            )
+        ),
+    )
+
+
+def header_meta_tui_lines(view: RunViewState) -> tuple[TuiLine, ...]:
+    return (
+        TuiLine(
+            (
+                _field("header.meta.session", view.session_short_id),
+                _literal(" · agent ", key="header.meta.agent_prefix"),
+                _field("header.meta.agent", view.agent_name),
+                _literal(" · ", key="header.meta.sep"),
+                _field(
+                    "header.meta.liveness",
+                    view.liveness_detail,
+                    compare=_semantic_liveness_compare(view.liveness_detail),
+                ),
+            )
+        ),
+    )
+
+
+def finalize_path_tui_lines(view: RunViewState) -> tuple[TuiLine, ...]:
+    lines: list[TuiLine] = []
+    for gate in view.gates:
+        marker = {"done": "✓", "running": "▶", "blocked": "!", "failed": "×"}.get(gate.state, " ")
+        prefix = f"gate.{gate.index}"
+        lines.append(
+            TuiLine(
+                (
+                    _field(f"finalize.{prefix}.marker", marker),
+                    _literal(" ", key=f"finalize.{prefix}.marker_space"),
+                    _field(f"finalize.{prefix}.title", f"{gate.title:<24}", compare=gate.title),
+                    _literal(" ", key=f"finalize.{prefix}.title_space"),
+                    _field(f"finalize.{prefix}.state", f"{gate.state:<7}", compare=gate.state),
+                    _literal(" ", key=f"finalize.{prefix}.state_space"),
+                    _field(f"finalize.{prefix}.detail", gate.detail),
+                )
+            )
+        )
+    return tuple(lines)
+
+
+def agent_summary_tui_lines(view: RunViewState) -> tuple[TuiLine, ...]:
+    lines = [
+        _label_value_line("agent.command", "command ", view.agent_summary.command),
+        _label_value_line(
+            "agent.status",
+            "status  ",
+            view.agent_summary.status,
+            compare=_semantic_liveness_compare(view.agent_summary.status),
+        ),
+        _label_value_line(
+            "agent.output",
+            "output  ",
+            view.agent_summary.output,
+            compare=_agent_output_compare(view.agent_summary.output),
+        ),
+        _label_value_line(
+            "agent.timeout",
+            "timeout ",
+            view.agent_summary.timeout,
+            compare=_agent_timeout_compare(view.agent_summary.timeout),
+        ),
+    ]
+    if view.agent_summary.artifact is not None:
+        lines.append(_label_value_line("agent.artifact", "artifact ", view.agent_summary.artifact))
+    return tuple(lines)
+
+
+def session_summary_tui_lines(view: RunViewState) -> tuple[TuiLine, ...]:
+    coverage = view.coverage
+    return (
+        TuiLine(
+            (
+                _literal("Coverage  ", key="session.coverage.label"),
+                _field("session.coverage.percent", f"{coverage.percent}%", compare="derived"),
+                _literal("   ", key="session.coverage.percent_sep"),
+                _field(
+                    "session.coverage.completed",
+                    str(coverage.completed),
+                    compare=coverage.completed,
+                ),
+                _literal(" / ", key="session.coverage.count_sep"),
+                _field("session.coverage.total", str(coverage.total), compare=coverage.total),
+            )
+        ),
+        TuiLine(
+            (
+                _literal("Findings  open ", key="session.findings.label"),
+                _field(
+                    "session.findings.open", str(view.open_findings), compare=view.open_findings
+                ),
+            )
+        ),
+        _label_value_line("session.current", "Current   ", view.session_summary.current),
+        _label_value_line(
+            "session.agent_step",
+            "Agent step ",
+            view.session_summary.agent_step,
+            compare=view.session_summary.agent_step,
+        ),
+    )
+
+
+def activity_tui_lines(view: RunViewState) -> tuple[TuiLine, ...]:
+    if not view.timeline_events:
+        return (TuiLine((_field("activity.empty", "--:--:-- waiting for run activity"),)),)
+    lines: list[TuiLine] = []
+    for event in view.timeline_events:
+        identity = _activity_identity(event)
+        suffix = f" - {event.detail}" if event.detail else ""
+        lines.append(
+            TuiLine(
+                (
+                    _field(f"activity.{identity}.time", event.time, compare="timestamp"),
+                    _literal(" ", key=f"activity.{identity}.time_space"),
+                    _field(f"activity.{identity}.label", event.label, compare=event.label),
+                    _field(
+                        f"activity.{identity}.detail", suffix, compare=(event.label, event.detail)
+                    ),
+                )
+            )
+        )
+    return tuple(lines)
+
+
+def finalize_path_tui_render(
+    view: RunViewState,
+    flashes: dict[str, TuiFlash] | None = None,
+    *,
+    mode: _FIELD_RENDER_MODE = "plain",
+) -> object:
+    return render_tui_lines(finalize_path_tui_lines(view), flashes, mode=mode)
+
+
+def agent_summary_tui_render(
+    view: RunViewState,
+    flashes: dict[str, TuiFlash] | None = None,
+    *,
+    mode: _FIELD_RENDER_MODE = "plain",
+) -> object:
+    return render_tui_lines(agent_summary_tui_lines(view), flashes, mode=mode)
+
+
+def session_summary_tui_render(
+    view: RunViewState,
+    flashes: dict[str, TuiFlash] | None = None,
+    *,
+    mode: _FIELD_RENDER_MODE = "plain",
+) -> object:
+    return render_tui_lines(session_summary_tui_lines(view), flashes, mode=mode)
+
+
+def activity_tui_render(
+    view: RunViewState,
+    flashes: dict[str, TuiFlash] | None = None,
+    *,
+    mode: _FIELD_RENDER_MODE = "plain",
+) -> object:
+    return render_tui_lines(activity_tui_lines(view), flashes, mode=mode)
+
+
+def _field(key: str, display: str, *, compare: object | None = None) -> TuiField:
+    return TuiField(key=key, display=display, compare=display if compare is None else compare)
+
+
+def _literal(display: str, *, key: str) -> TuiField:
+    return TuiField(key=key, display=display, compare=display)
+
+
+def _label_value_line(
+    key: str, label: str, value: str, *, compare: object | None = None
+) -> TuiLine:
+    return TuiLine(
+        (
+            _literal(label, key=f"{key}.label"),
+            _field(f"{key}.value", value, compare=value if compare is None else compare),
+        )
+    )
+
+
+def _field_compare_map(sections: tuple[tuple[TuiLine, ...], ...]) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for lines in sections:
+        for line in lines:
+            for field in line.fields:
+                result[field.key] = field.compare
+    return result
+
+
+def _is_activity_value_key(key: str) -> bool:
+    return key.startswith("activity.") and key.endswith(".detail")
+
+
+def _semantic_liveness_compare(value: str) -> object:
+    if value.startswith("quiet "):
+        return ("quiet",)
+    if value.startswith("last output "):
+        return ("last_output",)
+    return value
+
+
+def _agent_output_compare(value: str) -> object:
+    if value.startswith("last output "):
+        return ("last_output",)
+    return value
+
+
+def _agent_timeout_compare(value: str) -> object:
+    if value.startswith("in "):
+        return ("countdown",)
+    if value.startswith("configured "):
+        return ("configured",)
+    return value
+
+
+def _activity_identity(event: TimelineEvent) -> str:
+    normalized = re.sub(r"[^a-zA-Z0-9_.-]+", "-", f"{event.label}-{event.detail}").strip("-")
+    if not normalized:
+        return "empty"
+    return normalized[:80]
 
 
 def titled_section(title: str, body: str) -> str:
