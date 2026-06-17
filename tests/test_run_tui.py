@@ -403,7 +403,7 @@ def test_finalize_findings_and_activity_flash_at_value_or_new_row_granularity() 
     activity_rendered = run_tui.activity_tui_render(second_view, state.flashes, mode="rich")
 
     assert "header.gate" in _flash_keys(state)
-    assert "activity.event-failed-command_failed.detail" in _flash_keys(state)
+    assert "activity.1.event-failed-command_failed.detail" in _flash_keys(state)
     assert " - failed command_failed" in _styled_fragments(activity_rendered)
 
 

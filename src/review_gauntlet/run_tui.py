@@ -184,8 +184,15 @@ def create_run_app(controller: RunController) -> object:
 
         def on_mount(self) -> None:
             self.refresh_view()
-            self.set_interval(0.25, self.refresh_view)
+            self.set_interval(0.25, self._background_refresh)
             self.run_worker(self._run_controller, thread=True)
+
+        def _background_refresh(self) -> None:
+            if self.snapshot.agent_status != "running":
+                return
+            self.snapshot = self.controller.snapshot()
+            self._activity_frame += 1
+            self._render_from_snapshot()
 
         def _run_controller(self) -> None:
             result = self.controller.run()
@@ -207,7 +214,6 @@ def create_run_app(controller: RunController) -> object:
             self.exit({"completed": False, "reason": "interrupted", "steps": [], "step_count": 0})
 
         def action_refresh(self) -> None:
-            self.snapshot = self.controller.refresh()
             self.refresh_view()
 
         def action_help(self) -> None:
@@ -239,6 +245,9 @@ def create_run_app(controller: RunController) -> object:
             self.snapshot = self.controller.snapshot()
             if self.snapshot.agent_status == "running":
                 self._activity_frame += 1
+            self._render_from_snapshot()
+
+        def _render_from_snapshot(self) -> None:
             view = dashboard_state(
                 self.snapshot,
                 self.controller.events,
