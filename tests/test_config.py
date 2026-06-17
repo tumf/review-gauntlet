@@ -6,6 +6,8 @@ import pytest
 from review_gauntlet.config import (
     CommandAdapterConfig,
     ConfigError,
+    HookCommandConfig,
+    ReviewGauntletConfig,
     deep_merge,
     discover_config_path,
     load_config,
@@ -314,3 +316,75 @@ def test_effective_config_merges_global_then_project(
     assert resolved.config.adapter.env == {"A": "1", "B": "2"}
     assert resolved.config.adapter.timeout_seconds == 10
     assert resolved.sources == (global_config, project_config)
+
+
+def test_review_config_defaults_to_empty_hooks() -> None:
+    config = ReviewGauntletConfig.model_validate(
+        {"adapter": {"type": "command", "command": "tool"}}
+    )
+
+    assert config.hooks == {}
+    assert config.model_dump(mode="json")["hooks"] == {}
+
+
+def test_review_config_accepts_valid_hooks_and_serializes_mapping() -> None:
+    config = ReviewGauntletConfig.model_validate(
+        {
+            "adapter": {"type": "command", "command": "tool"},
+            "hooks": {
+                "run_started": [
+                    {
+                        "command": "python",
+                        "args": [
+                            "hook.py",
+                            "{event_type}",
+                            "{timestamp}",
+                            "{repo_root}",
+                            "{state_dir}",
+                            "{session_id}",
+                            "{step}",
+                            "{reason}",
+                            "{returncode}",
+                        ],
+                        "cwd": "{repo_root}",
+                        "env": {"RG_EVENT": "{event_type}"},
+                        "timeout_seconds": 3,
+                    }
+                ]
+            },
+        }
+    )
+
+    hook = config.hooks["run_started"][0]
+    assert hook.command == "python"
+    assert hook.args[-1] == "{returncode}"
+    serialized = config.model_dump(mode="json")
+    assert serialized["hooks"]["run_started"][0]["env"] == {"RG_EVENT": "{event_type}"}
+
+
+@pytest.mark.parametrize(
+    "payload, message",
+    [
+        (
+            {"hooks": {"status_refreshed": [{"command": "tool"}]}},
+            "unsupported hook event",
+        ),
+        ({"hooks": {"run_started": [{"command": "tool --flag"}]}}, "shell string"),
+        ({"hooks": {"run_started": [{"command": "tool", "timeout_seconds": 0}]}}, "greater"),
+        ({"hooks": {"run_started": [{"command": "tool", "env": {"BAD-NAME": "x"}}]}}, "portable"),
+        ({"hooks": {"run_started": [{"command": "tool", "args": ["{prompt}"]}]}}, "unsupported"),
+    ],
+)
+def test_review_config_rejects_invalid_hooks(payload: dict[str, object], message: str) -> None:
+    base: dict[str, object] = {"adapter": {"type": "command", "command": "tool"}}
+    base.update(payload)
+
+    with pytest.raises(ValueError, match=message):
+        ReviewGauntletConfig.model_validate(base)
+
+
+@pytest.mark.parametrize("name", ["MESSAGE", "_TOKEN", "A1", "PATH_WITH_UNDERSCORES"])
+def test_hook_command_config_accepts_portable_env_names(name: str) -> None:
+    config = HookCommandConfig.model_validate({"command": "tool", "env": {name: "value"}})
+
+    assert config.env == {name: "value"}

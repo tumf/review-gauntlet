@@ -21,6 +21,7 @@ from review_gauntlet.run_controller import (
     SessionCommandResult,
     checkpoint_generated_files_from_stdout,
     command_display_label,
+    compose_event_sinks,
 )
 from review_gauntlet.session_store import SessionStore
 
@@ -948,6 +949,19 @@ def test_run_event_model_dump_key_collision() -> None:
     event = RunEvent.create("test", type="should_be_overwritten", timestamp="should_be_overwritten")
     with pytest.raises(ValueError, match="reserved key"):
         event.model_dump()
+
+
+def test_compose_event_sinks_sends_same_event_to_all_sinks() -> None:
+    event = RunEvent.create("run_started", session_id="RGS-test")
+    first: list[RunEvent] = []
+    second: list[RunEvent] = []
+    sink = compose_event_sinks(first.append, second.append)
+
+    assert sink is not None
+    sink(event)
+
+    assert first == [event]
+    assert second == [event]
 
 
 def test_run_controller_max_steps_zero_raises(tmp_path: Path) -> None:

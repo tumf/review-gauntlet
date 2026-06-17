@@ -38,6 +38,7 @@ from review_gauntlet.config import (
     validate_config_text,
 )
 from review_gauntlet.findings import FindingState, normalize_ocr_comment
+from review_gauntlet.hooks import create_hook_event_sink
 from review_gauntlet.inventory import (
     UnsafeRepositoryPathError,
     build_inventory,
@@ -67,6 +68,7 @@ from review_gauntlet.run_controller import (
     AgentOutputProgress,
     RunController,
     SessionCommandResult,
+    compose_event_sinks,
 )
 from review_gauntlet.run_tui import (
     TUI_FALLBACK_WARNING,
@@ -1708,6 +1710,16 @@ def _validated_run_result(result: object) -> dict[str, object]:
 
 def _cmd_run(args: argparse.Namespace, root: Path, store: SessionStore) -> dict[str, object]:
     controller: RunController
+    loaded_config = load_config(root, args.config)
+    hook_event_sink = None
+    if loaded_config is not None:
+        _config_path, effective_config = loaded_config
+        if effective_config.hooks:
+            hook_event_sink = create_hook_event_sink(
+                hooks=effective_config.hooks,
+                root=root,
+                state_dir=store.state_dir,
+            )
 
     def command_runner(
         config: CommandAdapterConfig, agent_root: Path, state_dir: Path, prompt: str
@@ -1728,6 +1740,7 @@ def _cmd_run(args: argparse.Namespace, root: Path, store: SessionStore) -> dict[
         ready_prompt=_ready_prompt,
         status_snapshot=lambda session_store, repo_root: _status(session_store, repo_root),
         command_runner=command_runner,
+        event_sink=compose_event_sinks(hook_event_sink),
     )
     use_tui = should_use_tui(
         output_format=str(args.format),

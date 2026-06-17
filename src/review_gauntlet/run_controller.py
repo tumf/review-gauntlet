@@ -126,6 +126,20 @@ CommandRunner = Callable[[CommandAdapterConfig, Path, Path, str], SessionCommand
 EventSink = Callable[[RunEvent], None]
 
 
+def compose_event_sinks(*sinks: EventSink | None) -> EventSink | None:
+    active_sinks = tuple(sink for sink in sinks if sink is not None)
+    if not active_sinks:
+        return None
+    if len(active_sinks) == 1:
+        return active_sinks[0]
+
+    def emit_to_all(event: RunEvent) -> None:
+        for sink in active_sinks:
+            sink(event)
+
+    return emit_to_all
+
+
 @dataclass(frozen=True)
 class RunExecutionContext:
     agent_root: Path

@@ -27,7 +27,13 @@ def _init_git_repo(root: Path) -> None:
 
 
 def _write_config(
-    root: Path, command: str, args: list[str], *, timeout: float = 5.0, cwd: str | None = None
+    root: Path,
+    command: str,
+    args: list[str],
+    *,
+    timeout: float = 5.0,
+    cwd: str | None = None,
+    hooks: dict[str, object] | None = None,
 ) -> Path:
     config = root / "review-gauntlet.json"
     adapter: dict[str, object] = {
@@ -38,7 +44,10 @@ def _write_config(
     }
     if cwd is not None:
         adapter["cwd"] = cwd
-    config.write_text(json.dumps({"adapter": adapter}), encoding="utf-8")
+    payload: dict[str, object] = {"adapter": adapter}
+    if hooks is not None:
+        payload["hooks"] = hooks
+    config.write_text(json.dumps(payload), encoding="utf-8")
     return config
 
 
@@ -149,6 +158,234 @@ print('agent finished')
     assert observation["cwd"] == str(tmp_path)
     assert observation["state_dir"] == str(tmp_path / ".review-gauntlet")
     assert not (tmp_path / ".review-gauntlet" / "active-session.json").exists()
+
+
+def test_run_executes_configured_hooks_in_order_and_persists_artifacts(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_session(tmp_path, capsys)
+    observed = tmp_path / "hook-observed.jsonl"
+    agent = tmp_path / "agent.py"
+    agent.write_text(
+        """
+from pathlib import Path
+Path('.review-gauntlet/active-session.json').unlink()
+print('agent finalized')
+""".strip(),
+        encoding="utf-8",
+    )
+    hook = tmp_path / "hook.py"
+    hook.write_text(
+        """
+import json
+import os
+import sys
+from pathlib import Path
+payload = json.loads(os.environ['REVIEW_GAUNTLET_EVENT_JSON'])
+record = {
+    'marker': sys.argv[1],
+    'argv_event_type': sys.argv[2],
+    'argv_session_id': sys.argv[3],
+    'argv_step': sys.argv[4],
+    'argv_reason': sys.argv[5],
+    'argv_returncode': sys.argv[6],
+    'env_event_type': os.environ['REVIEW_GAUNTLET_EVENT_TYPE'],
+    'env_repo_root': os.environ['REVIEW_GAUNTLET_REPO_ROOT'],
+    'env_state_dir': os.environ['REVIEW_GAUNTLET_STATE_DIR'],
+    'event_json': payload,
+    'cwd': os.getcwd(),
+}
+Path(os.environ['RG_OBSERVED']).open('a', encoding='utf-8').write(json.dumps(record) + '\\n')
+print('hook stdout ' + sys.argv[1])
+""".strip(),
+        encoding="utf-8",
+    )
+    _write_config(
+        tmp_path,
+        sys.executable,
+        [str(agent)],
+        hooks={
+            "run_started": [
+                {
+                    "command": sys.executable,
+                    "args": [
+                        str(hook),
+                        "first",
+                        "{event_type}",
+                        "{session_id}",
+                        "{step}",
+                        "{reason}",
+                        "{returncode}",
+                    ],
+                    "cwd": "{repo_root}",
+                    "env": {"RG_OBSERVED": str(observed)},
+                    "timeout_seconds": 5,
+                },
+                {
+                    "command": sys.executable,
+                    "args": [
+                        str(hook),
+                        "second",
+                        "{event_type}",
+                        "{session_id}",
+                        "{step}",
+                        "{reason}",
+                        "{returncode}",
+                    ],
+                    "env": {"RG_OBSERVED": str(observed)},
+                    "timeout_seconds": 5,
+                },
+            ],
+            "finalized": [
+                {
+                    "command": sys.executable,
+                    "args": [
+                        str(hook),
+                        "final",
+                        "{event_type}",
+                        "{session_id}",
+                        "{step}",
+                        "{reason}",
+                        "{returncode}",
+                    ],
+                    "env": {"RG_OBSERVED": str(observed)},
+                    "timeout_seconds": 5,
+                }
+            ],
+        },
+    )
+
+    main(["run", str(tmp_path), "--format", "json"])
+
+    result = json.loads(capsys.readouterr().out)
+    assert result["completed"] is True
+    records = [json.loads(line) for line in observed.read_text(encoding="utf-8").splitlines()]
+    assert [record["marker"] for record in records] == ["first", "second", "final"]
+    assert records[0]["argv_event_type"] == "run_started"
+    assert records[0]["argv_step"] == ""
+    assert records[0]["argv_reason"] == ""
+    assert records[0]["argv_returncode"] == ""
+    assert records[0]["env_repo_root"] == str(tmp_path.resolve())
+    assert records[0]["env_state_dir"] == str((tmp_path / ".review-gauntlet").resolve())
+    assert records[0]["event_json"]["type"] == "run_started"
+    assert records[0]["event_json"]["session_id"].startswith("RGS-")
+    assert records[0]["cwd"] == str(tmp_path.resolve())
+    assert records[2]["argv_event_type"] == "finalized"
+    hook_root = tmp_path / ".review-gauntlet" / "runs" / "hooks"
+    result_paths = sorted(hook_root.glob("*/*/result.json"))
+    assert len(result_paths) == 3
+    artifact_payloads = [json.loads(path.read_text(encoding="utf-8")) for path in result_paths]
+    assert {payload["event_type"] for payload in artifact_payloads} == {"run_started", "finalized"}
+    for payload in artifact_payloads:
+        assert payload["returncode"] == 0
+        assert (
+            Path(payload["stdout_artifact"]).read_text(encoding="utf-8").startswith("hook stdout")
+        )
+        assert Path(payload["stderr_artifact"]).read_text(encoding="utf-8") == ""
+
+
+def test_config_effective_json_includes_hooks(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _write_config(
+        tmp_path,
+        "tool",
+        [],
+        hooks={"run_started": [{"command": "python", "args": ["hook.py", "{event_type}"]}]},
+    )
+
+    main(["config", "effective", str(tmp_path), "--format", "json"])
+
+    result = json.loads(capsys.readouterr().out)
+    assert result["hooks"]["run_started"][0]["command"] == "python"
+    assert result["hooks"]["run_started"][0]["args"] == ["hook.py", "{event_type}"]
+
+
+def test_run_hook_failure_is_best_effort_and_does_not_change_run_result(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_session(tmp_path, capsys)
+    agent = tmp_path / "agent.py"
+    agent.write_text(
+        """
+from pathlib import Path
+Path('.review-gauntlet/active-session.json').unlink()
+print('agent completed despite hook failure')
+""".strip(),
+        encoding="utf-8",
+    )
+    _write_config(
+        tmp_path,
+        sys.executable,
+        [str(agent)],
+        hooks={
+            "run_started": [
+                {
+                    "command": sys.executable,
+                    "args": ["-c", "import sys; print('hook failed'); sys.exit(9)"],
+                    "timeout_seconds": 5,
+                }
+            ]
+        },
+    )
+
+    main(["run", str(tmp_path), "--format", "json"])
+
+    captured = capsys.readouterr()
+    result = json.loads(captured.out)
+    assert result["completed"] is True
+    assert result["reason"] == "completed"
+    assert "review-gauntlet hook warning" in captured.err
+    result_paths = list((tmp_path / ".review-gauntlet" / "runs" / "hooks").glob("*/*/result.json"))
+    assert len(result_paths) == 1
+    artifact = json.loads(result_paths[0].read_text(encoding="utf-8"))
+    assert artifact["returncode"] == 9
+    assert artifact["failure_reason"] == "command_failed"
+    assert "hook failed" in Path(artifact["stdout_artifact"]).read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    ("hook", "expected_reason"),
+    [
+        ({"command": "review-gauntlet-hook-that-does-not-exist"}, "startup_error"),
+        (
+            {
+                "command": sys.executable,
+                "args": ["-c", "import time; time.sleep(2)"],
+                "timeout_seconds": 0.05,
+            },
+            "timeout",
+        ),
+    ],
+)
+def test_run_hook_startup_error_and_timeout_are_best_effort(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    hook: dict[str, object],
+    expected_reason: str,
+) -> None:
+    _init_session(tmp_path, capsys)
+    agent = tmp_path / "agent.py"
+    agent.write_text(
+        """
+from pathlib import Path
+Path('.review-gauntlet/active-session.json').unlink()
+print('agent completed')
+""".strip(),
+        encoding="utf-8",
+    )
+    _write_config(tmp_path, sys.executable, [str(agent)], hooks={"run_started": [hook]})
+
+    main(["run", str(tmp_path), "--format", "json"])
+
+    captured = capsys.readouterr()
+    result = json.loads(captured.out)
+    assert result["completed"] is True
+    assert "review-gauntlet hook warning" in captured.err
+    result_paths = list((tmp_path / ".review-gauntlet" / "runs" / "hooks").glob("*/*/result.json"))
+    assert len(result_paths) == 1
+    artifact = json.loads(result_paths[0].read_text(encoding="utf-8"))
+    assert artifact["failure_reason"] == expected_reason
 
 
 def test_run_does_not_mask_primary_exception_with_none_result(
