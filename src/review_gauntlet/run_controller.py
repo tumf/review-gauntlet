@@ -135,7 +135,7 @@ class RunExecutionContext:
     def from_active_session(
         cls, *, root: Path, store: SessionStore, session_id: str
     ) -> RunExecutionContext:
-        store.session_metadata(session_id)
+        store.session_metadata(session_id)  # raises LookupError if session missing
         return cls(agent_root=root, state_dir=store.state_dir)
 
 
@@ -231,25 +231,27 @@ class RunController:
         if self._agent_status != "running":
             return self._agent_lifecycle
         now = datetime.now(UTC)
-        last_output_age = self._agent_lifecycle.last_output_age_seconds
-        output_tail = self._agent_lifecycle.output_tail
+        # Snapshot mutable fields to avoid TOCTOU races with run() thread
+        lifecycle = self._agent_lifecycle
+        step_started_at = self._agent_step_started_at
+        timeout_seconds = self._agent_timeout_seconds
         output_progress = self._agent_output_progress
+        last_output_age = lifecycle.last_output_age_seconds
+        output_tail = lifecycle.output_tail
         if output_progress is not None:
             progress_age, progress_tail = output_progress.snapshot()
             if progress_tail:
                 last_output_age = progress_age
                 output_tail = progress_tail
-        if last_output_age is None and self._agent_step_started_at is not None:
-            last_output_age = (now - self._agent_step_started_at).total_seconds()
-        timeout_remaining = self._agent_lifecycle.timeout_remaining_seconds
-        if timeout_remaining is None and self._agent_timeout_seconds is not None:
+        if last_output_age is None and step_started_at is not None:
+            last_output_age = (now - step_started_at).total_seconds()
+        timeout_remaining = lifecycle.timeout_remaining_seconds
+        if timeout_remaining is None and timeout_seconds is not None:
             elapsed = (
-                (now - self._agent_step_started_at).total_seconds()
-                if self._agent_step_started_at is not None
-                else 0.0
+                (now - step_started_at).total_seconds() if step_started_at is not None else 0.0
             )
-            timeout_remaining = max(0.0, float(self._agent_timeout_seconds) - elapsed)
-        status = self._agent_lifecycle.status
+            timeout_remaining = max(0.0, float(timeout_seconds) - elapsed)
+        status = lifecycle.status
         if (
             status == "running"
             and last_output_age is not None
@@ -260,8 +262,8 @@ class RunController:
             status=status,
             last_output_age_seconds=last_output_age,
             timeout_remaining_seconds=timeout_remaining,
-            timeout_seconds=self._agent_timeout_seconds,
-            artifact_path=self._agent_lifecycle.artifact_path,
+            timeout_seconds=timeout_seconds,
+            artifact_path=lifecycle.artifact_path,
             output_tail=output_tail,
         )
 
