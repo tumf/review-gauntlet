@@ -8,6 +8,7 @@ import re
 import subprocess
 import sys
 import threading
+import time
 import uuid
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
@@ -1833,6 +1834,8 @@ def _run_session_command_step(
     stdout_lines: list[str] = []
     stderr_lines: list[str] = []
     output_lock = threading.Lock()
+    started_at = time.monotonic()
+    last_output_at = started_at
 
     try:
         process = subprocess.Popen(
@@ -1873,14 +1876,51 @@ def _run_session_command_step(
         )
 
     def read_stream(stream_name: str, lines: list[str], pipe: Any) -> None:
+        nonlocal last_output_at
         try:
             for line in pipe:
+                stripped_line = line.rstrip("\n")
                 with output_lock:
                     lines.append(line)
+                    last_output_at = time.monotonic()
                 if output_progress is not None:
-                    output_progress.push(stream_name, line.rstrip("\n"))
+                    output_progress.push(stream_name, stripped_line)
         finally:
             pipe.close()
+
+    def captured_output() -> tuple[str, str]:
+        with output_lock:
+            stdout = _process_session_output_text("".join(stdout_lines))
+            stderr = _process_session_output_text("".join(stderr_lines))
+        return stdout, stderr
+
+    def kill_and_persist_timeout(reason: str, error: str) -> SessionCommandResult:
+        process.kill()
+        returncode_after_kill = process.wait()
+        stdout_thread.join(timeout=1.0)
+        stderr_thread.join(timeout=1.0)
+        stdout, stderr = captured_output()
+        failure: dict[str, object] = {
+            "reason": reason,
+            "error": error,
+            "timeout_seconds": config.timeout_seconds,
+            "returncode_after_kill": returncode_after_kill,
+        }
+        if reason == "quiet_timeout":
+            failure["quiet_timeout_seconds"] = config.quiet_timeout_seconds
+            failure["stdout_tail"] = stdout.splitlines()[-20:]
+            failure["stderr_tail"] = stderr.splitlines()[-20:]
+        return _persist_session_command_artifacts(
+            state_dir,
+            SessionCommandResult(
+                argv=argv,
+                cwd=str(cwd_path),
+                returncode=None,
+                stdout=stdout,
+                stderr=stderr,
+                failure=failure,
+            ),
+        )
 
     if process.stdout is None or process.stderr is None:
         raise RuntimeError("subprocess pipes were not created")
@@ -1898,45 +1938,40 @@ def _run_session_command_step(
     stderr_thread.start()
 
     try:
-        returncode = process.wait(timeout=config.timeout_seconds)
-    except subprocess.TimeoutExpired:
-        process.kill()
-        returncode = process.wait()
-        stdout_thread.join(timeout=1.0)
-        stderr_thread.join(timeout=1.0)
-        with output_lock:
-            stdout = _process_session_output_text("".join(stdout_lines))
-            stderr = _process_session_output_text("".join(stderr_lines))
-        return _persist_session_command_artifacts(
-            state_dir,
-            SessionCommandResult(
-                argv=argv,
-                cwd=str(cwd_path),
-                returncode=None,
-                stdout=stdout,
-                stderr=stderr,
-                failure={
-                    "reason": "timeout",
-                    "error": f"command timed out after {config.timeout_seconds} seconds",
-                    "timeout_seconds": config.timeout_seconds,
-                    "returncode_after_kill": returncode,
-                },
-            ),
-        )
+        while True:
+            returncode = process.poll()
+            if returncode is not None:
+                break
+            now = time.monotonic()
+            overall_remaining = config.timeout_seconds - (now - started_at)
+            quiet_remaining = config.quiet_timeout_seconds - (now - last_output_at)
+            if overall_remaining <= 0:
+                return kill_and_persist_timeout(
+                    "timeout", f"command timed out after {config.timeout_seconds} seconds"
+                )
+            if quiet_remaining <= 0:
+                return kill_and_persist_timeout(
+                    "quiet_timeout",
+                    "command produced no stdout or stderr for "
+                    f"{config.quiet_timeout_seconds} seconds",
+                )
+            try:
+                returncode = process.wait(timeout=min(overall_remaining, quiet_remaining, 0.1))
+                break
+            except subprocess.TimeoutExpired:
+                continue
     except KeyboardInterrupt:
         process.kill()
         process.wait()
         stdout_thread.join(timeout=1.0)
         stderr_thread.join(timeout=1.0)
-        with output_lock:
-            captured_stdout = "".join(stdout_lines)
-            captured_stderr = "".join(stderr_lines)
+        stdout, stderr = captured_output()
         return SessionCommandResult(
             argv=argv,
             cwd=str(cwd_path),
             returncode=None,
-            stdout=captured_stdout,
-            stderr=captured_stderr,
+            stdout=stdout,
+            stderr=stderr,
             failure={
                 "reason": RUN_INTERRUPTED_REASON,
                 "error": RUN_INTERRUPTED_ERROR,
@@ -1944,9 +1979,7 @@ def _run_session_command_step(
         )
     stdout_thread.join()
     stderr_thread.join()
-    with output_lock:
-        stdout = "".join(stdout_lines)
-        stderr = "".join(stderr_lines)
+    stdout, stderr = captured_output()
     failure: dict[str, object] | None = None
     if returncode != 0:
         failure = {

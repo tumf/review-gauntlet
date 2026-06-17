@@ -156,7 +156,8 @@ class CommandAdapterConfig(BaseModel):
     command: str
     args: tuple[str, ...] = ()
     output: CommandOutputConfig = Field(default_factory=CommandOutputConfig)
-    timeout_seconds: float = 600.0
+    timeout_seconds: float = 3600.0
+    quiet_timeout_seconds: float = 600.0
     cwd: str | None = None
     env: dict[str, str] = Field(default_factory=dict)
 
@@ -182,6 +183,15 @@ class CommandAdapterConfig(BaseModel):
     def validate_timeout(cls, value: float) -> float:
         if not math.isfinite(value) or value <= 0:
             raise ValueError("adapter.timeout_seconds must be a finite value greater than zero")
+        return value
+
+    @field_validator("quiet_timeout_seconds")
+    @classmethod
+    def validate_quiet_timeout(cls, value: float) -> float:
+        if not math.isfinite(value) or value <= 0:
+            raise ValueError(
+                "adapter.quiet_timeout_seconds must be a finite value greater than zero"
+            )
         return value
 
     @field_validator("cwd")

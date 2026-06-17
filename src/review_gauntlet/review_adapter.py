@@ -269,6 +269,7 @@ class CommandReviewAdapter:
             "output_path": str(output_path),
             "prompt_artifact": str(prompt_file),
             "timeout_seconds": self._config.timeout_seconds,
+            "quiet_timeout_seconds": self._config.quiet_timeout_seconds,
         }
         (cell_dir / "command.json").write_text(
             json.dumps(command_metadata, indent=2, sort_keys=True), encoding="utf-8"

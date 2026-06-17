@@ -605,7 +605,7 @@ def _lifecycle_status_from_result(result: SessionCommandResult) -> str:
 
 
 def _agent_status_from_failure_reason(reason: str) -> str:
-    if reason == "timeout":
+    if reason in {"timeout", "quiet_timeout"}:
         return "timed_out"
     if reason in {
         "command_failed",

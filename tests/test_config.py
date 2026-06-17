@@ -184,7 +184,7 @@ def test_invalid_config_is_rejected(tmp_path: Path, payload: str, message: str) 
         load_config(tmp_path)
 
 
-def test_command_adapter_config_accepts_prompt_and_defaults_timeout() -> None:
+def test_command_adapter_config_accepts_prompt_and_defaults_timeouts() -> None:
     config = CommandAdapterConfig.model_validate(
         {
             "type": "command",
@@ -196,7 +196,22 @@ def test_command_adapter_config_accepts_prompt_and_defaults_timeout() -> None:
 
     assert config.args == ("run", "{prompt}")
     assert config.env == {"MESSAGE": "{prompt}"}
-    assert config.timeout_seconds == 600
+    assert config.timeout_seconds == 3600.0
+    assert config.quiet_timeout_seconds == 600.0
+
+
+def test_command_adapter_config_preserves_explicit_timeouts() -> None:
+    config = CommandAdapterConfig.model_validate(
+        {
+            "type": "command",
+            "command": "tool",
+            "timeout_seconds": 12.5,
+            "quiet_timeout_seconds": 3.5,
+        }
+    )
+
+    assert config.timeout_seconds == 12.5
+    assert config.quiet_timeout_seconds == 3.5
 
 
 @pytest.mark.parametrize("name", ["MESSAGE", "_TOKEN", "A1", "PATH_WITH_UNDERSCORES"])
@@ -245,6 +260,18 @@ def test_command_adapter_config_rejects_invalid_timeout(timeout: float) -> None:
     with pytest.raises(ValueError, match="finite value greater than zero"):
         CommandAdapterConfig.model_validate(
             {"type": "command", "command": "tool", "timeout_seconds": timeout}
+        )
+
+
+@pytest.mark.parametrize("quiet_timeout", [0, -1, math.inf, -math.inf, math.nan])
+def test_command_adapter_config_rejects_invalid_quiet_timeout(quiet_timeout: float) -> None:
+    with pytest.raises(ValueError, match="adapter.quiet_timeout_seconds"):
+        CommandAdapterConfig.model_validate(
+            {
+                "type": "command",
+                "command": "tool",
+                "quiet_timeout_seconds": quiet_timeout,
+            }
         )
 
 
