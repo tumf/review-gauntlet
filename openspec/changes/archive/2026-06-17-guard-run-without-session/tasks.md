@@ -8,7 +8,7 @@
 
 - [x] Preserve initialized-session run behavior (completion: existing run tests for initialized sessions continue to pass without changing JSON output, TUI behavior, or controller result handling; verification: integration - run focused CLI/run-controller tests such as `uv run pytest tests/test_cli.py tests/test_run_controller.py tests/test_run_tui.py` or the closest existing focused set).
 
-- [x] Run the project quality gate (completion: formatting, linting, type checking, and tests pass using the repository CI-equivalent command; verification: integration - execute `make check` and confirm it exits `0`).
+- [x] Run the project quality gate (completion: formatting, linting, type checking, and tests pass using the repository CI-equivalent command) (verification: integration - execute `make check` and confirm it exits `0`).
 
 ## Future Work
 
