@@ -189,10 +189,11 @@ def create_run_app(controller: RunController) -> object:
             self.run_worker(self._run_controller, thread=True)
 
         def _background_refresh(self) -> None:
-            if self.snapshot.agent_status != "running":
+            if self._completed_result is not None:
                 return
             self.snapshot = self.controller.snapshot()
-            self._activity_frame += 1
+            if self.snapshot.agent_status == "running":
+                self._activity_frame += 1
             self._render_from_snapshot()
 
         def _run_controller(self) -> None:
