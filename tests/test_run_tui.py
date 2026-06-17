@@ -42,9 +42,7 @@ def _advance_flash_state(
     state: run_tui.TuiRenderState, view: run_tui.RunViewState, *, now: float
 ) -> run_tui.TuiRenderState:
     sections = tuple(run_tui.tui_render_sections(view).values())
-    return run_tui.update_tui_render_state(
-        state, sections, now=now, flash_duration_seconds=1.0
-    )
+    return run_tui.update_tui_render_state(state, sections, now=now, flash_duration_seconds=1.0)
 
 
 def _flash_keys(state: run_tui.TuiRenderState) -> set[str]:

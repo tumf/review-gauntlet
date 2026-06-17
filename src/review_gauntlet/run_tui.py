@@ -789,9 +789,9 @@ def update_tui_render_state(
     }
     if state.initialized:
         for key, value in current.items():
-            if key in state.previous and state.previous[key] != value:
-                flashes[key] = TuiFlash(key=key, expires_at=current_time + flash_duration_seconds)
-            elif key not in state.previous and _is_activity_value_key(key):
+            if (key in state.previous and state.previous[key] != value) or (
+                key not in state.previous and _is_activity_value_key(key)
+            ):
                 flashes[key] = TuiFlash(key=key, expires_at=current_time + flash_duration_seconds)
     return TuiRenderState(previous=current, flashes=flashes, initialized=True)
 
@@ -863,9 +863,7 @@ def header_meta_tui_lines(view: RunViewState) -> tuple[TuiLine, ...]:
 def finalize_path_tui_lines(view: RunViewState) -> tuple[TuiLine, ...]:
     lines: list[TuiLine] = []
     for gate in view.gates:
-        marker = {"done": "✓", "running": "▶", "blocked": "!", "failed": "×"}.get(
-            gate.state, " "
-        )
+        marker = {"done": "✓", "running": "▶", "blocked": "!", "failed": "×"}.get(gate.state, " ")
         prefix = f"gate.{gate.index}"
         lines.append(
             TuiLine(
@@ -930,7 +928,9 @@ def session_summary_tui_lines(view: RunViewState) -> tuple[TuiLine, ...]:
         TuiLine(
             (
                 _literal("Findings  open ", key="session.findings.label"),
-                _field("session.findings.open", str(view.open_findings), compare=view.open_findings),
+                _field(
+                    "session.findings.open", str(view.open_findings), compare=view.open_findings
+                ),
             )
         ),
         _label_value_line("session.current", "Current   ", view.session_summary.current),
@@ -956,7 +956,9 @@ def activity_tui_lines(view: RunViewState) -> tuple[TuiLine, ...]:
                     _field(f"activity.{identity}.time", event.time, compare="timestamp"),
                     _literal(" ", key=f"activity.{identity}.time_space"),
                     _field(f"activity.{identity}.label", event.label, compare=event.label),
-                    _field(f"activity.{identity}.detail", suffix, compare=(event.label, event.detail)),
+                    _field(
+                        f"activity.{identity}.detail", suffix, compare=(event.label, event.detail)
+                    ),
                 )
             )
         )
