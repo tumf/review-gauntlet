@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from typing import NoReturn
 
 import pytest
 
@@ -686,9 +687,53 @@ def test_cli_run_help_exposes_no_tui(capsys: pytest.CaptureFixture[str]) -> None
     assert "--no-tui" in output
 
 
+def test_cli_run_without_active_session_exits_with_actionable_guidance(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        main(["run", str(tmp_path)])
+
+    captured = capsys.readouterr()
+    assert exc_info.value.code == 1
+    assert captured.err == "no active review session; run review-gauntlet init\n"
+    assert captured.out == ""
+
+
+def test_cli_run_without_active_session_preflights_before_config_tui_or_controller(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def fail_load_config(_root: Path, _config_path: Path | None = None) -> NoReturn:
+        raise AssertionError("load_config should not run without an active session")
+
+    def fail_should_use_tui(*, output_format: str, no_tui: bool, stdout_is_tty: bool) -> NoReturn:
+        raise AssertionError("should_use_tui should not run without an active session")
+
+    def fail_create_run_app(_controller: object) -> NoReturn:
+        raise AssertionError("create_run_app should not run without an active session")
+
+    def fail_controller_init(_self: object, *args: object, **kwargs: object) -> None:
+        raise AssertionError("RunController should not be constructed without an active session")
+
+    monkeypatch.setattr("review_gauntlet.cli.load_config", fail_load_config)
+    monkeypatch.setattr("review_gauntlet.cli.should_use_tui", fail_should_use_tui)
+    monkeypatch.setattr("review_gauntlet.cli.create_run_app", fail_create_run_app)
+    monkeypatch.setattr("review_gauntlet.cli.RunController.__init__", fail_controller_init)
+
+    with pytest.raises(SystemExit) as exc_info:
+        main(["run", str(tmp_path)])
+
+    captured = capsys.readouterr()
+    assert exc_info.value.code == 1
+    assert captured.err == "no active review session; run review-gauntlet init\n"
+    assert captured.out == ""
+
+
 def test_cli_run_no_tui_accepts_flag(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    (tmp_path / "README.md").write_text("# docs\n", encoding="utf-8")
+    main(["init", str(tmp_path), "--worktree", "--format", "json"])
+    capsys.readouterr()
     monkeypatch.setattr("review_gauntlet.cli.sys.stdout.isatty", lambda: True)
     monkeypatch.setattr("review_gauntlet.cli._cmd_run", _fake_cmd_run)
 
@@ -761,9 +806,12 @@ def test_cli_run_text_keyboard_interrupt_emits_concise_failure_without_traceback
 def test_cli_run_json_does_not_emit_tui_fallback_warning(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    (tmp_path / "README.md").write_text("# docs\n", encoding="utf-8")
     (tmp_path / "review-gauntlet.json").write_text(
         json.dumps({"adapter": {"type": "command", "command": "fake-agent"}}), encoding="utf-8"
     )
+    main(["init", str(tmp_path), "--worktree", "--format", "json"])
+    capsys.readouterr()
     monkeypatch.setattr("review_gauntlet.cli.sys.stdout.isatty", lambda: True)
     monkeypatch.setattr("review_gauntlet.cli.textual_available", lambda: False)
     monkeypatch.setattr("review_gauntlet.cli.RunController.run", _fake_controller_run)
@@ -779,9 +827,12 @@ def test_cli_run_json_does_not_emit_tui_fallback_warning(
 def test_cli_run_interactive_text_missing_textual_falls_back_with_warning(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    (tmp_path / "README.md").write_text("# docs\n", encoding="utf-8")
     (tmp_path / "review-gauntlet.json").write_text(
         json.dumps({"adapter": {"type": "command", "command": "fake-agent"}}), encoding="utf-8"
     )
+    main(["init", str(tmp_path), "--worktree", "--format", "json"])
+    capsys.readouterr()
     monkeypatch.setattr("review_gauntlet.cli.sys.stdout.isatty", lambda: True)
     monkeypatch.setattr("review_gauntlet.cli.textual_available", lambda: False)
     monkeypatch.setattr("review_gauntlet.cli.RunController.run", _fake_controller_run)
@@ -797,9 +848,12 @@ def test_cli_run_interactive_text_missing_textual_falls_back_with_warning(
 def test_cli_run_interactive_text_with_tui_available_chooses_tui_path(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    (tmp_path / "README.md").write_text("# docs\n", encoding="utf-8")
     (tmp_path / "review-gauntlet.json").write_text(
         json.dumps({"adapter": {"type": "command", "command": "fake-agent"}}), encoding="utf-8"
     )
+    main(["init", str(tmp_path), "--worktree", "--format", "json"])
+    capsys.readouterr()
     monkeypatch.setattr("review_gauntlet.cli.sys.stdout.isatty", lambda: True)
     monkeypatch.setattr("review_gauntlet.cli.textual_available", lambda: True)
 
@@ -826,9 +880,12 @@ def test_cli_run_interactive_text_with_tui_available_chooses_tui_path(
 def test_cli_run_non_tty_text_chooses_text_path(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    (tmp_path / "README.md").write_text("# docs\n", encoding="utf-8")
     (tmp_path / "review-gauntlet.json").write_text(
         json.dumps({"adapter": {"type": "command", "command": "fake-agent"}}), encoding="utf-8"
     )
+    main(["init", str(tmp_path), "--worktree", "--format", "json"])
+    capsys.readouterr()
     monkeypatch.setattr("review_gauntlet.cli.sys.stdout.isatty", lambda: False)
     monkeypatch.setattr("review_gauntlet.cli.textual_available", lambda: True)
     monkeypatch.setattr("review_gauntlet.cli.RunController.run", _fake_controller_run)

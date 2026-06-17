@@ -1283,6 +1283,10 @@ def _plain_text(value: object) -> str:
     return "".join(_plain_character(character) for character in str(value))
 
 
+def _rich_safe_text(value: object) -> str:  # pyright: ignore[reportUnusedFunction]
+    return _plain_text(value).replace("[", r"\[")
+
+
 def _plain_character(character: str) -> str:
     if character in {"\n", "\r", "\t"}:
         return " "
