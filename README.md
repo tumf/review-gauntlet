@@ -196,6 +196,9 @@ review-gauntlet run
 review-gauntlet status
 review-gauntlet findings
 
+# Abandon an accidental init without writing a checkpoint.
+review-gauntlet cancel
+
 # Optional isolation workflow: create a Git branch and linked worktree for the session.
 review-gauntlet init --git-worktree
 review-gauntlet run
@@ -206,7 +209,9 @@ review-gauntlet finalize --merge
 behavior of `review`: `review` advances exactly one review batch per invocation, and
 `run` orchestrates repeated ready-task execution through the external agent. `finalize`
 is still a gate, not a cleanup command: it fails until required coverage is complete
-and live findings are closed.
+and live findings are closed. Use `cancel` only to abandon an accidental `init`; it
+marks the session `cancelled` and clears the active-session marker without producing
+checkpoint artifacts.
 
 `--worktree` and `--git-worktree` are intentionally different concepts. `init
 --worktree` selects the current workspace diff as the review target. `init
@@ -309,7 +314,16 @@ review-gauntlet verify-fixes
 review-gauntlet finalize
 # Finalize writes Git-reviewable JSON/Markdown snapshots atomically.
 git add .review-gauntlet/checkpoints/latest
+
+# If init targeted the wrong work, cancel instead of finalizing.
+review-gauntlet cancel
 ```
+
+`cancel` is the supported way to abandon an active session that was initialized by
+mistake. It records `sessions.state = 'cancelled'` in the ledger and removes
+`.review-gauntlet/active-session.json`, so later `status`, `review`, and `ready`
+commands behave as no-active-session until a new `init`. Unlike `finalize`, it does
+not write checkpoints or claim review completion.
 
 `status` reports `coverage` as counts of review cells by state:
 
