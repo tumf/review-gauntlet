@@ -1,0 +1,258 @@
+{
+  "checkpoint_id": "RGC-229156b61bb2-RGS-348051370216",
+  "findings": [
+    {
+      "checkpoint_id": "RGC-229156b61bb2-RGS-348051370216",
+      "content": "`RunEvent.model_dump()` copies `self.payload` into `result` first, then unconditionally overwrites `result[\"type\"]` and `result[\"timestamp\"]`. If `payload` ever contains a key named `\"type\"` or `\"timestamp\"` (e.g. from an `_emit` call like `self._emit(\"foo\", type=\"bar\")`), the payload value is silently lost. Either detect the collision and raise, or namespace the envelope fields (e.g. `event_type`) to avoid shadowing.",
+      "finding_id": "RGF-0692",
+      "fingerprint": "07220b9cee3d19a2f544dbb852ef3c6fe1c6a2ddc4384b98adc66409274a1f64",
+      "latest_occurrence": {
+        "cell_id": "RGC-818ca3c0010eb49e",
+        "end_line": 96,
+        "finding_id": "RGF-0692",
+        "imprecise": 0,
+        "occurrence_id": 692,
+        "path": "src/review_gauntlet/run_controller.py",
+        "run_id": 231,
+        "start_line": 92
+      },
+      "metadata": "{\"fingerprint\":\"07220b9cee3d19a2f544dbb852ef3c6fe1c6a2ddc4384b98adc66409274a1f64\",\"path\":\"src/review_gauntlet/run_controller.py\",\"rule_id\":\"test-evidence\",\"content\":\"`RunEvent.model_dump()` copies `self.payload` into `result` first, then unconditionally overwrites `result[\\\"type\\\"]` and `result[\\\"timestamp\\\"]`. If `payload` ever contains a key named `\\\"type\\\"` or `\\\"timestamp\\\"` (e.g. from an `_emit` call like `self._emit(\\\"foo\\\", type=\\\"bar\\\")`), the payload value is silently lost. Either detect the collision and raise, or namespace the envelope fields (e.g. `event_type`) to avoid shadowing.\",\"suggestion_code\":\"    def model_dump(self) -> dict[str, object]:\\n        collisions = {\\\"type\\\", \\\"timestamp\\\"} & self.payload.keys()\\n        if collisions:\\n            raise ValueError(\\n                f\\\"RunEvent payload keys {collisions} collide with envelope fields\\\"\\n            )\\n        result = dict(self.payload)\\n        result[\\\"type\\\"] = self.type\\n        result[\\\"timestamp\\\"] = self.timestamp\\n        return result\",\"existing_code\":\"    def model_dump(self) -> dict[str, object]:\\n        result = dict(self.payload)\\n        result[\\\"type\\\"] = self.type\\n        result[\\\"timestamp\\\"] = self.timestamp\\n        return result\",\"start_line\":92,\"end_line\":96,\"thinking\":\"model_dump merges payload into the same dict as the envelope fields 'type' and 'timestamp'. Since create() accepts **payload, any caller can pass type= or timestamp= as a keyword arg, which would be stored in the payload and then silently overwritten. A defensive check prevents silent data loss.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_controller.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-348051370216",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-229156b61bb2-RGS-348051370216",
+      "content": "`_current_agent_lifecycle` accesses `self._agent_output_progress` (set to `None` on another thread at lines 341/351/465) without holding a lock. Under CPython the GIL makes this safe in practice, but the pattern is fragile: a non-CPython runtime (PyPy free-threading, Python 3.13+ free-threaded mode) could read a partially-written reference. Consider reading the reference once into a local before using it, which is already done but the field could still change between the `is not None` check and `.snapshot()` call in a free-threaded build.",
+      "finding_id": "RGF-0693",
+      "fingerprint": "5f3880bd9e0c2562a4f9c542f0c7bbb55d3d36e403c5c408e8059c44d70747c9",
+      "latest_occurrence": {
+        "cell_id": "RGC-818ca3c0010eb49e",
+        "end_line": 236,
+        "finding_id": "RGF-0693",
+        "imprecise": 0,
+        "occurrence_id": 693,
+        "path": "src/review_gauntlet/run_controller.py",
+        "run_id": 231,
+        "start_line": 231
+      },
+      "metadata": "{\"fingerprint\":\"5f3880bd9e0c2562a4f9c542f0c7bbb55d3d36e403c5c408e8059c44d70747c9\",\"path\":\"src/review_gauntlet/run_controller.py\",\"rule_id\":\"test-evidence\",\"content\":\"`_current_agent_lifecycle` accesses `self._agent_output_progress` (set to `None` on another thread at lines 341/351/465) without holding a lock. Under CPython the GIL makes this safe in practice, but the pattern is fragile: a non-CPython runtime (PyPy free-threading, Python 3.13+ free-threaded mode) could read a partially-written reference. Consider reading the reference once into a local before using it, which is already done but the field could still change between the `is not None` check and `.snapshot()` call in a free-threaded build.\",\"suggestion_code\":\"        output_progress = self._agent_output_progress\\n        if output_progress is not None:\\n            progress_age, progress_tail = output_progress.snapshot()\\n            if progress_tail:\\n                last_output_age = progress_age\\n                output_tail = progress_tail\",\"existing_code\":\"        output_progress = self._agent_output_progress\\n        if output_progress is not None:\\n            progress_age, progress_tail = output_progress.snapshot()\\n            if progress_tail:\\n                last_output_age = progress_age\\n                output_tail = progress_tail\",\"start_line\":231,\"end_line\":236,\"thinking\":\"The code already copies to a local variable which prevents the reference from changing between check and use. This is correct under CPython GIL. The comment is informational for future-proofing if the project adopts free-threaded Python. Since the existing code is already the correct pattern, this is low severity but worth noting for maintainability.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_controller.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-348051370216",
+      "state": "waived"
+    },
+    {
+      "checkpoint_id": "RGC-229156b61bb2-RGS-348051370216",
+      "content": "`model_dump` flattens `self.payload` into the top-level dict, then unconditionally overwrites `result[\"type\"]` and `result[\"timestamp\"]`. If a caller passes `type` or `timestamp` as keyword arguments to `RunEvent.create()`, those values are silently lost. This is a data-corruption bug: the payload key is accepted without error but never appears in the serialized output.",
+      "finding_id": "RGF-0694",
+      "fingerprint": "b85aa4bd55877f0af070eb87d82248ca17c0794c81cbdc5b40e2de7412e70539",
+      "latest_occurrence": {
+        "cell_id": "RGC-eaadb43273cd57a0",
+        "end_line": 96,
+        "finding_id": "RGF-0694",
+        "imprecise": 0,
+        "occurrence_id": 694,
+        "path": "src/review_gauntlet/run_controller.py",
+        "run_id": 231,
+        "start_line": 92
+      },
+      "metadata": "{\"fingerprint\":\"b85aa4bd55877f0af070eb87d82248ca17c0794c81cbdc5b40e2de7412e70539\",\"path\":\"src/review_gauntlet/run_controller.py\",\"rule_id\":\"data-validation\",\"content\":\"`model_dump` flattens `self.payload` into the top-level dict, then unconditionally overwrites `result[\\\"type\\\"]` and `result[\\\"timestamp\\\"]`. If a caller passes `type` or `timestamp` as keyword arguments to `RunEvent.create()`, those values are silently lost. This is a data-corruption bug: the payload key is accepted without error but never appears in the serialized output.\",\"suggestion_code\":\"    def model_dump(self) -> dict[str, object]:\\n        reserved = {\\\"type\\\", \\\"timestamp\\\"}\\n        conflicts = reserved & self.payload.keys()\\n        if conflicts:\\n            raise ValueError(\\n                f\\\"RunEvent payload contains reserved key(s): {conflicts}\\\"\\n            )\\n        result = dict(self.payload)\\n        result[\\\"type\\\"] = self.type\\n        result[\\\"timestamp\\\"] = self.timestamp\\n        return result\",\"existing_code\":\"    def model_dump(self) -> dict[str, object]:\\n        result = dict(self.payload)\\n        result[\\\"type\\\"] = self.type\\n        result[\\\"timestamp\\\"] = self.timestamp\\n        return result\",\"start_line\":92,\"end_line\":96,\"thinking\":\"model_dump merges payload with type/timestamp. If payload already has those keys they are silently overwritten. Raising early at create() or dump() prevents silent data loss. An alternative is to namespace payload under a 'payload' key, but that changes the wire format.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_controller.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-348051370216",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-229156b61bb2-RGS-348051370216",
+      "content": "`RunExecutionContext.from_active_session` calls `store.session_metadata(session_id)` solely for its side effect (raising `LookupError` if the session is missing), but discards the return value. This makes the intent unclear and wastes any work the method does to build the metadata object. Assign to `_` or add a brief comment to signal that the call is intentional validation.",
+      "finding_id": "RGF-0695",
+      "fingerprint": "9a7332dd834960338b33ad39399274b97a3eeafa80c054ea23ffc9b2b249586b",
+      "latest_occurrence": {
+        "cell_id": "RGC-eaadb43273cd57a0",
+        "end_line": 134,
+        "finding_id": "RGF-0695",
+        "imprecise": 0,
+        "occurrence_id": 695,
+        "path": "src/review_gauntlet/run_controller.py",
+        "run_id": 231,
+        "start_line": 133
+      },
+      "metadata": "{\"fingerprint\":\"9a7332dd834960338b33ad39399274b97a3eeafa80c054ea23ffc9b2b249586b\",\"path\":\"src/review_gauntlet/run_controller.py\",\"rule_id\":\"data-validation\",\"content\":\"`RunExecutionContext.from_active_session` calls `store.session_metadata(session_id)` solely for its side effect (raising `LookupError` if the session is missing), but discards the return value. This makes the intent unclear and wastes any work the method does to build the metadata object. Assign to `_` or add a brief comment to signal that the call is intentional validation.\",\"suggestion_code\":\"        store.session_metadata(session_id)  # validates session exists; raises LookupError if not\\n        return cls(agent_root=root, state_dir=store.state_dir)\",\"existing_code\":\"        store.session_metadata(session_id)\\n        return cls(agent_root=root, state_dir=store.state_dir)\",\"start_line\":133,\"end_line\":134,\"thinking\":\"The discarded return value makes it look like a mistake. A comment clarifies that the call is intentional validation.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_controller.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-348051370216",
+      "state": "waived"
+    },
+    {
+      "checkpoint_id": "RGC-229156b61bb2-RGS-348051370216",
+      "content": "Race condition: `now` is captured before the lock, so a concurrent `push()` can set `_last_output_at` to a timestamp *after* `now`, producing a negative age. Move the `datetime.now(UTC)` call inside the lock (or after it) so the age is always non-negative.",
+      "finding_id": "RGF-0696",
+      "fingerprint": "75165d695bdc6359238a251a69bedff0cc2e08d3f150b29378c394049c384d5c",
+      "latest_occurrence": {
+        "cell_id": "RGC-818ca3c0010eb49e",
+        "end_line": 51,
+        "finding_id": "RGF-0696",
+        "imprecise": 0,
+        "occurrence_id": 696,
+        "path": "src/review_gauntlet/run_controller.py",
+        "run_id": 232,
+        "start_line": 44
+      },
+      "metadata": "{\"fingerprint\":\"75165d695bdc6359238a251a69bedff0cc2e08d3f150b29378c394049c384d5c\",\"path\":\"src/review_gauntlet/run_controller.py\",\"rule_id\":\"test-evidence\",\"content\":\"Race condition: `now` is captured before the lock, so a concurrent `push()` can set `_last_output_at` to a timestamp *after* `now`, producing a negative age. Move the `datetime.now(UTC)` call inside the lock (or after it) so the age is always non-negative.\",\"suggestion_code\":\"    def snapshot(self) -> tuple[float | None, tuple[AgentOutputEntry, ...]]:\\n        with self._lock:\\n            last_output_at = self._last_output_at\\n            output_tail = tuple(self._output_lines)\\n        if last_output_at is None:\\n            return None, output_tail\\n        now = datetime.now(UTC)\\n        return (now - last_output_at).total_seconds(), output_tail\",\"existing_code\":\"    def snapshot(self) -> tuple[float | None, tuple[AgentOutputEntry, ...]]:\\n        now = datetime.now(UTC)\\n        with self._lock:\\n            last_output_at = self._last_output_at\\n            output_tail = tuple(self._output_lines)\\n        if last_output_at is None:\\n            return None, output_tail\\n        return (now - last_output_at).total_seconds(), output_tail\",\"start_line\":44,\"end_line\":51,\"thinking\":\"datetime.now(UTC) on line 45 is called before the lock on line 46. If another thread calls push() between these two lines, _last_output_at will be updated to a time after `now`, resulting in a negative total_seconds(). Moving `now` after the lock release ensures the age is always >= 0.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_controller.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-348051370216",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-229156b61bb2-RGS-348051370216",
+      "content": "The return value of `store.session_metadata(session_id)` is discarded. This call appears to serve as an existence/validation check (raising `LookupError` if the session is missing), but the intent is non-obvious. If the goal is validation, consider naming it explicitly or adding a brief comment so future readers don't remove the call as dead code.",
+      "finding_id": "RGF-0697",
+      "fingerprint": "bee96fa0f815025b0569faf68a19cd5a9460a8e63f96a96d3a0128c45b4ab92c",
+      "latest_occurrence": {
+        "cell_id": "RGC-eaadb43273cd57a0",
+        "end_line": 138,
+        "finding_id": "RGF-0697",
+        "imprecise": 0,
+        "occurrence_id": 697,
+        "path": "src/review_gauntlet/run_controller.py",
+        "run_id": 232,
+        "start_line": 138
+      },
+      "metadata": "{\"fingerprint\":\"bee96fa0f815025b0569faf68a19cd5a9460a8e63f96a96d3a0128c45b4ab92c\",\"path\":\"src/review_gauntlet/run_controller.py\",\"rule_id\":\"data-validation\",\"content\":\"The return value of `store.session_metadata(session_id)` is discarded. This call appears to serve as an existence/validation check (raising `LookupError` if the session is missing), but the intent is non-obvious. If the goal is validation, consider naming it explicitly or adding a brief comment so future readers don't remove the call as dead code.\",\"suggestion_code\":\"        store.session_metadata(session_id)  # validates session exists; raises LookupError if not\",\"existing_code\":\"        store.session_metadata(session_id)\",\"start_line\":138,\"end_line\":138,\"thinking\":\"The classmethod from_active_session calls store.session_metadata purely for its side effect (raising LookupError on missing session). The return value is silently dropped. This is a maintainability risk \u2014 a future contributor may delete it as unused.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_controller.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-348051370216",
+      "state": "waived"
+    },
+    {
+      "checkpoint_id": "RGC-229156b61bb2-RGS-348051370216",
+      "content": "`_run_step_payload` embeds the full `stdout` and `stderr` strings in every step dict. These dicts accumulate in the `steps` list across the run loop (line 371). For long-running sessions with verbose agent output, this can lead to unbounded memory growth proportional to `max_steps * output_size`. Consider truncating or streaming large outputs to artifact files (as is already done via `stdout_artifact`/`stderr_artifact`) and only keeping a bounded tail in the in-memory payload.",
+      "finding_id": "RGF-0698",
+      "fingerprint": "bc202e1ced56621ac0e2c09d5511abb18b5e42fa56f7651b2d9649d3dc126f0c",
+      "latest_occurrence": {
+        "cell_id": "RGC-eaadb43273cd57a0",
+        "end_line": 640,
+        "finding_id": "RGF-0698",
+        "imprecise": 0,
+        "occurrence_id": 698,
+        "path": "src/review_gauntlet/run_controller.py",
+        "run_id": 232,
+        "start_line": 619
+      },
+      "metadata": "{\"fingerprint\":\"bc202e1ced56621ac0e2c09d5511abb18b5e42fa56f7651b2d9649d3dc126f0c\",\"path\":\"src/review_gauntlet/run_controller.py\",\"rule_id\":\"data-validation\",\"content\":\"`_run_step_payload` embeds the full `stdout` and `stderr` strings in every step dict. These dicts accumulate in the `steps` list across the run loop (line 371). For long-running sessions with verbose agent output, this can lead to unbounded memory growth proportional to `max_steps * output_size`. Consider truncating or streaming large outputs to artifact files (as is already done via `stdout_artifact`/`stderr_artifact`) and only keeping a bounded tail in the in-memory payload.\",\"suggestion_code\":\"    MAX_INLINE_OUTPUT = 64 * 1024\\n    payload: dict[str, object] = {\\n        \\\"step\\\": step_number,\\n        \\\"prompt\\\": prompt,\\n        \\\"argv\\\": result.argv,\\n        \\\"cwd\\\": result.cwd,\\n        \\\"returncode\\\": result.returncode,\\n        \\\"stdout\\\": result.stdout[-MAX_INLINE_OUTPUT:] if len(result.stdout) > MAX_INLINE_OUTPUT else result.stdout,\\n        \\\"stderr\\\": result.stderr[-MAX_INLINE_OUTPUT:] if len(result.stderr) > MAX_INLINE_OUTPUT else result.stderr,\",\"existing_code\":\"    payload: dict[str, object] = {\\n        \\\"step\\\": step_number,\\n        \\\"prompt\\\": prompt,\\n        \\\"argv\\\": result.argv,\\n        \\\"cwd\\\": result.cwd,\\n        \\\"returncode\\\": result.returncode,\\n        \\\"stdout\\\": result.stdout,\\n        \\\"stderr\\\": result.stderr,\",\"start_line\":619,\"end_line\":640,\"thinking\":\"Each step stores the full stdout/stderr in memory. With max_steps up to potentially large values and verbose agents, this is an unbounded accumulation. The artifact paths already exist for persisting full output to disk \u2014 the in-memory dict only needs a bounded tail for API responses.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_controller.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-348051370216",
+      "state": "waived"
+    },
+    {
+      "checkpoint_id": "RGC-229156b61bb2-RGS-348051370216",
+      "content": "Thread safety issue: `_current_agent_lifecycle` reads multiple mutable fields (`_agent_status`, `_agent_step_started_at`, `_agent_timeout_seconds`, `_agent_output_progress`, `_agent_lifecycle`) without synchronization, while `run()` mutates them from another thread. Since `snapshot()` is designed to be called from a TUI/refresh thread, this is a data race. For example, `_agent_step_started_at` could be set to `None` between the check on line 242 and the read on line 247, causing an `AttributeError` or computing with stale `now`. Consider adding a `threading.Lock` to protect controller state accessed across threads.",
+      "finding_id": "RGF-0699",
+      "fingerprint": "00e0ab674c33b9aaf4e3181e29ec3246e579de1bb42c56a8eae483d9bb855b04",
+      "latest_occurrence": {
+        "cell_id": "RGC-818ca3c0010eb49e",
+        "end_line": 266,
+        "finding_id": "RGF-0699",
+        "imprecise": 0,
+        "occurrence_id": 699,
+        "path": "src/review_gauntlet/run_controller.py",
+        "run_id": 233,
+        "start_line": 230
+      },
+      "metadata": "{\"fingerprint\":\"00e0ab674c33b9aaf4e3181e29ec3246e579de1bb42c56a8eae483d9bb855b04\",\"path\":\"src/review_gauntlet/run_controller.py\",\"rule_id\":\"test-evidence\",\"content\":\"Thread safety issue: `_current_agent_lifecycle` reads multiple mutable fields (`_agent_status`, `_agent_step_started_at`, `_agent_timeout_seconds`, `_agent_output_progress`, `_agent_lifecycle`) without synchronization, while `run()` mutates them from another thread. Since `snapshot()` is designed to be called from a TUI/refresh thread, this is a data race. For example, `_agent_step_started_at` could be set to `None` between the check on line 242 and the read on line 247, causing an `AttributeError` or computing with stale `now`. Consider adding a `threading.Lock` to protect controller state accessed across threads.\",\"suggestion_code\":\"    def _current_agent_lifecycle(self) -> AgentLifecycle:\\n        if self._agent_status != \\\"running\\\":\\n            return self._agent_lifecycle\\n        now = datetime.now(UTC)\\n        lifecycle = self._agent_lifecycle\\n        step_started_at = self._agent_step_started_at\\n        timeout_seconds = self._agent_timeout_seconds\\n        output_progress = self._agent_output_progress\\n        last_output_age = lifecycle.last_output_age_seconds\\n        output_tail = lifecycle.output_tail\\n        if output_progress is not None:\\n            progress_age, progress_tail = output_progress.snapshot()\\n            if progress_tail:\\n                last_output_age = progress_age\\n                output_tail = progress_tail\\n        if last_output_age is None and step_started_at is not None:\\n            last_output_age = (now - step_started_at).total_seconds()\\n        timeout_remaining = lifecycle.timeout_remaining_seconds\\n        if timeout_remaining is None and timeout_seconds is not None:\\n            elapsed = (\\n                (now - step_started_at).total_seconds()\\n                if step_started_at is not None\\n                else 0.0\\n            )\\n            timeout_remaining = max(0.0, float(timeout_seconds) - elapsed)\",\"existing_code\":\"    def _current_agent_lifecycle(self) -> AgentLifecycle:\\n        if self._agent_status != \\\"running\\\":\\n            return self._agent_lifecycle\\n        now = datetime.now(UTC)\\n        last_output_age = self._agent_lifecycle.last_output_age_seconds\\n        output_tail = self._agent_lifecycle.output_tail\\n        output_progress = self._agent_output_progress\\n        if output_progress is not None:\\n            progress_age, progress_tail = output_progress.snapshot()\\n            if progress_tail:\\n                last_output_age = progress_age\\n                output_tail = progress_tail\\n        if last_output_age is None and self._agent_step_started_at is not None:\\n            last_output_age = (now - self._agent_step_started_at).total_seconds()\\n        timeout_remaining = self._agent_lifecycle.timeout_remaining_seconds\\n        if timeout_remaining is None and self._agent_timeout_seconds is not None:\\n            elapsed = (\\n                (now - self._agent_step_started_at).total_seconds()\\n                if self._agent_step_started_at is not None\\n                else 0.0\\n            )\\n            timeout_remaining = max(0.0, float(self._agent_timeout_seconds) - elapsed)\",\"start_line\":230,\"end_line\":266,\"thinking\":\"Multiple mutable instance fields are read without any lock in _current_agent_lifecycle, while run() mutates them from the main thread. Snapshotting each field into a local variable at the top of the method at least ensures consistency within the method body (no TOCTOU between the None-check and the use). A proper fix would use a threading.Lock, but local-variable snapshotting is a minimal improvement.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_controller.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-348051370216",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-229156b61bb2-RGS-348051370216",
+      "content": "`RunExecutionContext.from_active_session` calls `store.session_metadata(session_id)` on line 138 and discards the return value. If this is a validation-only call (to raise `LookupError` on missing sessions), the intent is non-obvious and fragile \u2014 a future refactor could remove the 'side-effect' call assuming it's dead code. Add a brief comment or use `assert` / explicit existence check to clarify the intent.",
+      "finding_id": "RGF-0700",
+      "fingerprint": "8356a6105588eb34fd09107d37c19d9ea4e771a5cc4eb2b2632bc3906dd6117f",
+      "latest_occurrence": {
+        "cell_id": "RGC-818ca3c0010eb49e",
+        "end_line": 139,
+        "finding_id": "RGF-0700",
+        "imprecise": 0,
+        "occurrence_id": 700,
+        "path": "src/review_gauntlet/run_controller.py",
+        "run_id": 233,
+        "start_line": 134
+      },
+      "metadata": "{\"fingerprint\":\"8356a6105588eb34fd09107d37c19d9ea4e771a5cc4eb2b2632bc3906dd6117f\",\"path\":\"src/review_gauntlet/run_controller.py\",\"rule_id\":\"test-evidence\",\"content\":\"`RunExecutionContext.from_active_session` calls `store.session_metadata(session_id)` on line 138 and discards the return value. If this is a validation-only call (to raise `LookupError` on missing sessions), the intent is non-obvious and fragile \u2014 a future refactor could remove the 'side-effect' call assuming it's dead code. Add a brief comment or use `assert` / explicit existence check to clarify the intent.\",\"suggestion_code\":\"    @classmethod\\n    def from_active_session(\\n        cls, *, root: Path, store: SessionStore, session_id: str\\n    ) -> RunExecutionContext:\\n        store.session_metadata(session_id)  # raises LookupError if session missing\\n        return cls(agent_root=root, state_dir=store.state_dir)\",\"existing_code\":\"    @classmethod\\n    def from_active_session(\\n        cls, *, root: Path, store: SessionStore, session_id: str\\n    ) -> RunExecutionContext:\\n        store.session_metadata(session_id)\\n        return cls(agent_root=root, state_dir=store.state_dir)\",\"start_line\":134,\"end_line\":139,\"thinking\":\"The discarded return value looks like dead code but is actually a validation side-effect. Without a comment, a future contributor will likely delete the line as a no-op.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_controller.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-348051370216",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-229156b61bb2-RGS-348051370216",
+      "content": "Thread-safety issue: `_current_agent_lifecycle` reads multiple instance attributes (`_agent_lifecycle`, `_agent_step_started_at`, `_agent_timeout_seconds`, `_agent_output_progress`) that are written by `run()` on a different thread without holding a lock. While individual attribute reads are atomic in CPython due to the GIL, the combination of reads is not atomic \u2014 between reading `_agent_step_started_at` and `_agent_timeout_seconds`, the `run()` thread could set one to `None` and the other to a new value, producing an inconsistent snapshot. Consider protecting these fields with a `threading.Lock`.",
+      "finding_id": "RGF-0701",
+      "fingerprint": "e27c2423b67a1170bc27d7685dd1a0cb6d196acb994eb1198f39edab6ea8fab6",
+      "latest_occurrence": {
+        "cell_id": "RGC-818ca3c0010eb49e",
+        "end_line": 282,
+        "finding_id": "RGF-0701",
+        "imprecise": 0,
+        "occurrence_id": 701,
+        "path": "src/review_gauntlet/run_controller.py",
+        "run_id": 234,
+        "start_line": 244
+      },
+      "metadata": "{\"fingerprint\":\"e27c2423b67a1170bc27d7685dd1a0cb6d196acb994eb1198f39edab6ea8fab6\",\"path\":\"src/review_gauntlet/run_controller.py\",\"rule_id\":\"test-evidence\",\"content\":\"Thread-safety issue: `_current_agent_lifecycle` reads multiple instance attributes (`_agent_lifecycle`, `_agent_step_started_at`, `_agent_timeout_seconds`, `_agent_output_progress`) that are written by `run()` on a different thread without holding a lock. While individual attribute reads are atomic in CPython due to the GIL, the combination of reads is not atomic \u2014 between reading `_agent_step_started_at` and `_agent_timeout_seconds`, the `run()` thread could set one to `None` and the other to a new value, producing an inconsistent snapshot. Consider protecting these fields with a `threading.Lock`.\",\"suggestion_code\":\"\",\"existing_code\":\"        lifecycle = self._agent_lifecycle\\n        step_started_at = self._agent_step_started_at\\n        timeout_seconds = self._agent_timeout_seconds\\n        output_progress = self._agent_output_progress\",\"start_line\":244,\"end_line\":282,\"thinking\":\"The comment on line 248 acknowledges the TOCTOU concern but the individual local-variable snapshots do not form an atomic group. In CPython the GIL makes each individual read safe, but the run() method can interleave between any two of these reads, so for example step_started_at could be non-None while timeout_seconds is already reset to None (or vice versa). A threading.Lock would fix this.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_controller.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-348051370216",
+      "state": "waived"
+    },
+    {
+      "checkpoint_id": "RGC-229156b61bb2-RGS-348051370216",
+      "content": "Path traversal check is incomplete: the validation rejects `..` in path parts and non-`.review-gauntlet/checkpoints/` prefixes, but does not guard against symlink-based escapes. If an attacker can place a symlink inside the checkpoints directory before `commit_latest_checkpoint` acts on these paths, the resolved path could point outside the repository. Consider resolving symlinks (e.g., `Path.resolve()`) and re-checking that the resolved path is still under the repository root before acting on these paths downstream.",
+      "finding_id": "RGF-0702",
+      "fingerprint": "662f4d3b58c277d3cceaf35e85890ad31385b799e675c9a2a6fe15b33e9dffb1",
+      "latest_occurrence": {
+        "cell_id": "RGC-818ca3c0010eb49e",
+        "end_line": 632,
+        "finding_id": "RGF-0702",
+        "imprecise": 0,
+        "occurrence_id": 702,
+        "path": "src/review_gauntlet/run_controller.py",
+        "run_id": 234,
+        "start_line": 598
+      },
+      "metadata": "{\"fingerprint\":\"662f4d3b58c277d3cceaf35e85890ad31385b799e675c9a2a6fe15b33e9dffb1\",\"path\":\"src/review_gauntlet/run_controller.py\",\"rule_id\":\"test-evidence\",\"content\":\"Path traversal check is incomplete: the validation rejects `..` in path parts and non-`.review-gauntlet/checkpoints/` prefixes, but does not guard against symlink-based escapes. If an attacker can place a symlink inside the checkpoints directory before `commit_latest_checkpoint` acts on these paths, the resolved path could point outside the repository. Consider resolving symlinks (e.g., `Path.resolve()`) and re-checking that the resolved path is still under the repository root before acting on these paths downstream.\",\"suggestion_code\":\"\",\"existing_code\":\"        if relative.is_absolute() or \\\"..\\\" in relative.parts:\\n            continue\\n        normalized = relative.as_posix()\\n        if not normalized.startswith(\\\".review-gauntlet/checkpoints/\\\"):\\n            continue\",\"start_line\":598,\"end_line\":632,\"thinking\":\"The function parses file paths from JSON stdout of an external command. The string-level checks are good (rejecting absolute, '..', null bytes, non-.json, wrong prefix), but they don't account for symlinks at the filesystem level. Whether this is exploitable depends on how commit_latest_checkpoint uses these paths.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_controller.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-348051370216",
+      "state": "waived"
+    },
+    {
+      "checkpoint_id": "RGC-229156b61bb2-RGS-348051370216",
+      "content": "`_RESERVED_KEYS` is defined as a class attribute inside a frozen dataclass, which means it also becomes a dataclass field visible to `dataclasses.asdict()` and similar introspection. This is likely unintended. Use a module-level constant or prefix with a ClassVar annotation to exclude it from the dataclass field list.",
+      "finding_id": "RGF-0703",
+      "fingerprint": "ad0fb8c5e9c8bf720d7df6a3ad37a777696e45ac7e443fbbacb02ed150d11416",
+      "latest_occurrence": {
+        "cell_id": "RGC-818ca3c0010eb49e",
+        "end_line": 101,
+        "finding_id": "RGF-0703",
+        "imprecise": 0,
+        "occurrence_id": 703,
+        "path": "src/review_gauntlet/run_controller.py",
+        "run_id": 234,
+        "start_line": 92
+      },
+      "metadata": "{\"fingerprint\":\"ad0fb8c5e9c8bf720d7df6a3ad37a777696e45ac7e443fbbacb02ed150d11416\",\"path\":\"src/review_gauntlet/run_controller.py\",\"rule_id\":\"test-evidence\",\"content\":\"`_RESERVED_KEYS` is defined as a class attribute inside a frozen dataclass, which means it also becomes a dataclass field visible to `dataclasses.asdict()` and similar introspection. This is likely unintended. Use a module-level constant or prefix with a ClassVar annotation to exclude it from the dataclass field list.\",\"suggestion_code\":\"    _RESERVED_KEYS: ClassVar[frozenset[str]] = frozenset({\\\"type\\\", \\\"timestamp\\\"})\\n\\n    def model_dump(self) -> dict[str, object]:\",\"existing_code\":\"    _RESERVED_KEYS = frozenset({\\\"type\\\", \\\"timestamp\\\"})\\n\\n    def model_dump(self) -> dict[str, object]:\",\"start_line\":92,\"end_line\":101,\"thinking\":\"In Python dataclasses, class-level assignments that lack a type annotation are NOT treated as fields (since dataclass fields require annotations). So `_RESERVED_KEYS = frozenset(...)` without a type annotation is fine \u2014 it won't become a dataclass field. However, if someone adds a type annotation later, it would become a field. Using ClassVar makes the intent explicit and protects against future mistakes. This is a maintainability improvement.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_controller.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-348051370216",
+      "state": "false_positive"
+    }
+  ],
+  "schema_version": 1
+}

@@ -1,0 +1,206 @@
+{
+  "checkpoint_id": "RGC-229156b61bb2-RGS-348051370216",
+  "events": [
+    {
+      "checkpoint_id": "RGC-229156b61bb2-RGS-348051370216",
+      "created_at": "2026-06-17 00:55:15",
+      "event_id": 1227,
+      "finding_id": "RGF-0692",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "model_dump\u3067payload\u30ad\u30fc\u304ctype/timestamp\u3068\u885d\u7a81\u3059\u308b\u3068\u7121\u8a00\u3067\u30c7\u30fc\u30bf\u304c\u5931\u308f\u308c\u308b\u3002\u885d\u7a81\u691c\u51fa\u3092\u8ffd\u52a0\u3059\u308b\u3002",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-229156b61bb2-RGS-348051370216",
+      "created_at": "2026-06-17 00:55:17",
+      "event_id": 1228,
+      "finding_id": "RGF-0694",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "RGF-0692\u3068\u540c\u4e00\u554f\u984c\u3002\u885d\u7a81\u691c\u51fa\u3067\u4fee\u6b63\u3059\u308b\u3002",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-229156b61bb2-RGS-348051370216",
+      "created_at": "2026-06-17 00:55:18",
+      "event_id": 1229,
+      "finding_id": "RGF-0695",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "\u610f\u56f3\u7684\u306a\u30d0\u30ea\u30c7\u30fc\u30b7\u30e7\u30f3\u547c\u3073\u51fa\u3057\u3002\u30b3\u30e1\u30f3\u30c8\u8ffd\u52a0\u306f\u30b9\u30bf\u30a4\u30eb\u7684\u306a\u63d0\u6848\u306e\u307f\u3067\u4f4e\u30ea\u30b9\u30af\u3002",
+      "to_state": "waived"
+    },
+    {
+      "checkpoint_id": "RGC-229156b61bb2-RGS-348051370216",
+      "created_at": "2026-06-17 00:55:19",
+      "event_id": 1230,
+      "finding_id": "RGF-0693",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "\u65e2\u306b\u30ed\u30fc\u30ab\u30eb\u5909\u6570\u30d1\u30bf\u30fc\u30f3\u3067\u6b63\u3057\u304f\u5b9f\u88c5\u6e08\u307f\u3002free-threaded Python\u306f\u73fe\u6642\u70b9\u3067\u30bf\u30fc\u30b2\u30c3\u30c8\u5916\u3002",
+      "to_state": "waived"
+    },
+    {
+      "checkpoint_id": "RGC-229156b61bb2-RGS-348051370216",
+      "created_at": "2026-06-17 00:56:16",
+      "event_id": 1231,
+      "finding_id": "RGF-0692",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "model_dump\u306b\u4e88\u7d04\u30ad\u30fc\u885d\u7a81\u691c\u51fa\u3092\u8ffd\u52a0\u3002\u65e2\u5b58\u30c6\u30b9\u30c8\u3082\u66f4\u65b0\u6e08\u307f\u3002",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-229156b61bb2-RGS-348051370216",
+      "created_at": "2026-06-17 00:56:17",
+      "event_id": 1232,
+      "finding_id": "RGF-0694",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "RGF-0692\u3068\u540c\u4e00\u4fee\u6b63\u3002\u4e88\u7d04\u30ad\u30fc\u885d\u7a81\u691c\u51fa\u3067\u5bfe\u5fdc\u6e08\u307f\u3002",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-229156b61bb2-RGS-348051370216",
+      "created_at": "2026-06-17 00:57:40",
+      "event_id": 1233,
+      "finding_id": "RGF-0692",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-229156b61bb2-RGS-348051370216",
+      "created_at": "2026-06-17 00:57:40",
+      "event_id": 1234,
+      "finding_id": "RGF-0694",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-229156b61bb2-RGS-348051370216",
+      "created_at": "2026-06-17 00:58:00",
+      "event_id": 1235,
+      "finding_id": "RGF-0696",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "datetime.now(UTC)\u304c\u30ed\u30c3\u30af\u53d6\u5f97\u524d\u306b\u547c\u3070\u308c\u3066\u304a\u308a\u3001concurrent push\u3067\u8ca0\u306eage\u304c\u51fa\u308b\u53ef\u80fd\u6027\u304c\u3042\u308b\u3002\u30ed\u30c3\u30af\u5f8c\u306b\u79fb\u52d5\u3059\u308b\u3002",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-229156b61bb2-RGS-348051370216",
+      "created_at": "2026-06-17 00:58:02",
+      "event_id": 1236,
+      "finding_id": "RGF-0697",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "RGF-0695\u3068\u540c\u4e00\u6307\u6458\u3002\u610f\u56f3\u7684\u306a\u30d0\u30ea\u30c7\u30fc\u30b7\u30e7\u30f3\u547c\u3073\u51fa\u3057\u3067\u30b9\u30bf\u30a4\u30eb\u7684\u63d0\u6848\u306e\u307f\u3002",
+      "to_state": "waived"
+    },
+    {
+      "checkpoint_id": "RGC-229156b61bb2-RGS-348051370216",
+      "created_at": "2026-06-17 00:58:02",
+      "event_id": 1237,
+      "finding_id": "RGF-0698",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "stdout/stderr\u306e\u30e1\u30e2\u30ea\u4f7f\u7528\u306f\u8a2d\u8a08\u5224\u65ad\u3002artifact\u30b7\u30b9\u30c6\u30e0\u304c\u65e2\u306b\u5b58\u5728\u3057\u3001max_steps\u3067\u5236\u9650\u3055\u308c\u3066\u3044\u308b\u3002\u4eca\u56de\u306e\u30b9\u30b3\u30fc\u30d7\u5916\u3002",
+      "to_state": "waived"
+    },
+    {
+      "checkpoint_id": "RGC-229156b61bb2-RGS-348051370216",
+      "created_at": "2026-06-17 00:58:22",
+      "event_id": 1238,
+      "finding_id": "RGF-0696",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "datetime.now(UTC)\u3092\u30ed\u30c3\u30af\u89e3\u653e\u5f8c\u306b\u79fb\u52d5\u3002concurrent push\u3067\u8ca0\u306eage\u304c\u51fa\u308b\u554f\u984c\u3092\u89e3\u6d88\u3002",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-229156b61bb2-RGS-348051370216",
+      "created_at": "2026-06-17 00:59:43",
+      "event_id": 1239,
+      "finding_id": "RGF-0696",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-229156b61bb2-RGS-348051370216",
+      "created_at": "2026-06-17 02:00:58",
+      "event_id": 1240,
+      "finding_id": "RGF-0700",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Fix already applied: line 152 has the clarifying comment '# raises LookupError if session missing'. The finding's existing_code metadata shows the old version without the comment.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-229156b61bb2-RGS-348051370216",
+      "created_at": "2026-06-17 02:01:00",
+      "event_id": 1241,
+      "finding_id": "RGF-0699",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Fix already applied: lines 248-251 snapshot mutable fields into locals (lifecycle, step_started_at, timeout_seconds, output_progress) to avoid TOCTOU races. The finding's existing_code metadata shows the old version without these snapshots. A full threading.Lock is overkill for this display-only TUI path under CPython GIL.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-229156b61bb2-RGS-348051370216",
+      "created_at": "2026-06-17 02:01:53",
+      "event_id": 1242,
+      "finding_id": "RGF-0699",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-229156b61bb2-RGS-348051370216",
+      "created_at": "2026-06-17 02:01:53",
+      "event_id": 1243,
+      "finding_id": "RGF-0700",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-229156b61bb2-RGS-348051370216",
+      "created_at": "2026-06-17 02:02:33",
+      "event_id": 1244,
+      "finding_id": "RGF-0701",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Display-only TUI refresh path. CPython GIL makes individual attribute reads atomic; local-variable snapshotting (already applied) prevents TOCTOU within the method body. Worst case is one slightly stale refresh cycle with no correctness impact. A full threading.Lock is disproportionate for this use case.",
+      "to_state": "waived"
+    },
+    {
+      "checkpoint_id": "RGC-229156b61bb2-RGS-348051370216",
+      "created_at": "2026-06-17 02:02:35",
+      "event_id": 1245,
+      "finding_id": "RGF-0702",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Theoretical symlink escape requires write access to .review-gauntlet/checkpoints/ inside the repo, meaning the attacker already has full repo access. String-level validation (no absolute paths, no .., prefix check, .json suffix) is sufficient for the threat model. No practical attack surface.",
+      "to_state": "waived"
+    },
+    {
+      "checkpoint_id": "RGC-229156b61bb2-RGS-348051370216",
+      "created_at": "2026-06-17 02:02:45",
+      "event_id": 1246,
+      "finding_id": "RGF-0703",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Unannotated class-level assignments are not dataclass fields in Python. _RESERVED_KEYS = frozenset(...) without a type annotation is correctly excluded from the field list by the dataclass machinery. The finding's own analysis confirms this.",
+      "to_state": "false_positive"
+    }
+  ],
+  "schema_version": 1
+}
