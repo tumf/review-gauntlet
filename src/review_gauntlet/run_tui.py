@@ -287,14 +287,9 @@ def create_run_app(controller: RunController) -> object:
             queue_panel_container.display = bool(sections["queue"])
             queue_panel.update(render_tui_lines(sections["queue"], flashes, mode="rich"))
             rules_panel_container.border_title = _rules_panel_title(view.active_view)
-            rules_content = _render_rules_panel(view, flashes)
-            rules_panel.update(rules_content)
+            rules_panel.update(_render_rules_panel(view, flashes))
             files_panel_container.border_title = _files_panel_title(view.active_view)
-            files_content = _render_files_panel(view, flashes)
-            files_panel.update(files_content)
-            _equalize_panel_heights(
-                rules_panel_container, rules_content, files_panel_container, files_content
-            )
+            files_panel.update(_render_files_panel(view, flashes))
             findings_panel_container.border_title = _findings_panel_title(view.active_view)
             if view.active_view == "agent":
                 findings_panel.update(agent_summary_text(view))
@@ -1648,28 +1643,6 @@ def _render_files_panel(view: RunViewState, flashes: dict[str, TuiFlash]) -> Any
     if view.active_view in ("cells", "findings", "agent"):
         return ""
     return render_tui_lines(files_tui_lines(view, limit=5), flashes, mode="rich")
-
-
-def _content_line_count(content: object) -> int:
-    if hasattr(content, "plain"):
-        text: str = content.plain  # type: ignore[union-attr]
-    elif isinstance(content, str):
-        text = content
-    else:
-        return 0
-    if not text:
-        return 0
-    return text.count("\n") + 1
-
-
-def _equalize_panel_heights(
-    container_a: Any, content_a: object, container_b: Any, content_b: object
-) -> None:
-    ha = _content_line_count(content_a) + 2
-    hb = _content_line_count(content_b) + 2
-    target = max(ha, hb, 1)
-    container_a.styles.height = target
-    container_b.styles.height = target
 
 
 def overview_text(view: RunViewState, *, width: int = 120) -> str:
