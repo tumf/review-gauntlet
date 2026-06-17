@@ -91,6 +91,12 @@ def _count_runs_and_events(tmp_path: Path) -> tuple[int, int]:
     return int(runs), int(events)
 
 
+def test_verify_fixes_default_concurrency_is_three() -> None:
+    args = build_parser().parse_args(["verify-fixes", "."])
+
+    assert args.concurrency == 3
+
+
 def test_verify_fixes_parser_accepts_execution_and_focus_options() -> None:
     args = build_parser().parse_args(
         [

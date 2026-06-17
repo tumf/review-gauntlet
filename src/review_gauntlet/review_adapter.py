@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 from review_gauntlet.config import TEMPLATE_PATTERN, CommandAdapterConfig, OutputMode
 from review_gauntlet.ocr_rules import OCRComment, RuleDocument, Ruleset
 from review_gauntlet.review_cells import ReviewCell
+from review_gauntlet.subprocess_failures import subprocess_startup_failure_details
 
 RAW_SNIPPET_LIMIT = 500
 VERDICT_OUTPUT_SIZE_LIMIT_BYTES = 1_000_000
@@ -343,6 +344,12 @@ class CommandReviewAdapter:
         except FileNotFoundError as exc:
             self._fail(
                 f"command not found: {argv[0]}", failure_file, {"argv": argv, "error": str(exc)}
+            )
+        except OSError as exc:
+            self._fail(
+                "command startup failed",
+                failure_file,
+                subprocess_startup_failure_details(argv, exc),
             )
         with self._process_lock:
             self._active_processes.add(process)
