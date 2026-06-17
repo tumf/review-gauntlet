@@ -1,3 +1,4 @@
+import errno
 import json
 import subprocess
 import sys
@@ -489,6 +490,36 @@ def test_run_reports_startup_failure(tmp_path: Path, capsys: pytest.CaptureFixtu
     assert result["completed"] is False
     assert result["reason"] == "startup_error"
     assert "command not found" in result["error"]
+
+
+def test_run_reports_resource_exhaustion_startup_failure(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _init_session(tmp_path, capsys)
+    _write_config(tmp_path, sys.executable, ["-c", "print('unused')", "{prompt}"])
+
+    def raise_emfile(*_args: object, **_kwargs: object) -> None:
+        raise OSError(errno.EMFILE, "Too many open files")
+
+    monkeypatch.setattr("review_gauntlet.cli.subprocess.Popen", raise_emfile)
+
+    with pytest.raises(SystemExit) as exc_info:
+        main(["run", str(tmp_path), "--format", "json"])
+
+    assert exc_info.value.code == 1
+    result = json.loads(capsys.readouterr().out)
+    assert result["completed"] is False
+    assert result["reason"] == "startup_error"
+    assert result["error"] == "command startup failed"
+    failure = result["steps"][0]["failure"]
+    assert failure["reason"] == "startup_error"
+    assert failure["argv"][:3] == [sys.executable, "-c", "print('unused')"]
+    assert failure["exception_type"] == "OSError"
+    assert failure["errno"] == errno.EMFILE
+    assert "Too many open files" in failure["detail"]
+    assert failure["startup_error_reason"] == "resource_exhaustion"
+    assert "--concurrency" in failure["hint"]
+    assert "open-file limit" in failure["hint"]
 
 
 def test_run_reports_timeout(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

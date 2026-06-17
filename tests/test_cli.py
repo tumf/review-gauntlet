@@ -446,7 +446,7 @@ def test_cli_review_help_shows_numeric_and_audience_defaults(
     output = _help_output(["review"], capsys)
 
     assert "Maximum review budget (default: 50)" in output
-    assert "Review concurrency (default: 8)" in output
+    assert "Review concurrency (default: 3)" in output
     assert "Output format (default: text)" in output
     assert "Progress output audience (default: human)" in output
     assert "--fixture" in output
@@ -463,7 +463,7 @@ def test_cli_verify_fixes_help_shows_repeatable_filter_defaults(
     assert "Filter by finding ID (default: none)" in output
     assert "Filter by finding path (default: none)" in output
     assert "Maximum review budget (default: 50)" in output
-    assert "Review concurrency (default: 8)" in output
+    assert "Review concurrency (default: 3)" in output
     assert "Progress output audience (default: human)" in output
 
 

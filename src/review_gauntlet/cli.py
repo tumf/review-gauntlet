@@ -78,6 +78,7 @@ from review_gauntlet.run_tui import (
     textual_available,
 )
 from review_gauntlet.session_store import SessionStore
+from review_gauntlet.subprocess_failures import subprocess_startup_failure_details
 from review_gauntlet.targets import (
     TargetSpec,
     changed_files_for_target,
@@ -353,7 +354,7 @@ def _budget_arg(parser: argparse.ArgumentParser) -> None:
 
 def _concurrency_arg(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
-        "--concurrency", type=_positive_int, default=8, help="Review concurrency (default: 8)"
+        "--concurrency", type=_positive_int, default=3, help="Review concurrency (default: 3)"
     )
 
 
@@ -1841,6 +1842,19 @@ def _run_session_command_step(
                 "reason": "startup_error",
                 "error": f"command not found: {argv[0]}",
                 "detail": str(exc),
+            },
+        )
+    except OSError as exc:
+        return SessionCommandResult(
+            argv=argv,
+            cwd=str(cwd_path),
+            returncode=None,
+            stdout="",
+            stderr="",
+            failure={
+                "reason": "startup_error",
+                "error": "command startup failed",
+                **subprocess_startup_failure_details(argv, exc),
             },
         )
 

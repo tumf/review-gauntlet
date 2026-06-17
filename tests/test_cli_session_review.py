@@ -1,7 +1,11 @@
+import errno
 import json
 import sqlite3
+import subprocess
 import sys
+import threading
 from pathlib import Path
+from typing import Any, NoReturn
 
 import pytest
 
@@ -139,10 +143,61 @@ def _command_config(
     return config
 
 
-def test_review_default_concurrency_is_eight() -> None:
+def test_review_default_concurrency_is_three() -> None:
     args = build_parser().parse_args(["review", "."])
 
-    assert args.concurrency == 8
+    assert args.concurrency == 3
+
+
+def test_default_concurrency_bounds_simultaneous_review_tasks() -> None:
+    default_concurrency = build_parser().parse_args(["review", "."]).concurrency
+    cells = [
+        ReviewCell(
+            id=f"RGC-{index}",
+            file_path=f"file-{index}.py",
+            rule_id="python",
+            slice_id="python",
+            content_digest="digest",
+        )
+        for index in range(default_concurrency + 2)
+    ]
+    lock = threading.Lock()
+    release = threading.Event()
+    started = threading.Event()
+    active_count = 0
+    max_active = 0
+
+    class TrackingAdapter:
+        def review(self, cell: ReviewCell) -> ReviewAdapterResult:
+            nonlocal active_count, max_active
+            with lock:
+                active_count += 1
+                max_active = max(max_active, active_count)
+                if active_count == default_concurrency:
+                    started.set()
+            try:
+                release.wait(timeout=1.0)
+                return ReviewAdapterResult(cell_id=cell.id)
+            finally:
+                with lock:
+                    active_count -= 1
+
+    holder: dict[str, dict[str, ReviewAdapterResult | ReviewAdapterError]] = {}
+
+    def run_review() -> None:
+        holder["results"] = review_cells_concurrently(
+            TrackingAdapter(), cells, concurrency=default_concurrency
+        )
+
+    thread = threading.Thread(target=run_review)
+    thread.start()
+    assert started.wait(timeout=1.0)
+    release.set()
+    thread.join(timeout=2.0)
+
+    assert not thread.is_alive()
+    assert max_active == 3
+    assert set(holder["results"]) == {cell.id for cell in cells}
 
 
 def test_init_creates_active_session_without_run(
@@ -713,6 +768,40 @@ def test_command_adapter_reviews_selected_cells_concurrently_with_isolated_artif
         assert (cell_dir / "stderr.txt").is_file()
         assert (cell_dir / "command.json").is_file()
         assert (cell_dir / "verdict.json").is_file()
+
+
+def test_resource_exhaustion_startup_failure_persists_sibling_successes(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "app.py").write_text("print('hello')\n", encoding="utf-8")
+    _init_session(tmp_path, capsys)
+    ordered_cells = [str(row["cell_id"]) for row in SessionStore(tmp_path).list_cells()]
+    failing_cell = ordered_cells[0]
+    _command_config(tmp_path, "import json; print(json.dumps({'comments':[]}))")
+    original_popen = subprocess.Popen
+
+    def raise_emfile_for_one_cell(argv: Any, *args: Any, **kwargs: Any) -> Any:
+        if isinstance(argv, list) and failing_cell in "\n".join(str(part) for part in argv):
+            raise OSError(errno.EMFILE, "Too many open files")
+        return original_popen(argv, *args, **kwargs)
+
+    monkeypatch.setattr("review_gauntlet.review_adapter.subprocess.Popen", raise_emfile_for_one_cell)
+
+    with pytest.raises(SystemExit) as excinfo:
+        main(["review", str(tmp_path), "--budget", "3", "--concurrency", "2", "--format", "json"])
+
+    data = json.loads(capsys.readouterr().out)
+    assert excinfo.value.code == 1
+    assert data["reviewed_cells"] == 2
+    assert data["finding_ids"] == []
+    assert data["failed_cell_id"] == failing_cell
+    assert data["error"] == "command startup failed"
+    assert data["failure"]["startup_error_reason"] == "resource_exhaustion"
+    assert data["failure"]["errno"] == errno.EMFILE
+    assert "--concurrency" in data["failure"]["hint"]
+    assert data["coverage"]["reviewed"] == 2
+    assert _coverage_for_cell(tmp_path, failing_cell) == "pending"
+    assert len(_reviewed_cell_ids(tmp_path)) == 2
 
 
 def test_concurrent_review_failure_persists_later_successes(

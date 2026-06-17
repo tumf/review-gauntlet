@@ -1,6 +1,8 @@
+import errno
 import json
 import sys
 from pathlib import Path
+from typing import NoReturn
 
 import pytest
 
@@ -348,6 +350,62 @@ def test_command_adapter_failure_paths(
 
     failure = tmp_path / ".review-gauntlet" / "runs" / "1" / "cells" / "RGC-test" / "failure.json"
     assert failure.is_file()
+
+
+def test_command_adapter_resource_exhaustion_startup_failure_is_structured(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = CommandAdapterConfig.model_validate(
+        {
+            "type": "command",
+            "command": sys.executable,
+            "args": ["-c", "print('{\\\"comments\\\": []}')"],
+            "output": {"mode": "stdout-json"},
+        }
+    )
+
+    def raise_emfile(*_args: object, **_kwargs: object) -> NoReturn:
+        raise OSError(errno.EMFILE, "Too many open files")
+
+    monkeypatch.setattr("review_gauntlet.review_adapter.subprocess.Popen", raise_emfile)
+
+    with pytest.raises(ReviewAdapterError, match="command startup failed") as excinfo:
+        _adapter(tmp_path, config).review(_cell(tmp_path))
+
+    cell_dir = tmp_path / ".review-gauntlet" / "runs" / "1" / "cells" / "RGC-test"
+    failure = json.loads((cell_dir / "failure.json").read_text(encoding="utf-8"))
+    assert excinfo.value.failure == failure
+    assert failure["error"] == "command startup failed"
+    assert failure["argv"][:3] == [sys.executable, "-c", "print('{\\\"comments\\\": []}')"]
+    assert failure["exception_type"] == "OSError"
+    assert failure["errno"] == errno.EMFILE
+    assert "Too many open files" in failure["detail"]
+    assert failure["startup_error_reason"] == "resource_exhaustion"
+    assert "--concurrency" in failure["hint"]
+    assert "open-file limit" in failure["hint"]
+
+
+def test_command_adapter_generic_os_startup_failure_preserves_details(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = CommandAdapterConfig.model_validate(
+        {"type": "command", "command": sys.executable, "output": {"mode": "stdout-json"}}
+    )
+
+    def raise_eacces(*_args: object, **_kwargs: object) -> NoReturn:
+        raise OSError(errno.EACCES, "Permission denied")
+
+    monkeypatch.setattr("review_gauntlet.review_adapter.subprocess.Popen", raise_eacces)
+
+    with pytest.raises(ReviewAdapterError, match="command startup failed") as excinfo:
+        _adapter(tmp_path, config).review(_cell(tmp_path))
+
+    failure = excinfo.value.failure
+    assert failure["startup_error_reason"] == "os_error"
+    assert failure["exception_type"] == "PermissionError"
+    assert failure["errno"] == errno.EACCES
+    assert "Permission denied" in failure["detail"]
+    assert "hint" not in failure
 
 
 def test_command_adapter_timeout_failure(tmp_path: Path) -> None:
