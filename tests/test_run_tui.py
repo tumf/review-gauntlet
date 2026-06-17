@@ -933,7 +933,7 @@ def test_session_summary_derives_open_findings_and_action_breakdown_without_open
     details = findings_text(snapshot)
 
     assert view.open_findings == 5
-    assert "Findings  open 5   triage 3 | fix 1 | verify 1" in session
+    assert "Findings  untri 2  reopn 1  conf 1  fix-pend 1" in session
     assert "open 5" in details
     assert "reopened 1" in details
     assert "untriaged 2" in details
@@ -958,10 +958,7 @@ def test_session_summary_keeps_zero_actionable_findings_without_work_breakdown()
     details = findings_text(snapshot)
 
     assert view.open_findings == 0
-    assert "Findings  open 0" in session
-    assert "triage" not in session
-    assert "fix" not in session
-    assert "verify" not in session
+    assert "Findings  none" in session
     assert "open 0" in details
     assert "closed 3" in details
 
@@ -1006,7 +1003,7 @@ def test_agent_session_summary_and_activity_rows_are_human_facing_and_sanitized(
     assert "artifact .review-gauntlet/runs/run-1/output.txt" in agent
     assert "Session" not in session
     assert "Coverage  0%   0 / 9" in session
-    assert "Findings  open 0" in session
+    assert "Findings  none" in session
     assert "Current   review coverage" in session
     assert "Agent step 1" in session
     assert "event - run started session RGS-summ…1234" in activity

@@ -134,6 +134,7 @@ def create_run_app(controller: RunController) -> object:
             self._active_view = "overview"
             self._tui_render_state = empty_tui_render_state()
             self._completed_result: dict[str, object] | None = None
+            self._exit_on_complete: bool = False
 
         def compose(self) -> ComposeResult:
             view = dashboard_state(
@@ -197,7 +198,10 @@ def create_run_app(controller: RunController) -> object:
         def _run_controller(self) -> None:
             result = self.controller.run()
             self._completed_result = result
-            self.call_from_thread(self.refresh_view)
+            if self._exit_on_complete:
+                self.call_from_thread(self.exit, result)
+            else:
+                self.call_from_thread(self.refresh_view)
 
         def action_stop_after_current_step(self) -> None:
             if self._completed_result is not None:
@@ -210,8 +214,9 @@ def create_run_app(controller: RunController) -> object:
             if self._completed_result is not None:
                 self.exit(self._completed_result)
                 return
+            self._exit_on_complete = True
             self.controller.interrupt()
-            self.exit({"completed": False, "reason": "interrupted", "steps": [], "step_count": 0})
+            self.refresh_view()
 
         def action_refresh(self) -> None:
             self.refresh_view()
@@ -325,6 +330,26 @@ FINDING_STATES = (
     "fixed_pending_verification",
     "closed",
 )
+_FINDING_STATE_LABELS = (
+    "untriaged",
+    "reopened",
+    "confirmed",
+    "fixed_pending_verification",
+    "fixed_verified",
+    "false_positive",
+    "accepted_risk",
+    "waived",
+)
+_FINDING_STATE_ABBREV: dict[str, str] = {
+    "untriaged": "untri",
+    "reopened": "reopn",
+    "confirmed": "conf",
+    "fixed_pending_verification": "fix-pend",
+    "fixed_verified": "fix-ok",
+    "false_positive": "fp",
+    "accepted_risk": "risk",
+    "waived": "waived",
+}
 _SPINNER_FRAMES = ("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
 _BAR_WIDTH = 24
 _FLASH_STYLE = "bold #fef3c7 on #3f3520"
@@ -714,12 +739,13 @@ def build_session_summary(
     active_gate: FinalizeGate,
     findings_summary: ActionableFindingSummary,
 ) -> SessionSummary:
-    findings = f"open {findings_summary.open}"
-    if findings_summary.open:
-        findings = (
-            f"{findings}   triage {findings_summary.triage} | "
-            f"fix {findings_summary.fix} | verify {findings_summary.verify}"
-        )
+    finding_parts: list[str] = []
+    for state in _FINDING_STATE_LABELS:
+        count = _count_value(snapshot.findings.get(state, 0))
+        if count:
+            abbr = _FINDING_STATE_ABBREV.get(state, state)
+            finding_parts.append(f"{abbr} {count}")
+    findings = "  ".join(finding_parts) if finding_parts else "none"
     return SessionSummary(
         coverage=f"{coverage.percent}%   {coverage.completed} / {coverage.total}",
         findings=findings,
@@ -1203,9 +1229,11 @@ def session_summary_tui_lines(view: RunViewState) -> tuple[TuiLine, ...]:
         ),
         TuiLine(
             (
-                _literal("Findings  open ", key="session.findings.label"),
+                _literal("Findings  ", key="session.findings.label"),
                 _field(
-                    "session.findings.open", str(view.open_findings), compare=view.open_findings
+                    "session.findings.detail",
+                    view.session_summary.findings,
+                    compare=view.session_summary.findings,
                 ),
             )
         ),
@@ -1506,7 +1534,11 @@ def group_queue_by_file(
         )
 
     file_groups.sort(
-        key=lambda g: (-int(cast(int, g["highest_priority_score"])), str(g["file_path"]))
+        key=lambda g: (
+            _priority_rank(str(g["highest_priority_label"])),
+            -int(cast(int, g["highest_priority_score"])),
+            str(g["file_path"]),
+        )
     )
     entries_out: list[FileQueueEntry] = []
     for g in file_groups:
