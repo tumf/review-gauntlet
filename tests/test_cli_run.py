@@ -33,6 +33,7 @@ def _write_config(
     args: list[str],
     *,
     timeout: float = 5.0,
+    quiet_timeout: float | None = None,
     cwd: str | None = None,
     hooks: dict[str, object] | None = None,
 ) -> Path:
@@ -43,6 +44,8 @@ def _write_config(
         "args": args,
         "timeout_seconds": timeout,
     }
+    if quiet_timeout is not None:
+        adapter["quiet_timeout_seconds"] = quiet_timeout
     if cwd is not None:
         adapter["cwd"] = cwd
     payload: dict[str, object] = {"adapter": adapter}
@@ -524,7 +527,13 @@ def test_run_reports_resource_exhaustion_startup_failure(
 
 def test_run_reports_timeout(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     _init_session(tmp_path, capsys)
-    _write_config(tmp_path, sys.executable, ["-c", "import time; time.sleep(2)"], timeout=0.1)
+    _write_config(
+        tmp_path,
+        sys.executable,
+        ["-c", "import time; time.sleep(2)"],
+        timeout=0.1,
+        quiet_timeout=5.0,
+    )
 
     with pytest.raises(SystemExit) as exc_info:
         main(["run", str(tmp_path), "--format", "json"])
@@ -534,6 +543,70 @@ def test_run_reports_timeout(tmp_path: Path, capsys: pytest.CaptureFixture[str])
     assert result["completed"] is False
     assert result["reason"] == "timeout"
     assert result["steps"][0]["failure"]["timeout_seconds"] == 0.1
+
+
+def test_run_reports_quiet_timeout_before_overall_timeout(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_session(tmp_path, capsys)
+    _write_config(
+        tmp_path,
+        sys.executable,
+        ["-c", "import time; time.sleep(2)"],
+        timeout=2.0,
+        quiet_timeout=0.15,
+    )
+
+    started_at = time.monotonic()
+    with pytest.raises(SystemExit) as exc_info:
+        main(["run", str(tmp_path), "--format", "json"])
+    elapsed = time.monotonic() - started_at
+
+    assert exc_info.value.code == 1
+    result = json.loads(capsys.readouterr().out)
+    failure = result["steps"][0]["failure"]
+    assert elapsed < 1.0
+    assert result["completed"] is False
+    assert result["reason"] == "quiet_timeout"
+    assert failure["reason"] == "quiet_timeout"
+    assert failure["quiet_timeout_seconds"] == 0.15
+    assert failure["timeout_seconds"] == 2.0
+
+
+def test_run_quiet_timeout_persists_output_tail_after_initial_output(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_session(tmp_path, capsys)
+    _write_config(
+        tmp_path,
+        sys.executable,
+        [
+            "-c",
+            "import sys, time; "
+            "print('stdout before quiet', flush=True); "
+            "print('stderr before quiet', file=sys.stderr, flush=True); "
+            "time.sleep(0.4)",
+        ],
+        timeout=2.0,
+        quiet_timeout=0.15,
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        main(["run", str(tmp_path), "--format", "json"])
+
+    assert exc_info.value.code == 1
+    result = json.loads(capsys.readouterr().out)
+    step = result["steps"][0]
+    failure = step["failure"]
+    assert result["reason"] == "quiet_timeout"
+    assert failure["reason"] == "quiet_timeout"
+    assert failure["quiet_timeout_seconds"] == 0.15
+    assert failure["stdout_tail"] == ["stdout before quiet"]
+    assert failure["stderr_tail"] == ["stderr before quiet"]
+    assert {entry["text"] for entry in step["output_tail"]} == {
+        "stdout before quiet",
+        "stderr before quiet",
+    }
 
 
 def test_run_reports_max_steps_exhaustion(
@@ -654,6 +727,45 @@ print('error line', file=sys.stderr, flush=True)
         "error line",
         "second line",
     )
+
+
+def test_run_session_command_resets_quiet_timeout_on_stdout_and_stderr(
+    tmp_path: Path,
+) -> None:
+    state_dir = tmp_path / ".review-gauntlet"
+    state_dir.mkdir()
+    script = tmp_path / "periodic_agent.py"
+    script.write_text(
+        """
+import sys
+import time
+
+for index in range(4):
+    print(f'out {index}', flush=True)
+    print(f'err {index}', file=sys.stderr, flush=True)
+    time.sleep(0.08)
+""".strip(),
+        encoding="utf-8",
+    )
+    config = CommandAdapterConfig(
+        type="command",
+        command=sys.executable,
+        args=(str(script),),
+        timeout_seconds=2.0,
+        quiet_timeout_seconds=0.2,
+    )
+
+    result = run_session_command_step_for_testing(
+        config=config,
+        root=tmp_path,
+        state_dir=state_dir,
+        prompt="prompt",
+    )
+
+    assert result.failure is None
+    assert result.returncode == 0
+    assert "out 3" in result.stdout
+    assert "err 3" in result.stderr
 
 
 def test_run_session_command_resolves_nested_cwd_and_rejects_escape(

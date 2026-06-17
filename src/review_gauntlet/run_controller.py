@@ -11,6 +11,7 @@ from typing import cast
 
 from review_gauntlet.checkpoint import CheckpointCommitResult, commit_latest_checkpoint
 from review_gauntlet.config import CommandAdapterConfig, load_config
+from review_gauntlet.coverage_projection import CoverageProjection, empty_coverage_projection
 from review_gauntlet.session_store import SessionStore
 from review_gauntlet.subprocess_failures import subprocess_startup_failure_blocker
 
@@ -119,6 +120,7 @@ class RunSnapshot:
     next_required_action: str | None = None
     run_count: int = 0
     agent_lifecycle: AgentLifecycle = AgentLifecycle()
+    coverage_projection: CoverageProjection = empty_coverage_projection()
 
 
 ReadyPrompt = Callable[[SessionStore, Path], str | None]
@@ -257,6 +259,7 @@ class RunController:
             next_required_action=_string_or_none(status.get("next_required_action")),
             run_count=_int_or_zero(status.get("run_count", self._step)),
             agent_lifecycle=self._current_agent_lifecycle(),
+            coverage_projection=_coverage_projection_or_empty(status.get("coverage_projection")),
         )
 
     def _current_agent_lifecycle(self) -> AgentLifecycle:
@@ -575,6 +578,12 @@ def _object_dict(value: object) -> dict[str, object]:
     return {str(key): item for key, item in typed_value.items()}
 
 
+def _coverage_projection_or_empty(value: object) -> CoverageProjection:
+    if isinstance(value, CoverageProjection):
+        return value
+    return empty_coverage_projection()
+
+
 def _string_or_none(value: object) -> str | None:
     if value is None:
         return None
@@ -607,7 +616,7 @@ def _lifecycle_status_from_result(result: SessionCommandResult) -> str:
 
 
 def _agent_status_from_failure_reason(reason: str) -> str:
-    if reason == "timeout":
+    if reason in {"timeout", "quiet_timeout"}:
         return "timed_out"
     if reason in {
         "command_failed",

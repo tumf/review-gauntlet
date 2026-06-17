@@ -379,7 +379,30 @@ Explicit `--config` SHALL accept both absolute paths and repository-relative pat
 
 Command adapter output path templates SHALL be deterministic before prompt construction. `adapter.output.path` SHALL reject `{prompt}` because the prompt itself can contain the output path and would make prompt-time and read-time path resolution diverge. The `{prompt}` template variable SHALL remain supported for adapter `args` and `env`.
 
-<!-- Expected canonical result after archive: missing-config guidance points to `review-gauntlet config preset list` instead of `review-gauntlet config list`. -->
+Command adapter configuration SHALL provide bounded execution defaults for autonomous agents. `adapter.timeout_seconds` SHALL default to 3600 seconds when not explicitly configured. `adapter.quiet_timeout_seconds` SHALL default to 600 seconds when not explicitly configured. Both timeout fields SHALL reject non-finite or non-positive values before adapter execution.
+
+<!-- Expected canonical result after archive: command adapter configuration documents default overall timeout as 3600 seconds and default quiet timeout as 600 seconds, with validation requirements for both fields. -->
+
+#### Scenario: Default adapter timeouts are applied
+
+**Given**: a valid command adapter configuration omits `timeout_seconds` and `quiet_timeout_seconds`
+**When**: Review Gauntlet loads the effective configuration
+**Then**: `adapter.timeout_seconds` is `3600.0`
+**And**: `adapter.quiet_timeout_seconds` is `600.0`
+
+#### Scenario: Explicit adapter timeouts override defaults
+
+**Given**: a valid command adapter configuration explicitly sets `timeout_seconds` and `quiet_timeout_seconds`
+**When**: Review Gauntlet loads the effective configuration
+**Then**: the configured timeout values are preserved
+**And**: default timeout values do not override the explicit values
+
+#### Scenario: Invalid quiet timeout fails validation before execution
+
+**Given**: a command adapter configuration whose `quiet_timeout_seconds` value is zero, negative, NaN, or infinite
+**When**: `review-gauntlet config validate` or an adapter-backed command loads that configuration
+**Then**: configuration validation fails with an actionable error
+**And**: no external adapter command is executed
 
 #### Scenario: Missing config guidance is actionable
 
@@ -657,6 +680,38 @@ The `review-gauntlet config` command group SHALL validate configuration files an
 
 `review-gauntlet run` SHALL preserve and display distinct external-agent and orchestration failure reasons instead of collapsing them into misleading timeout or generic failure labels. Timeout wording SHALL be reserved for actual timeout failures, and configured timeout details SHALL be rendered concisely without duplicated or unset wording.
 
+Quiet timeout caused by lack of stdout/stderr output SHALL remain distinguishable from overall wall-clock command timeout in structured run results and artifacts, while human-facing terminal TUI wording MAY present both as timeout-family failures.
+
+<!-- Expected canonical result after archive: run failure semantics distinguish `quiet_timeout` from overall `timeout` while preserving timeout-family terminal display. -->
+
+#### Scenario: Quiet timeout remains distinct from overall command timeout
+
+**Given**: a configured command adapter subprocess is still running
+**And**: the subprocess has produced no stdout or stderr output for `adapter.quiet_timeout_seconds`
+**And**: the overall `adapter.timeout_seconds` deadline has not been reached
+**When**: `review-gauntlet run` enforces adapter timeouts
+**Then**: the subprocess is terminated
+**And**: the run result or persisted command artifact reports `reason` as `quiet_timeout`
+**And**: the diagnostic includes the configured `quiet_timeout_seconds`
+**And**: the diagnostic remains distinguishable from an overall `timeout` failure
+
+#### Scenario: Overall timeout remains distinct
+
+**Given**: a configured command adapter subprocess remains running until `adapter.timeout_seconds` elapses
+**When**: `review-gauntlet run` enforces adapter timeouts
+**Then**: the subprocess is terminated
+**And**: the run result or persisted command artifact reports `reason` as `timeout`
+**And**: the diagnostic includes the configured `timeout_seconds`
+**And**: the failure is not reported as `quiet_timeout` unless the quiet-output deadline was the cause
+
+#### Scenario: Quiet timeout renders as terminal timeout family in TUI
+
+**Given**: a run step fails because of quiet timeout
+**When**: the run TUI renders the result
+**Then**: the agent is displayed as a terminal timeout-family failure
+**And**: the display does not label the failure as command failed, startup error, interrupted, or max steps exhausted
+**And**: timeout wording is concise and does not duplicate labels such as `timeout timeout`
+
 #### Scenario: Timeout failure remains distinct
 
 **Given**: a configured command adapter times out during `review-gauntlet run`
@@ -713,6 +768,26 @@ The `review-gauntlet config` command group SHALL validate configuration files an
 ### Requirement: Run agent liveness SHALL reflect actual output activity
 
 `review-gauntlet run` SHALL track agent subprocess stdout and stderr output as it is produced, not only after the subprocess exits. The agent liveness status SHALL reflect the time since the most recent output line, not the time since the subprocess was started. An agent that is actively producing output SHALL be displayed as "running", not "quiet". The Activity panel SHALL show live output tail entries during agent execution.
+
+Output activity SHALL also reset quiet-timeout enforcement. stdout and stderr output lines SHALL both count as liveness. When no output has ever been produced for a running subprocess, quiet-timeout elapsed time SHALL be measured from the agent step start time.
+
+<!-- Expected canonical result after archive: run liveness defines stdout/stderr output as both display liveness and quiet-timeout reset evidence. -->
+
+#### Scenario: Periodic output prevents quiet timeout
+
+**Given**: a configured command adapter subprocess runs longer than `adapter.quiet_timeout_seconds`
+**And**: the subprocess produces stdout or stderr output before each quiet-timeout window elapses
+**When**: `review-gauntlet run` enforces adapter timeouts
+**Then**: the subprocess is not terminated for quiet timeout
+**And**: run completion remains governed by process exit or the overall `adapter.timeout_seconds`
+
+#### Scenario: No initial output can quiet-timeout
+
+**Given**: a configured command adapter subprocess starts successfully
+**And**: the subprocess produces no stdout or stderr output after start
+**When**: `adapter.quiet_timeout_seconds` elapses before the overall timeout
+**Then**: `review-gauntlet run` terminates the subprocess for quiet timeout
+**And**: `last_output_age_seconds` or equivalent diagnostics reflect silence since step start when available
 
 #### Scenario: Agent producing output is shown as running
 
@@ -1145,3 +1220,81 @@ When a command-backed review or verification attempt cannot start its external p
 **When**: the developer runs `review-gauntlet review --concurrency 2`
 **Then**: adapter review work executes for no more than two selected cells at the same time
 **And**: the default concurrency of `3` is not applied to that invocation
+
+### Requirement: Run TUI overview SHALL show actionable coverage projections instead of the full matrix
+
+`review-gauntlet run` interactive TUI SHALL treat the full file × rule coverage matrix as internal session state and SHALL NOT render the complete matrix in the overview screen. The overview SHALL display actionable projections derived from current review cells and live findings: session status, coverage summary, finalize blockers, prioritized next review queue, rule coverage summary, file hotlist, open findings, and recent activity. The overview SHALL preserve the existing finalization, coverage, finding, and non-TUI output semantics.
+
+<!-- Expected canonical result after archive: the canonical review-sessions spec will require the run TUI overview to render queue/aggregate/hotlist projections rather than a wide file-by-rule matrix. -->
+
+#### Scenario: Overview prioritizes the next review queue
+
+**Given**: an active review session with pending cells, stale cells, and actionable findings
+**When**: `review-gauntlet run` renders the interactive overview screen
+**Then**: the overview displays a prioritized next review queue derived from concrete current review cells
+**And**: the queue includes file path, rule ID, review state, priority label, and a concise reason for each visible entry
+**And**: the overview does not render every file × rule cell as a complete matrix
+
+#### Scenario: Overview shows rule and file aggregates
+
+**Given**: an active review session with multiple files and rules
+**When**: `review-gauntlet run` renders the interactive overview screen at a width that can fit aggregate panels
+**Then**: the overview displays rule-level coverage summaries with reviewed, pending, stale, and open-finding counts
+**And**: the overview displays a file hotlist with coverage, pending, stale, and finding counts
+**And**: the aggregate lists are sorted deterministically so the riskiest or least-complete entries are visible first
+
+#### Scenario: Narrow overview remains actionable
+
+**Given**: an active review session in a narrow terminal
+**When**: `review-gauntlet run` renders the interactive overview screen
+**Then**: the overview prioritizes session status, coverage summary, finalize blockers, next review queue, and activity
+**And**: lower-priority aggregate panels are compacted, stacked, or omitted rather than forcing a wide matrix layout
+**And**: the controls explain how to navigate to focused detail views for files, rules, cells, findings, and agent state
+
+### Requirement: Run TUI SHALL provide focused drill-down coverage views
+
+`review-gauntlet run` interactive TUI SHALL provide focused views for file, rule, cell, finding, and agent detail navigation. Matrix-like coverage inspection SHALL be available through file-scoped, rule-scoped, or flat cell table views rather than through the overview screen. The existing stop, interrupt, refresh, and help controls SHALL remain available.
+
+<!-- Expected canonical result after archive: the canonical review-sessions spec will require focused coverage drill-down views while keeping the overview compact and actionable. -->
+
+#### Scenario: Files view shows selected file rule states
+
+**Given**: an active review session with review cells for multiple files
+**When**: the developer opens the files view and selects a file
+**Then**: the TUI shows that file's rule states and associated finding/evidence summary
+**And**: it does not require displaying unrelated files' rule states in the same table
+
+#### Scenario: Rules view shows selected rule file states
+
+**Given**: an active review session with review cells for multiple rules
+**When**: the developer opens the rules view and selects a rule
+**Then**: the TUI shows files relevant to that rule with their review states and finding counts
+**And**: it does not require displaying unrelated rules in the same detail table
+
+#### Scenario: Cells view exposes all cells as a filterable flat table
+
+**Given**: an active review session with many file × rule cells
+**When**: the developer opens the cells view
+**Then**: the TUI shows cells as a flat sortable or filterable table with state, priority, rule, file, and finding columns
+**And**: filters can narrow the table to stale cells, pending cells, blockers, a rule, a file prefix, or open findings
+
+### Requirement: Run TUI review queue priorities SHALL be deterministic and actionable
+
+`review-gauntlet run` interactive TUI SHALL assign deterministic priority labels to review-cell queue entries. The displayed label SHALL be one of P0, P1, P2, or P3, derived from an internal score or equivalent deterministic ordering. Raw scores SHALL NOT be required in the overview display. Actionable findings, stale cells, pending cells, high-risk rules, changed files, and finding counts SHALL influence ordering so the queue identifies finalization blockers and high-value review work first.
+
+<!-- Expected canonical result after archive: the canonical review-sessions spec will require deterministic actionable priority labels for the run TUI review queue. -->
+
+#### Scenario: Findings and stale cells sort ahead of normal pending cells
+
+**Given**: an active review session with a normal pending cell, a stale cell, and a cell with an actionable finding
+**When**: the run TUI builds the next review queue
+**Then**: the cell with an actionable finding is labeled P0 and appears before normal pending cells
+**And**: the stale cell appears before normal pending cells
+**And**: entries with equal priority are ordered deterministically by stable cell attributes
+
+#### Scenario: Queue labels hide raw scoring details
+
+**Given**: an active review session with prioritized review queue entries
+**When**: the run TUI renders the overview queue
+**Then**: the overview displays P0, P1, P2, or P3 labels
+**And**: it does not require exposing raw numeric priority scores to the developer

@@ -9,6 +9,12 @@ from typing import Any, cast
 import pytest
 
 from review_gauntlet import run_tui
+from review_gauntlet.coverage_projection import (
+    CoverageCellFilter,
+    CoverageCellInput,
+    CoverageFindingInput,
+    build_coverage_projection,
+)
 from review_gauntlet.review_cells import CellState, ReviewCell
 from review_gauntlet.run_controller import (
     AgentLifecycle,
@@ -1097,6 +1103,37 @@ def test_activity_panel_uses_command_failure_reason_and_keeps_stderr_evidence() 
     assert "timed out" not in text
 
 
+def test_activity_panel_keeps_quiet_timeout_reason_in_timed_out_family() -> None:
+    snapshot = RunSnapshot(
+        session_id="RGS-quiet-timeout",
+        coverage={"pending": 1},
+        findings={},
+        next_ready_prompt="review pending cells",
+        step=1,
+        agent_status="timed_out",
+        command_argv=("agent",),
+        elapsed_seconds=1,
+        command_label="agent",
+        agent_lifecycle=AgentLifecycle(
+            status="timed_out",
+            timeout_seconds=3600.0,
+            output_tail=(AgentOutputEntry("stdout", "last heartbeat"),),
+        ),
+    )
+    events = (RunEvent("failed", "2026-06-15T12:35:03+00:00", {"reason": "quiet_timeout"}),)
+
+    view = dashboard_state(snapshot, events)
+    agent = run_tui.agent_summary_text(view)
+    text = activity_text(view)
+
+    assert view.status_summary == "TIMED OUT"
+    assert "status  · timed out" in agent
+    assert "event - failed quiet_timeout" in text
+    assert "stdout - last heartbeat" in text
+    assert "command failed" not in agent
+    assert "max steps exhausted" not in agent
+
+
 def test_agent_summary_uses_configured_default_timeout_without_unset_or_duplicate_wording() -> None:
     snapshot = RunSnapshot(
         session_id="RGS-timeout-default",
@@ -1108,12 +1145,12 @@ def test_agent_summary_uses_configured_default_timeout_without_unset_or_duplicat
         command_argv=("agent",),
         elapsed_seconds=600,
         command_label="agent",
-        agent_lifecycle=AgentLifecycle(status="timed_out", timeout_seconds=600.0),
+        agent_lifecycle=AgentLifecycle(status="timed_out", timeout_seconds=3600.0),
     )
 
     text = run_tui.agent_summary_text(dashboard_state(snapshot, ()))
 
-    assert "timeout configured 10m00s" in text
+    assert "timeout configured 1h00m" in text
     assert "timeout not set" not in text
     assert "timeout timeout" not in text
 
@@ -1362,6 +1399,163 @@ def test_run_controller_repeated_snapshots_do_not_accumulate_sqlite_fds(tmp_path
     after = _open_fd_count()
     assert snapshot.next_ready_prompt == "ready prompt"
     assert after <= before + 8
+
+
+def test_coverage_projection_prioritizes_actionable_stale_and_pending_cells() -> None:
+    projection = build_coverage_projection(
+        (
+            CoverageCellInput("cell-reviewed", "src/a.py", "docs-accuracy", "s1", "reviewed"),
+            CoverageCellInput("cell-pending", "src/b.py", "data-validation", "s1", "pending"),
+            CoverageCellInput("cell-stale", "src/c.py", "secret-handling", "s1", "stale"),
+            CoverageCellInput("cell-finding", "src/d.py", "cli-contract", "s1", "reviewed"),
+            CoverageCellInput("cell-superseded", "src/z.py", "path-safety", "s1", "superseded"),
+        ),
+        (
+            CoverageFindingInput(
+                "RGF-1", "src/d.py", "cli-contract", "confirmed", "fix command output"
+            ),
+        ),
+    )
+
+    assert [entry.cell_id for entry in projection.queue] == [
+        "cell-finding",
+        "cell-stale",
+        "cell-pending",
+        "cell-reviewed",
+    ]
+    assert [entry.priority_label for entry in projection.queue] == ["P0", "P0", "P2", "P3"]
+    finding_cell = projection.queue[0]
+    assert finding_cell.actionable_finding_count == 1
+    assert "actionable finding" in finding_cell.why
+    stale_cell = projection.queue[1]
+    assert stale_cell.stale_reason == "content digest changed since review"
+    assert projection.rules[0].rule_id == "cli-contract"
+    assert projection.files[0].file_path == "src/d.py"
+    assert projection.findings[0].finding_id == "RGF-1"
+
+
+def test_coverage_projection_filters_preserve_queue_order() -> None:
+    projection = build_coverage_projection(
+        (
+            CoverageCellInput("cell-a", "src/api.py", "secret-handling", "s1", "stale"),
+            CoverageCellInput("cell-b", "src/api.py", "docs-accuracy", "s1", "pending"),
+            CoverageCellInput("cell-c", "tests/test_api.py", "test-evidence", "s1", "pending"),
+        ),
+        (CoverageFindingInput("RGF-1", "src/api.py", "secret-handling", "untriaged", "leak"),),
+    )
+
+    stale = run_tui.cells_text(
+        dashboard_state(_snapshot_with_projection(projection), ()), CoverageCellFilter(stale=True)
+    )
+    pending_src = run_tui.cells_text(
+        dashboard_state(_snapshot_with_projection(projection), ()),
+        CoverageCellFilter(pending=True, file_prefix="src/"),
+    )
+    blockers = run_tui.cells_text(
+        dashboard_state(_snapshot_with_projection(projection), ()),
+        CoverageCellFilter(blockers=True),
+    )
+    rule_prefix = run_tui.cells_text(
+        dashboard_state(_snapshot_with_projection(projection), ()),
+        CoverageCellFilter(rule_prefix="test"),
+    )
+
+    assert "secret-handling" in stale
+    assert "docs-accuracy" not in stale
+    assert "docs-accuracy" in pending_src
+    assert "tests/test_api.py" not in pending_src
+    assert "P0 stale" in blockers
+    assert "test-evidence" in rule_prefix
+
+
+def test_overview_renders_projections_without_full_matrix_grid() -> None:
+    projection = build_coverage_projection(
+        (
+            CoverageCellInput("cell-a", "src/a.py", "secret-handling", "s1", "pending"),
+            CoverageCellInput("cell-b", "src/a.py", "path-safety", "s1", "pending"),
+            CoverageCellInput("cell-c", "src/b.py", "docs-accuracy", "s1", "reviewed"),
+            CoverageCellInput("cell-d", "src/b.py", "test-evidence", "s1", "reviewed"),
+        ),
+        (),
+    )
+    view = dashboard_state(_snapshot_with_projection(projection), ())
+
+    overview = run_tui.overview_text(view, width=160)
+
+    assert "Next review queue" in overview
+    assert "Rule coverage" in overview
+    assert "File hotlist" in overview
+    assert "P1 pending  secret-handling" in overview
+    assert "P1 path-safety" in overview
+    assert "src/a.py | secret-handling | path-safety" not in overview
+    assert "src/b.py | docs-accuracy | test-evidence" not in overview
+
+
+def test_responsive_overview_sections_prioritize_narrow_operational_status() -> None:
+    assert run_tui.responsive_overview_sections(80) == (
+        "status",
+        "coverage",
+        "blockers",
+        "queue",
+        "activity",
+    )
+    assert "rules" not in run_tui.responsive_overview_sections(80)
+    assert "files" not in run_tui.responsive_overview_sections(80)
+    assert "rules" in run_tui.responsive_overview_sections(120)
+    assert "files" in run_tui.responsive_overview_sections(160)
+    assert "findings" in run_tui.responsive_overview_sections(160)
+
+
+def test_detail_views_and_bindings_cover_files_rules_cells_findings_and_agent() -> None:
+    projection = build_coverage_projection(
+        (CoverageCellInput("cell-a", "src/a.py", "secret-handling", "s1", "pending"),),
+        (CoverageFindingInput("RGF-1", "src/a.py", "secret-handling", "untriaged", "leak"),),
+    )
+
+    assert "src/a.py" in run_tui.active_detail_text(
+        dashboard_state(_snapshot_with_projection(projection), (), active_view="files")
+    )
+    assert "secret-handling" in run_tui.active_detail_text(
+        dashboard_state(_snapshot_with_projection(projection), (), active_view="rules")
+    )
+    assert "pending" in run_tui.active_detail_text(
+        dashboard_state(_snapshot_with_projection(projection), (), active_view="cells")
+    )
+    assert "RGF-1" in run_tui.active_detail_text(
+        dashboard_state(_snapshot_with_projection(projection), (), active_view="findings")
+    )
+    assert "command" in run_tui.active_detail_text(
+        dashboard_state(_snapshot_with_projection(projection), (), active_view="agent")
+    )
+
+    source = Path("src/review_gauntlet/run_tui.py").read_text(encoding="utf-8")
+    for binding in (
+        '("1", "show_overview", "Overview")',
+        '("2", "show_files", "Files")',
+        '("3", "show_rules", "Rules")',
+        '("4", "show_cells", "Cells")',
+        '("5", "show_findings", "Findings")',
+        '("q", "stop_after_current_step", "Stop after current step")',
+        '("ctrl+c", "interrupt", "Interrupt")',
+        '("r", "refresh", "Refresh")',
+        '("h", "help", "Help")',
+    ):
+        assert binding in source
+
+
+def _snapshot_with_projection(projection: run_tui.CoverageProjection) -> RunSnapshot:
+    return RunSnapshot(
+        session_id="RGS-projection",
+        coverage={"reviewed": 2, "pending": 2},
+        findings={"untriaged": 1},
+        next_ready_prompt="review pending cells",
+        step=1,
+        agent_status="running",
+        command_argv=("agent",),
+        elapsed_seconds=0,
+        command_label="agent",
+        coverage_projection=projection,
+    )
 
 
 def test_create_run_app_constructs_when_textual_available(tmp_path: Path) -> None:

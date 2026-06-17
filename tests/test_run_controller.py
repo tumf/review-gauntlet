@@ -648,7 +648,7 @@ def test_run_controller_synthesizes_quiet_liveness_and_timeout_remaining(
     from review_gauntlet.run_controller import AGENT_QUIET_THRESHOLD_SECONDS
 
     assert last_output_age is not None and last_output_age >= AGENT_QUIET_THRESHOLD_SECONDS
-    assert timeout_remaining is not None and 0 < timeout_remaining <= 594
+    assert timeout_remaining is not None and 0 < timeout_remaining <= 3594
 
 
 def test_command_display_label_omits_template_arguments() -> None:
@@ -702,7 +702,7 @@ def test_run_controller_preserves_effective_timeout_after_command_timeout(
     assert result["reason"] == "timeout"
     assert snapshot.agent_status == "timed_out"
     assert snapshot.agent_lifecycle.status == "timed_out"
-    assert snapshot.agent_lifecycle.timeout_seconds == 600.0
+    assert snapshot.agent_lifecycle.timeout_seconds == 3600.0
     assert snapshot.agent_lifecycle.timeout_remaining_seconds is None
     assert snapshot.can_finalize is True
 
@@ -711,6 +711,7 @@ def test_run_controller_preserves_effective_timeout_after_command_timeout(
     ("reason", "expected_status"),
     [
         ("timeout", "timed_out"),
+        ("quiet_timeout", "timed_out"),
         ("command_failed", "command_failed"),
         ("startup_error", "startup_error"),
         ("template_error", "template_error"),
@@ -753,7 +754,7 @@ def test_run_controller_preserves_specific_command_failure_statuses(
     assert result["step_count"] == 1
     assert snapshot.agent_status == expected_status
     assert snapshot.agent_lifecycle.status == expected_status
-    assert snapshot.agent_status != "timed_out" or reason == "timeout"
+    assert snapshot.agent_status != "timed_out" or reason in {"timeout", "quiet_timeout"}
 
 
 def test_run_controller_reports_interrupted_command_and_keeps_active_session(

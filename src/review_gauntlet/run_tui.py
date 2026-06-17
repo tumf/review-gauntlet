@@ -10,6 +10,15 @@ from datetime import datetime
 from typing import Any, Literal
 
 from review_gauntlet.__about__ import __version__
+from review_gauntlet.coverage_projection import (
+    CoverageCellFilter,
+    CoverageProjection,
+    FileCoverageSummary,
+    FindingSummaryEntry,
+    QueueEntry,
+    RuleCoverageSummary,
+    filter_queue_entries,
+)
 from review_gauntlet.run_controller import AgentOutputEntry, RunController, RunEvent, RunSnapshot
 
 TUI_FALLBACK_WARNING = "TUI support is not installed; falling back to text mode."
@@ -17,6 +26,10 @@ TUI_INSTALL_GUIDANCE = "Reinstall review-gauntlet to restore bundled TUI depende
 PANEL_TITLES = {
     "header": "Review Gauntlet",
     "finalize_path": "Finalize checklist",
+    "queue": "Next review queue",
+    "rules": "Rule coverage",
+    "files": "File hotlist",
+    "findings": "Findings",
     "agent": "Agent",
     "session": "Session",
     "activity": "Activity",
@@ -102,6 +115,12 @@ def create_run_app(controller: RunController) -> object:
             ("ctrl+c", "interrupt", "Interrupt"),
             ("r", "refresh", "Refresh"),
             ("h", "help", "Help"),
+            ("1", "show_overview", "Overview"),
+            ("2", "show_files", "Files"),
+            ("3", "show_rules", "Rules"),
+            ("4", "show_cells", "Cells"),
+            ("5", "show_findings", "Findings"),
+            ("a", "show_agent", "Agent"),
         ]
 
         def __init__(self, run_controller: RunController) -> None:
@@ -109,12 +128,16 @@ def create_run_app(controller: RunController) -> object:
             self.controller = run_controller
             self.snapshot = run_controller.snapshot()
             self._activity_frame = 0
+            self._active_view = "overview"
             self._tui_render_state = empty_tui_render_state()
             self._completed_result: dict[str, object] | None = None
 
         def compose(self) -> ComposeResult:
             view = dashboard_state(
-                self.snapshot, self.controller.events, activity_frame=self._activity_frame
+                self.snapshot,
+                self.controller.events,
+                activity_frame=self._activity_frame,
+                active_view=self._active_view,
             )
             with Vertical(id="body"):
                 session_header = Vertical(id="session_header", classes=view.state_class)
@@ -127,6 +150,18 @@ def create_run_app(controller: RunController) -> object:
                     Static(finalize_path_text(view), id="finalize_path"),
                     id="finalize_path_panel",
                     classes=f"panel {view.state_class}",
+                )
+                yield titled_panel(
+                    PANEL_TITLES["queue"],
+                    Static(queue_text(view), id="queue_panel"),
+                    id="queue_panel_container",
+                    classes=f"panel {view.state_class}",
+                )
+                yield titled_panel(
+                    detail_panel_title(view),
+                    Static(active_detail_text(view), id="detail_panel"),
+                    id="detail_panel_container",
+                    classes="panel",
                 )
                 with Horizontal(id="summary"):
                     yield titled_panel(
@@ -177,12 +212,37 @@ def create_run_app(controller: RunController) -> object:
         def action_help(self) -> None:
             self.notify(footer_text())
 
+        def action_show_overview(self) -> None:
+            self._show_view("overview")
+
+        def action_show_files(self) -> None:
+            self._show_view("files")
+
+        def action_show_rules(self) -> None:
+            self._show_view("rules")
+
+        def action_show_cells(self) -> None:
+            self._show_view("cells")
+
+        def action_show_findings(self) -> None:
+            self._show_view("findings")
+
+        def action_show_agent(self) -> None:
+            self._show_view("agent")
+
+        def _show_view(self, view_name: str) -> None:
+            self._active_view = view_name
+            self.refresh_view()
+
         def refresh_view(self) -> None:
             self.snapshot = self.controller.snapshot()
             if self.snapshot.agent_status == "running":
                 self._activity_frame += 1
             view = dashboard_state(
-                self.snapshot, self.controller.events, activity_frame=self._activity_frame
+                self.snapshot,
+                self.controller.events,
+                activity_frame=self._activity_frame,
+                active_view=self._active_view,
             )
             sections = tui_render_sections(view)
             self._tui_render_state = update_tui_render_state(
@@ -195,6 +255,10 @@ def create_run_app(controller: RunController) -> object:
                 header_meta = self.query_one("#header_meta", Static)
                 finalize_path_panel = self.query_one("#finalize_path_panel", Vertical)
                 finalize_path = self.query_one("#finalize_path", Static)
+                queue_panel_container = self.query_one("#queue_panel_container", Vertical)
+                queue_panel = self.query_one("#queue_panel", Static)
+                detail_panel_container = self.query_one("#detail_panel_container", Vertical)
+                detail_panel = self.query_one("#detail_panel", Static)
                 agent_panel_container = self.query_one("#agent_panel_container", Vertical)
                 session_panel_container = self.query_one("#session_panel_container", Vertical)
                 agent_panel = self.query_one("#agent_panel", Static)
@@ -215,10 +279,15 @@ def create_run_app(controller: RunController) -> object:
                 enabled = state_class == "panel" or state_class == view.state_class
                 session_header.set_class(state_class == view.state_class, state_class)
                 finalize_path_panel.set_class(enabled, state_class)
+                queue_panel_container.set_class(enabled, state_class)
+                detail_panel_container.set_class(enabled, state_class)
                 agent_panel_container.set_class(enabled, state_class)
                 session_panel_container.set_class(enabled, state_class)
                 activity_panel.set_class(enabled, state_class)
             finalize_path.update(render_tui_lines(sections["finalize_path"], flashes, mode="rich"))
+            queue_panel.update(render_tui_lines(sections["queue"], flashes, mode="rich"))
+            detail_panel_container.border_title = detail_panel_title(view)
+            detail_panel.update(active_detail_text(view))
             agent_panel.update(render_tui_lines(sections["agent"], flashes, mode="rich"))
             session_panel.update(render_tui_lines(sections["session"], flashes, mode="rich"))
             activity_timeline.update(render_tui_lines(sections["activity"], flashes, mode="rich"))
@@ -383,6 +452,8 @@ class RunViewState:
     agent_summary: AgentSummary
     session_summary: SessionSummary
     timeline_events: tuple[TimelineEvent, ...]
+    coverage_projection: CoverageProjection
+    active_view: str
     activity: str
     liveness_detail: str
     artifact_path: str | None
@@ -494,7 +565,11 @@ def format_command_label(snapshot: RunSnapshot) -> str | None:
 
 
 def dashboard_state(
-    snapshot: RunSnapshot, events: tuple[RunEvent, ...], *, activity_frame: int = 0
+    snapshot: RunSnapshot,
+    events: tuple[RunEvent, ...],
+    *,
+    activity_frame: int = 0,
+    active_view: str = "overview",
 ) -> RunViewState:
     status_summary, state_class = terminal_state(snapshot.agent_status)
     command_label = format_command_label(snapshot)
@@ -526,6 +601,8 @@ def dashboard_state(
         agent_summary=build_agent_summary(snapshot, command_label, liveness_detail, artifact_path),
         session_summary=build_session_summary(snapshot, coverage, active_gate, findings_summary),
         timeline_events=timeline_events + output_events,
+        coverage_projection=snapshot.coverage_projection,
+        active_view=active_view,
         activity=agent_activity_text(
             _display_agent_status(snapshot), activity_frame=activity_frame
         ),
@@ -834,6 +911,7 @@ def tui_render_sections(view: RunViewState) -> dict[str, tuple[TuiLine, ...]]:
         "header_status": header_status_tui_lines(view),
         "header_meta": header_meta_tui_lines(view),
         "finalize_path": finalize_path_tui_lines(view),
+        "queue": queue_tui_lines(view),
         "agent": agent_summary_tui_lines(view),
         "session": session_summary_tui_lines(view),
         "activity": activity_tui_lines(view),
@@ -908,6 +986,31 @@ def finalize_path_tui_lines(view: RunViewState) -> tuple[TuiLine, ...]:
                     _field(f"finalize.{prefix}.state", f"{gate.state:<7}", compare=gate.state),
                     _literal(" ", key=f"finalize.{prefix}.state_space"),
                     _field(f"finalize.{prefix}.detail", gate.detail),
+                )
+            )
+        )
+    return tuple(lines)
+
+
+def queue_tui_lines(view: RunViewState, *, limit: int = 6) -> tuple[TuiLine, ...]:
+    entries = actionable_queue_entries(view, limit=limit)
+    if not entries:
+        return (TuiLine((_field("queue.empty", "no actionable cells"),)),)
+    lines: list[TuiLine] = []
+    for index, entry in enumerate(entries, start=1):
+        prefix = f"queue.{entry.cell_id}"
+        lines.append(
+            TuiLine(
+                (
+                    _field(f"{prefix}.rank", f"{index:>2}. ", compare=index),
+                    _field(f"{prefix}.priority", f"{entry.priority_label} "),
+                    _field(f"{prefix}.state", f"{entry.state:<8}", compare=entry.state),
+                    _literal(" ", key=f"{prefix}.state_space"),
+                    _field(f"{prefix}.rule", f"{entry.rule_id:<18}", compare=entry.rule_id),
+                    _literal(" ", key=f"{prefix}.rule_space"),
+                    _field(f"{prefix}.file", _summarize_text(entry.file_path, limit=44)),
+                    _literal(" · ", key=f"{prefix}.why_sep"),
+                    _field(f"{prefix}.why", entry.why, compare=entry.why),
                 )
             )
         )
@@ -1105,6 +1208,8 @@ def compact_dashboard_text(snapshot: RunSnapshot, events: tuple[RunEvent, ...] =
         [
             header_text(view),
             titled_section(PANEL_TITLES["finalize_path"], finalize_path_text(view)),
+            titled_section(PANEL_TITLES["queue"], queue_text(view)),
+            active_detail_text(view),
             titled_section(PANEL_TITLES["agent"], agent_summary_text(view)),
             titled_section(PANEL_TITLES["session"], session_summary_text(view)),
             titled_section(PANEL_TITLES["activity"], activity_text(view)),
@@ -1132,6 +1237,150 @@ def coverage_text(snapshot: RunSnapshot) -> str:
                 f"stale {metrics.stale} | superseded {metrics.superseded}"
             ),
         ]
+    )
+
+
+def actionable_queue_entries(
+    view: RunViewState, *, limit: int | None = None
+) -> tuple[QueueEntry, ...]:
+    entries = tuple(
+        entry for entry in view.coverage_projection.queue if _entry_is_actionable(entry)
+    )
+    if not entries:
+        entries = view.coverage_projection.queue
+    return entries[:limit] if limit is not None else entries
+
+
+def queue_text(view: RunViewState, *, limit: int = 6) -> str:
+    return render_tui_lines(queue_tui_lines(view, limit=limit))
+
+
+def rule_coverage_text(view: RunViewState, *, limit: int = 8) -> str:
+    if not view.coverage_projection.rules:
+        return "no rule coverage details"
+    return "\n".join(_format_rule_summary(rule) for rule in view.coverage_projection.rules[:limit])
+
+
+def file_hotlist_text(view: RunViewState, *, limit: int = 8) -> str:
+    if not view.coverage_projection.files:
+        return "no file hot spots"
+    return "\n".join(_format_file_summary(file) for file in view.coverage_projection.files[:limit])
+
+
+def finding_projection_text(view: RunViewState, *, limit: int = 8) -> str:
+    findings = tuple(finding for finding in view.coverage_projection.findings if finding.actionable)
+    if not findings:
+        return "no open actionable findings"
+    return "\n".join(_format_finding_summary(finding) for finding in findings[:limit])
+
+
+def cells_text(
+    view: RunViewState,
+    filters: CoverageCellFilter | None = None,
+    *,
+    limit: int = 12,
+) -> str:
+    entries = filter_queue_entries(view.coverage_projection.queue, filters or CoverageCellFilter())
+    if not entries:
+        return "no cells match filters"
+    return "\n".join(_format_cell_entry(entry) for entry in entries[:limit])
+
+
+def overview_text(view: RunViewState, *, width: int = 120) -> str:
+    section_names = responsive_overview_sections(width)
+    rendered: list[str] = []
+    for name in section_names:
+        if name == "status":
+            rendered.append(header_text(view))
+        elif name == "coverage":
+            rendered.append(titled_section(PANEL_TITLES["session"], session_summary_text(view)))
+        elif name == "blockers":
+            rendered.append(titled_section(PANEL_TITLES["finalize_path"], finalize_path_text(view)))
+        elif name == "queue":
+            rendered.append(titled_section(PANEL_TITLES["queue"], queue_text(view)))
+        elif name == "rules":
+            rendered.append(titled_section(PANEL_TITLES["rules"], rule_coverage_text(view)))
+        elif name == "files":
+            rendered.append(titled_section(PANEL_TITLES["files"], file_hotlist_text(view)))
+        elif name == "findings":
+            rendered.append(titled_section(PANEL_TITLES["findings"], finding_projection_text(view)))
+        elif name == "activity":
+            rendered.append(titled_section(PANEL_TITLES["activity"], activity_text(view)))
+    return "\n".join(rendered)
+
+
+def responsive_overview_sections(width: int) -> tuple[str, ...]:
+    if width >= 140:
+        return ("status", "coverage", "blockers", "queue", "rules", "files", "findings", "activity")
+    if width >= 100:
+        return ("status", "coverage", "blockers", "queue", "rules", "files", "activity")
+    return ("status", "coverage", "blockers", "queue", "activity")
+
+
+def detail_panel_title(view: RunViewState) -> str:
+    return {
+        "overview": "Overview projections",
+        "files": PANEL_TITLES["files"],
+        "rules": PANEL_TITLES["rules"],
+        "cells": "Cells",
+        "findings": PANEL_TITLES["findings"],
+        "agent": PANEL_TITLES["agent"],
+    }.get(view.active_view, "Overview projections")
+
+
+def active_detail_text(view: RunViewState) -> str:
+    if view.active_view == "files":
+        return file_hotlist_text(view, limit=12)
+    if view.active_view == "rules":
+        return rule_coverage_text(view, limit=12)
+    if view.active_view == "cells":
+        return cells_text(view, limit=16)
+    if view.active_view == "findings":
+        return finding_projection_text(view, limit=12)
+    if view.active_view == "agent":
+        return agent_summary_text(view)
+    return "\n\n".join(
+        [
+            titled_section(PANEL_TITLES["rules"], rule_coverage_text(view, limit=4)),
+            titled_section(PANEL_TITLES["files"], file_hotlist_text(view, limit=4)),
+            titled_section(PANEL_TITLES["findings"], finding_projection_text(view, limit=4)),
+        ]
+    )
+
+
+def _entry_is_actionable(entry: QueueEntry) -> bool:
+    return entry.state in INCOMPLETE_COVERAGE_STATES or entry.actionable_finding_count > 0
+
+
+def _format_cell_entry(entry: QueueEntry) -> str:
+    finding = f" findings {entry.actionable_finding_count}/{entry.finding_count}"
+    return (
+        f"{entry.priority_label:<2} {entry.state:<8} {entry.rule_id:<18} "
+        f"{_summarize_text(entry.file_path, limit=48)}{finding} · {entry.why}"
+    )
+
+
+def _format_rule_summary(rule: RuleCoverageSummary) -> str:
+    return (
+        f"{rule.priority_label} {rule.rule_id:<18} {rule.reviewed}/{rule.total} reviewed · "
+        f"pending {rule.pending} stale {rule.stale} findings {rule.actionable_findings}"
+    )
+
+
+def _format_file_summary(file: FileCoverageSummary) -> str:
+    return (
+        f"{file.highest_priority_label} {_summarize_text(file.file_path, limit=48):<48} "
+        f"{file.reviewed}/{file.total} reviewed · pending {file.pending} "
+        f"stale {file.stale} findings {file.actionable_findings}"
+    )
+
+
+def _format_finding_summary(finding: FindingSummaryEntry) -> str:
+    cell = finding.latest_cell_id or "cell unknown"
+    return (
+        f"{finding.finding_id:<12} {finding.state:<28} {finding.rule_id:<18} "
+        f"{_summarize_text(finding.file_path, limit=36)} · {cell} · "
+        f"{_summarize_text(finding.content, limit=72)}"
     )
 
 
@@ -1229,7 +1478,10 @@ def _events_text(events: tuple[RunEvent, ...]) -> str:  # pyright: ignore[report
 
 
 def footer_text() -> str:
-    return "q stop after current step | r refresh | h help | Ctrl-C interrupt"
+    return (
+        "1 overview | 2 files | 3 rules | 4 cells | 5 findings | a agent | "
+        "q stop after current step | r refresh | h help | Ctrl-C interrupt"
+    )
 
 
 def _event_label(event: RunEvent) -> str:

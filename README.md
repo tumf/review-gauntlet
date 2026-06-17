@@ -445,11 +445,16 @@ Minimal JSONC configuration for opencode file-json verdicts:
 
 The generated OCR prompt is expanded into `{prompt}` as one argv element. Prompt
 artifacts are still written for audit evidence, but prompt-file transport is not
-part of the command adapter contract. `cwd`, `env`, and `timeout_seconds` are
-optional escape hatches: omitted `cwd` inherits the caller's current working
-directory, omitted `env` inherits the parent environment without fixed automatic
-variables, explicit `env` values override that inherited environment, and omitted
-`timeout_seconds` defaults to 600 seconds.
+part of the command adapter contract. `cwd`, `env`, `timeout_seconds`, and
+`quiet_timeout_seconds` are optional escape hatches: omitted `cwd` inherits the
+caller's current working directory, omitted `env` inherits the parent environment
+without fixed automatic variables, and explicit `env` values override that
+inherited environment. Omitted `timeout_seconds` defaults to 3600 seconds / 60
+minutes of total adapter wall-clock runtime. Omitted `quiet_timeout_seconds`
+defaults to 600 seconds / 10 minutes without stdout or stderr output; either
+stdout or stderr output resets the quiet timeout. The TUI may show an agent as
+quiet before that threshold, but quiet display is a running/alive state rather
+than a failure.
 
 Use `adapter.env` when the configured agent command needs environment variables
 that should travel with the Review Gauntlet config, such as model selection,

@@ -351,7 +351,7 @@ opencode file-json verdicts 向けの最小 JSONC 設定:
 }
 ```
 
-生成された OCR プロンプトは `{prompt}` として 1 つの argv 要素に展開されます。プロンプト artifact は監査証拠として引き続き書き込まれますが、prompt-file transport はコマンドアダプター契約の一部ではありません。`cwd`、`env`、`timeout_seconds` は任意の escape hatch です。`cwd` を省略すると呼び出し元の現在の作業ディレクトリを継承し、`env` を省略すると固定の自動変数なしで親環境を継承し、明示的な `env` 値は継承環境を上書きします。`timeout_seconds` を省略すると既定で 600 秒です。
+生成された OCR プロンプトは `{prompt}` として 1 つの argv 要素に展開されます。プロンプト artifact は監査証拠として引き続き書き込まれますが、prompt-file transport はコマンドアダプター契約の一部ではありません。`cwd`、`env`、`timeout_seconds`、`quiet_timeout_seconds` は任意の escape hatch です。`cwd` を省略すると呼び出し元の現在の作業ディレクトリを継承し、`env` を省略すると固定の自動変数なしで親環境を継承し、明示的な `env` 値は継承環境を上書きします。`timeout_seconds` を省略すると総実行時間の既定は 3600 秒 / 60 分です。`quiet_timeout_seconds` を省略すると stdout/stderr が出力されない時間の既定は 600 秒 / 10 分です。stdout と stderr のどちらの出力でも quiet timeout はリセットされます。TUI がしきい値前にエージェントを quiet と表示することはありますが、quiet 表示は失敗ではなく実行中/alive の状態です。
 
 設定済みエージェントコマンドに環境変数を渡したい場合は `adapter.env` を使います。モデル選択、feature flag、wrapper 固有のパスなど、Review Gauntlet 設定と一緒に管理したい値に利用できます。
 
