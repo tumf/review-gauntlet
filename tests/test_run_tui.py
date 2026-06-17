@@ -1258,8 +1258,8 @@ def test_summary_panel_containers_have_scoped_equal_height_layout_rule() -> None
     summary_rule = source.split("#rules_panel_container, #files_panel_container", maxsplit=1)[1]
     summary_rule = summary_rule.split("#bottom_row", maxsplit=1)[0]
     assert "width: 1fr;" in summary_rule
-    assert "height: 1fr;" in summary_rule
-    assert "#rules_panel, #files_panel" in summary_rule
+    assert "width: 1fr;" in summary_rule
+    assert "height: 1fr;" not in summary_rule
 
     panel_rule = source.split(".panel {", maxsplit=1)[1].split("}", maxsplit=1)[0]
     assert "height: auto;" in panel_rule
