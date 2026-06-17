@@ -192,7 +192,7 @@ def create_run_app(controller: RunController) -> object:
             if self._completed_result is not None:
                 return
             self.snapshot = self.controller.snapshot()
-            if self.snapshot.agent_status == "running":
+            if self.snapshot.agent_status in {"running", "starting"}:
                 self._activity_frame += 1
             self._render_from_snapshot()
 
@@ -249,7 +249,7 @@ def create_run_app(controller: RunController) -> object:
 
         def refresh_view(self) -> None:
             self.snapshot = self.controller.snapshot()
-            if self.snapshot.agent_status == "running":
+            if self.snapshot.agent_status in {"running", "starting"}:
                 self._activity_frame += 1
             self._render_from_snapshot()
 
@@ -295,10 +295,11 @@ def create_run_app(controller: RunController) -> object:
                 "panel-failed",
                 "panel-finalized",
             ):
-                enabled = state_class == "panel" or state_class == view.state_class
-                session_header.set_class(state_class == view.state_class, state_class)
-                queue_panel_container.set_class(enabled, state_class)
-                activity_panel_container.set_class(enabled, state_class)
+                state_active = state_class == view.state_class
+                panel_or_state_active = state_class == "panel" or state_active
+                session_header.set_class(state_active, state_class)
+                queue_panel_container.set_class(panel_or_state_active, state_class)
+                activity_panel_container.set_class(panel_or_state_active, state_class)
             queue_panel_container.display = bool(sections["queue"])
             queue_panel.update(render_tui_lines(sections["queue"], flashes, mode="rich"))
             rules_panel_container.border_title = _rules_panel_title(view.active_view)
@@ -587,7 +588,7 @@ def format_elapsed_time(seconds: float) -> str:
 def short_session_id(session_id: str | None) -> str:
     if not session_id:
         return "none"
-    safe = _plain_text(session_id).replace("\n", " ")
+    safe = _plain_text(session_id)
     if len(safe) <= 12:
         return safe
     return f"{safe[:8]}…{safe[-4:]}"
@@ -878,15 +879,17 @@ def derive_finalize_gates(snapshot: RunSnapshot) -> tuple[FinalizeGate, ...]:
     ]
     if finalized:
         return tuple(FinalizeGate(gate.index, gate.title, "done", "complete") for gate in gates)
-    if failed and not _is_finalize_ready_timeout(snapshot):
-        for gate in gates:
-            if gate.state in {"running", "blocked", "next", "later"}:
-                return tuple(
-                    FinalizeGate(item.index, item.title, "failed", item.detail)
-                    if item.index == gate.index
-                    else item
-                    for item in gates
-                )
+    if (
+        failed
+        and not _is_finalize_ready_timeout(snapshot)
+        and any(gate.state in {"running", "blocked", "next", "later"} for gate in gates)
+    ):
+        return tuple(
+            FinalizeGate(item.index, item.title, "failed", item.detail)
+            if item.state in {"running", "blocked", "next", "later"}
+            else item
+            for item in gates
+        )
     return tuple(gates)
 
 
@@ -1027,6 +1030,9 @@ def tui_render_sections(view: RunViewState) -> dict[str, tuple[TuiLine, ...]]:
         "header_agent": header_agent_tui_lines(view),
         "queue": queue_tui_lines(view),
         "activity": activity_tui_lines(view),
+        "rules": rules_tui_lines(view),
+        "files": files_tui_lines(view),
+        "findings": findings_tui_lines(view),
     }
 
 

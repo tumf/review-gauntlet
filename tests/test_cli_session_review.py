@@ -420,8 +420,8 @@ def test_ready_prioritizes_confirmed_findings_before_stale_review(
     prompt = data["prompt"]
     assert "file_path: README.md" in prompt
     assert "confirmed findings need fixing or re-triage" in prompt
-    assert "triage" in prompt
-    assert "fix if needed" in prompt
+    assert "inspect" in prompt
+    assert "fix" in prompt
     assert "mark" in prompt
     assert finding_id in prompt
     assert "stale review cells need refreshed coverage" not in prompt
@@ -445,8 +445,7 @@ def test_ready_prioritizes_fixed_pending_verification_before_stale_review(
     prompt = data["prompt"]
     assert "file_path: README.md" in prompt
     assert "fixed-pending findings need verification" in prompt
-    assert "triage" in prompt
-    assert "fix if needed" in prompt
+    assert "verify" in prompt
     assert "mark" in prompt
     assert finding_id in prompt
     assert "stale review cells need refreshed coverage" not in prompt
@@ -486,8 +485,7 @@ def test_ready_emits_one_file_scoped_pending_task_with_workflow_and_cell_ids(
     assert "app.py" not in prompt
     assert "Scope: work only on this file_path" in prompt
     assert "Other files are out of scope" in prompt
-    assert "triage" in prompt
-    assert "fix if needed" in prompt
+    assert "review" in prompt
     assert "mark" in prompt
     assert "pending review cells need coverage" in prompt
     for cell_id in _cell_ids_for_path(tmp_path, "README.md"):

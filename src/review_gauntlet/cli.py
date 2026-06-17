@@ -1340,6 +1340,17 @@ _READY_REASON_LABELS = {
     FindingState.FIXED_PENDING_VERIFICATION.value: "fixed-pending findings need verification",
 }
 
+_TRIAGE_ONLY_REASONS = frozenset({FindingState.UNTRIAGED.value, FindingState.REOPENED.value})
+
+_REVIEW_REASONS = frozenset({"pending_review_cell", "stale_review_cell"})
+
+_FINDING_ACTION_REASONS = frozenset(
+    {
+        FindingState.CONFIRMED.value,
+        FindingState.FIXED_PENDING_VERIFICATION.value,
+    }
+)
+
 
 @dataclass(frozen=True)
 class _ReadyReviewCell:
@@ -1546,6 +1557,7 @@ def _build_file_scoped_ready_prompt(
     findings: tuple[_ReadyFinding, ...],
     continuation_path: Path | None = None,
 ) -> str:
+    workflow_lines, completion_text, cells_header = _ready_prompt_segments(reason)
     lines = [
         READY_PROMPT_PREFIX,
         "",
@@ -1556,16 +1568,13 @@ def _build_file_scoped_ready_prompt(
         "You may inspect related files for context, but do not triage, fix, or mark other files.",
         "",
         "## Required workflow for this file",
-        "1. triage: inspect the review cells and findings listed below for this file.",
-        "2. fix if needed: make only the changes needed for confirmed issues in this file.",
-        "3. mark: record the result with review-gauntlet commands for the listed IDs.",
+        *workflow_lines,
         "",
         "## Completion condition",
-        "Stop when this target file has no pending/stale cells and no actionable "
-        "findings listed below.",
+        completion_text,
         "Do not continue into another file in this invocation.",
         "",
-        "## Review cells for this file",
+        cells_header,
         *_ready_review_cell_lines(review_cells),
         "",
         "## Findings for this file",
@@ -1574,6 +1583,67 @@ def _build_file_scoped_ready_prompt(
     if continuation_path is not None:
         lines.extend(_continuation_prompt_sections(continuation_path))
     return "\n".join(lines)
+
+
+def _ready_prompt_segments(reason: str) -> tuple[list[str], str, str]:
+    if reason in _REVIEW_REASONS:
+        return (
+            [
+                "1. review: inspect the review cells listed below for this file.",
+                "   Read this file and discover any issues matching the listed rules.",
+                "   Record confirmed issues as findings using review-gauntlet mark commands.",
+                "2. mark: record your review results with review-gauntlet mark commands.",
+            ],
+            "Stop when this target file has no pending/stale cells listed below.",
+            "## Review cells for this file",
+        )
+    if reason in _TRIAGE_ONLY_REASONS:
+        context_note = " (context only, do NOT review for new findings)"
+        return (
+            [
+                "1. triage: inspect ONLY the EXISTING findings in 'Findings for this file' below.",
+                "   Read the target file to understand context, but do NOT search for new issues.",
+                "   Categorize each finding as confirmed, false-positive, waived, or",
+                "   accepted-risk. Do NOT discover new findings.",
+                "2. mark: record triage decisions with review-gauntlet mark commands.",
+            ],
+            "Stop when all findings listed below have been triaged.",
+            f"## Review cells for this file{context_note}",
+        )
+    if reason == FindingState.CONFIRMED.value:
+        return (
+            [
+                "1. inspect: examine the confirmed findings listed below.",
+                "   Read the target file to understand context.",
+                "   Fix the issues identified by each confirmed finding.",
+                "   Do NOT discover new findings.",
+                "2. fix: make the changes needed to address each confirmed finding.",
+                "3. mark: record your fix decisions with review-gauntlet mark commands.",
+            ],
+            "Stop when all findings listed below have been fixed or re-triaged.",
+            "## Review cells for this file (context only, do NOT review for new findings)",
+        )
+    if reason == FindingState.FIXED_PENDING_VERIFICATION.value:
+        return (
+            [
+                "1. verify: verify that the fixes for findings listed below are correct.",
+                "   Run review-gauntlet verify-fixes or re-inspect the relevant code.",
+                "   Do NOT discover new findings.",
+                "2. mark: mark verified findings with review-gauntlet mark commands.",
+            ],
+            "Stop when all findings listed below have been verified.",
+            "## Review cells for this file (context only, do NOT review for new findings)",
+        )
+    return (
+        [
+            "1. inspect: examine the findings listed in 'Findings for this file' below.",
+            "   Take the appropriate action based on the finding state.",
+            "   Do NOT discover new findings.",
+            "2. mark: record your decisions with review-gauntlet mark commands.",
+        ],
+        "Stop when all findings listed below have been resolved.",
+        "## Review cells for this file (context only, do NOT review for new findings)",
+    )
 
 
 def _continuation_prompt_sections(continuation_path: Path) -> list[str]:
