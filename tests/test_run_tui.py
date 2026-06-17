@@ -53,7 +53,7 @@ def _flash_keys(state: run_tui.TuiRenderState) -> set[str]:
 def _styled_fragments(rendered: object) -> tuple[str, ...]:
     text = cast(Any, rendered)
     plain = cast(str, text.plain)
-    spans = cast(Any, text.spans)
+    spans = text.spans
     return tuple(plain[span.start : span.end] for span in spans)
 
 

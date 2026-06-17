@@ -7,7 +7,7 @@ import re
 import time
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from review_gauntlet.__about__ import __version__
 from review_gauntlet.run_controller import AgentOutputEntry, RunController, RunEvent, RunSnapshot
@@ -844,7 +844,7 @@ def render_tui_lines(
     flashes: dict[str, TuiFlash] | None = None,
     *,
     mode: _FIELD_RENDER_MODE = "plain",
-) -> object:
+) -> Any:
     flash_keys = frozenset(flashes or {})
     if mode == "rich":
         from rich.text import Text
