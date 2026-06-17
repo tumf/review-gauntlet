@@ -769,6 +769,72 @@ Session metadata and agent execution SHALL NOT interpret any `git_worktree` meta
 **And**: no attempt is made to resolve or validate a linked worktree path
 **And**: no `worktree_error` reason is emitted
 
+### Requirement: Run TUI SHALL align Agent and Session summary panel heights
+
+`review-gauntlet run` TUI SHALL render the side-by-side Agent and Session summary panel boxes at equal height within the summary row, even when one panel has more rows of content than the other. The equal-height behavior SHALL be scoped to the Agent/Session summary pair and SHALL NOT force unrelated dashboard panels to adopt the same sizing rule.
+
+#### Scenario: Summary panels remain equal height when Agent has artifact row
+
+**Given**: the run TUI renders the Agent and Session summary panels side by side
+**And**: the Agent summary includes an optional artifact row
+**When**: the summary row is laid out
+**Then**: the Agent panel box height equals the Session panel box height
+**And**: both panels continue to share equal horizontal width
+
+#### Scenario: Equal-height rule is scoped to summary pair
+
+**Given**: the run TUI renders the header, finalize checklist, Agent panel, Session panel, Activity panel, and footer
+**When**: the dashboard CSS/layout is applied
+**Then**: equal-height stretching applies to the Agent and Session panel containers
+**And**: the common panel style does not force the finalize checklist or Activity panel to use the summary-pair sizing behavior
+
+### Requirement: Run TUI SHALL display title and version in the header border
+
+`review-gauntlet run` SHALL render the interactive TUI top header title as the `#session_header` border title. The border title SHALL include the Review Gauntlet brand marker, product name, and current package version sourced from the package version metadata. The TUI header body SHALL remain focused on run status and metadata, while non-TUI compact/text rendering SHALL remain self-describing with title, status, and metadata text.
+
+<!-- Expected canonical result after archive: the canonical review-sessions spec will require the run TUI top header to use a versioned border title instead of rendering the product title as ordinary header body content. -->
+
+#### Scenario: TUI header uses versioned border title
+
+**Given**: `review-gauntlet run` selects the interactive TUI path
+**When**: the TUI application is constructed
+**Then**: the top `#session_header` panel has a border title containing the brand marker, `Review Gauntlet`, and the current package version
+**And**: the header body does not render the title as a separate first-line body widget
+**And**: the header body still renders run status and metadata
+
+#### Scenario: Version comes from package metadata
+
+**Given**: the package exposes `review_gauntlet.__about__.__version__`
+**When**: the run TUI header title is rendered
+**Then**: the version shown in the header title matches the package version metadata
+**And**: changing the package version source changes the displayed TUI title version without editing a duplicate literal in the TUI title implementation
+
+#### Scenario: Compact text output remains self-describing
+
+**Given**: run dashboard text is rendered outside the interactive TUI border-title context
+**When**: compact or fallback dashboard text is generated
+**Then**: the text output includes the title, status, and metadata lines
+**And**: the output remains readable without relying on a graphical border title
+
+### Requirement: Run TUI SHALL use an explicit dark background
+
+`review-gauntlet run` SHALL render the interactive TUI with an explicitly dark dashboard background rather than relying on Textual default backgrounds. The dark styling SHALL cover the screen and the primary dashboard surfaces while preserving existing brand accents, semantic status colors, panel titles, layout, and run behavior.
+
+#### Scenario: Run TUI renders dark dashboard surfaces
+
+**Given**: `review-gauntlet run` selects the interactive TUI path
+**When**: the TUI application is constructed
+**Then**: the Textual CSS defines an explicit dark background for the screen
+**And**: the header, panel, body, and controls surfaces use dark-compatible background styling
+**And**: the existing brand accent and semantic status colors remain available
+
+#### Scenario: Dark styling does not change non-TUI behavior
+
+**Given**: `review-gauntlet run` is executed with JSON output or with TUI disabled
+**When**: the run result is rendered
+**Then**: output selection and non-TUI rendering behavior remain unchanged
+**And**: run controller state, session state, findings state, and finalization behavior are not modified by the dark TUI styling
+
 ### Requirement: Run TUI SHALL display actionable finding counts
 
 `review-gauntlet run` TUI SHALL derive visible open finding counts from actionable live finding states instead of requiring an `open` aggregate key in status output. The displayed open count SHALL equal the sum of `reopened`, `untriaged`, `confirmed`, and `fixed_pending_verification`. When the derived open count is non-zero, the Session panel SHALL include a concise action breakdown for triage, fix, and verify work.

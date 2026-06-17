@@ -7,6 +7,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime
 
+from review_gauntlet.__about__ import __version__
 from review_gauntlet.run_controller import AgentOutputEntry, RunController, RunEvent, RunSnapshot
 
 TUI_FALLBACK_WARNING = "TUI support is not installed; falling back to text mode."
@@ -50,10 +51,19 @@ def create_run_app(controller: RunController) -> object:
     class RunApp(App[dict[str, object]]):
         CSS = """
         $brand: #d97757;
-        Screen { layout: vertical; }
-        #body { height: 1fr; padding: 1; }
-        #session_header { border: round $primary; padding: 1; height: auto; }
-        #header_title { color: $brand; text-style: bold; }
+        $dashboard-bg: #0f1117;
+        $dashboard-surface: #151923;
+        $dashboard-surface-muted: #11151d;
+        Screen { layout: vertical; background: $dashboard-bg; }
+        #body { height: 1fr; padding: 1; background: $dashboard-bg; }
+        #session_header {
+            border: round $primary;
+            border-title-color: $brand;
+            border-title-style: bold;
+            padding: 1;
+            height: auto;
+            background: $dashboard-surface;
+        }
         #header_status { text-style: bold; }
         #header_meta { color: $text-muted; }
         .panel-active #header_status { color: $success; }
@@ -61,14 +71,17 @@ def create_run_app(controller: RunController) -> object:
         .panel-failed #header_status { color: $error; }
         .panel-finalized #header_status { color: $success; }
         #summary { height: auto; }
-        #agent_panel { width: 1fr; }
-        #session_panel { width: 1fr; }
+        #agent_panel_container, #session_panel_container {
+            width: 1fr;
+            height: 1fr;
+        }
         .panel {
             border: round $surface-lighten-2;
             border-title-color: $text-muted;
             border-title-style: bold;
             padding: 1;
             height: auto;
+            background: $dashboard-surface;
         }
         .panel-active { border: round $success; border-title-color: $success; }
         .panel-blocked { border: round $warning; border-title-color: $warning; }
@@ -76,7 +89,11 @@ def create_run_app(controller: RunController) -> object:
         .panel-finalized { border: round $success; border-title-color: $success; }
         #activity_panel { height: 1fr; }
         #activity_timeline { height: 1fr; }
-        #controls { color: $text-muted; height: auto; }        """
+        #controls {
+            color: $text-muted;
+            height: auto;
+            background: $dashboard-surface-muted;
+        }        """
         BINDINGS = [
             ("q", "stop_after_current_step", "Stop after current step"),
             ("ctrl+c", "interrupt", "Interrupt"),
@@ -96,8 +113,9 @@ def create_run_app(controller: RunController) -> object:
                 self.snapshot, self.controller.events, activity_frame=self._activity_frame
             )
             with Vertical(id="body"):
-                with Vertical(id="session_header", classes=view.state_class):
-                    yield Static(header_title_text(), id="header_title")
+                session_header = Vertical(id="session_header", classes=view.state_class)
+                session_header.border_title = header_title_text()
+                with session_header:
                     yield Static(header_status_text(view), id="header_status")
                     yield Static(header_meta_text(view), id="header_meta")
                 yield titled_panel(
@@ -728,7 +746,7 @@ def _agent_status_label(status: str) -> str:
 
 
 def header_title_text() -> str:
-    return "✻ Review Gauntlet"
+    return f"✻ Review Gauntlet v{__version__}"
 
 
 def header_status_text(view: RunViewState) -> str:

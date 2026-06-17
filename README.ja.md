@@ -345,6 +345,25 @@ opencode file-json verdicts 向けの最小 JSONC 設定:
 
 生成された OCR プロンプトは `{prompt}` として 1 つの argv 要素に展開されます。プロンプト artifact は監査証拠として引き続き書き込まれますが、prompt-file transport はコマンドアダプター契約の一部ではありません。`cwd`、`env`、`timeout_seconds` は任意の escape hatch です。`cwd` を省略すると呼び出し元の現在の作業ディレクトリを継承し、`env` を省略すると固定の自動変数なしで親環境を継承し、明示的な `env` 値は継承環境を上書きします。`timeout_seconds` を省略すると既定で 600 秒です。
 
+設定済みエージェントコマンドに環境変数を渡したい場合は `adapter.env` を使います。モデル選択、feature flag、wrapper 固有のパスなど、Review Gauntlet 設定と一緒に管理したい値に利用できます。
+
+```jsonc
+{
+  "adapter": {
+    "type": "command",
+    "command": "opencode",
+    "args": ["run", "{prompt}"],
+    "env": {
+      "OPENCODE_MODEL": "anthropic/claude-sonnet-4",
+      "REVIEW_GAUNTLET_REPO": "{repo_root}",
+      "REVIEW_GAUNTLET_STATE": "{state_dir}"
+    }
+  }
+}
+```
+
+環境変数の値は、アダプター引数と同じテンプレート構文で展開されます。親プロセスの環境に追加されるため、継承された変数を上書きすることもできます。provider credential は project config にコミットせず、外部 CLI や secret manager 側に置いてください。
+
 Verdict は OCR スタイルコメントを含む JSON である必要があります。
 
 ```json

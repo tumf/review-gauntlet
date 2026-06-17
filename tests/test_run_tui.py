@@ -979,17 +979,44 @@ def test_run_tui_source_uses_border_titles_and_semantic_title_styles() -> None:
     assert "Header" not in source
     assert "Footer" not in source
     assert "border_title" in source
+    assert "session_header.border_title = header_title_text()" in source
+    assert 'Static(header_title_text(), id="header_title")' not in source
+    assert 'id="header_title"' not in source
     assert "border-title-color" in source
     assert "border-title-style" in source
     assert "$warning" in source
     assert "$accent" not in source
 
 
-def test_header_title_carries_brand_sparkle_and_name() -> None:
+def test_summary_panel_containers_have_scoped_equal_height_layout_rule() -> None:
+    source = Path("src/review_gauntlet/run_tui.py").read_text(encoding="utf-8")
+
+    assert "#agent_panel_container, #session_panel_container" in source
+    assert "#agent_panel { width: 1fr; }" not in source
+    assert "#session_panel { width: 1fr; }" not in source
+    assert "#finalize_path_panel { height: 1fr; }" not in source
+    assert "#activity_panel { height: 1fr; }" in source
+
+    header_rule = source.split("#session_header {", maxsplit=1)[1].split("}", maxsplit=1)[0]
+    assert "border: round $primary;" in header_rule
+    assert "height: auto;" in header_rule
+
+    summary_rule = source.split("#agent_panel_container, #session_panel_container", maxsplit=1)[1]
+    summary_rule = summary_rule.split(".panel {", maxsplit=1)[0]
+    assert "width: 1fr;" in summary_rule
+    assert "height: 1fr;" in summary_rule
+
+    panel_rule = source.split(".panel {", maxsplit=1)[1].split("}", maxsplit=1)[0]
+    assert "height: auto;" in panel_rule
+    assert "height: 1fr;" not in panel_rule
+
+
+def test_header_title_carries_brand_sparkle_name_and_version() -> None:
     title = run_tui.header_title_text()
 
     assert "✻" in title
     assert "Review Gauntlet" in title
+    assert f"v{run_tui.__version__}" in title
 
 
 def test_header_first_line_is_brand_title_and_meta_omits_timeout() -> None:
@@ -1018,13 +1045,32 @@ def test_header_first_line_is_brand_title_and_meta_omits_timeout() -> None:
     assert "53s" not in meta
 
 
-def test_run_tui_source_styles_header_with_brand_accent_and_state_status() -> None:
+def test_run_tui_source_styles_header_border_title_with_brand_accent_and_state_status() -> None:
     source = Path("src/review_gauntlet/run_tui.py").read_text(encoding="utf-8")
 
     assert "$brand: #d97757;" in source
-    assert "#header_title { color: $brand;" in source
+    assert "#header_title" not in source
+    assert "#session_header {" in source
+    assert "border-title-color: $brand;" in source
+    assert "border-title-style: bold;" in source
     assert ".panel-active #header_status { color: $success; }" in source
+    assert ".panel-blocked #header_status { color: $warning; }" in source
     assert ".panel-failed #header_status { color: $error; }" in source
+    assert ".panel-finalized #header_status { color: $success; }" in source
+
+
+def test_run_tui_source_defines_explicit_dark_dashboard_backgrounds() -> None:
+    source = Path("src/review_gauntlet/run_tui.py").read_text(encoding="utf-8")
+
+    assert "$dashboard-bg: #0f1117;" in source
+    assert "$dashboard-surface: #151923;" in source
+    assert "Screen { layout: vertical; background: $dashboard-bg; }" in source
+    assert "#body { height: 1fr; padding: 1; background: $dashboard-bg; }" in source
+    assert "#session_header {" in source
+    assert "background: $dashboard-surface;" in source
+    assert ".panel {" in source
+    assert "#controls {" in source
+    assert "background: $dashboard-surface-muted;" in source
 
 
 def test_create_run_app_constructs_when_textual_available(tmp_path: Path) -> None:
