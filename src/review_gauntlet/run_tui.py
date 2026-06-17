@@ -71,8 +71,10 @@ def create_run_app(controller: RunController) -> object:
         .panel-failed #header_status { color: $error; }
         .panel-finalized #header_status { color: $success; }
         #summary { height: auto; }
-        #agent_panel { width: 1fr; }
-        #session_panel { width: 1fr; }
+        #agent_panel_container, #session_panel_container {
+            width: 1fr;
+            height: 1fr;
+        }
         .panel {
             border: round $surface-lighten-2;
             border-title-color: $text-muted;
