@@ -89,7 +89,12 @@ class RunEvent:
             payload=dict(payload),
         )
 
+    _RESERVED_KEYS = frozenset({"type", "timestamp"})
+
     def model_dump(self) -> dict[str, object]:
+        conflicts = self._RESERVED_KEYS & self.payload.keys()
+        if conflicts:
+            raise ValueError(f"RunEvent payload contains reserved key(s): {conflicts}")
         result = dict(self.payload)
         result["type"] = self.type
         result["timestamp"] = self.timestamp

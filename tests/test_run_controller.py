@@ -946,9 +946,8 @@ def test_agent_output_progress_ring_buffer_truncation() -> None:
 
 def test_run_event_model_dump_key_collision() -> None:
     event = RunEvent.create("test", type="should_be_overwritten", timestamp="should_be_overwritten")
-    dumped = event.model_dump()
-    assert dumped["type"] == "test"
-    assert dumped["timestamp"] != "should_be_overwritten"
+    with pytest.raises(ValueError, match="reserved key"):
+        event.model_dump()
 
 
 def test_run_controller_max_steps_zero_raises(tmp_path: Path) -> None:
