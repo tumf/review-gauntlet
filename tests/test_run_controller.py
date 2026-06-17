@@ -210,10 +210,8 @@ def test_run_controller_lifecycle_uses_live_output_progress(
     assert snapshots[1][2] == ("recent output",)
 
 
-def test_run_execution_context_uses_git_worktree_agent_root(tmp_path: Path) -> None:
+def test_run_execution_context_ignores_stale_git_worktree_metadata(tmp_path: Path) -> None:
     store = _store(tmp_path)
-    worktree = tmp_path / ".review-gauntlet" / "worktrees" / "RGS-test"
-    worktree.mkdir(parents=True)
     metadata = store.session_metadata("RGS-test")
     with store.connect() as conn:
         conn.execute(
@@ -239,14 +237,14 @@ def test_run_execution_context_uses_git_worktree_agent_root(tmp_path: Path) -> N
         session_id="RGS-test",
     )
 
-    assert context.agent_root == worktree.resolve()
+    assert context.agent_root == tmp_path
     assert context.state_dir == tmp_path / ".review-gauntlet"
 
 
-def test_run_controller_passes_git_worktree_agent_root_to_command(tmp_path: Path) -> None:
+def test_run_controller_passes_base_root_to_command_with_stale_git_metadata(
+    tmp_path: Path,
+) -> None:
     store = _store(tmp_path)
-    worktree = tmp_path / ".review-gauntlet" / "worktrees" / "RGS-test"
-    worktree.mkdir(parents=True)
     metadata = store.session_metadata("RGS-test")
     with store.connect() as conn:
         conn.execute(
@@ -289,7 +287,7 @@ def test_run_controller_passes_git_worktree_agent_root_to_command(tmp_path: Path
     result = controller.run()
 
     assert result["completed"] is True
-    assert observed == [(worktree.resolve(), tmp_path / ".review-gauntlet")]
+    assert observed == [(tmp_path, tmp_path / ".review-gauntlet")]
 
 
 def test_run_controller_completes_when_command_finalizes_session(tmp_path: Path) -> None:
@@ -532,70 +530,6 @@ def test_checkpoint_generated_files_from_stdout_deduplicates() -> None:
     path = ".review-gauntlet/checkpoints/latest/status.json"
     stdout = json.dumps({"generated_files": [path, path, path]})
     assert checkpoint_generated_files_from_stdout(stdout) == (path,)
-
-
-def test_run_execution_context_raises_for_missing_worktree_path(tmp_path: Path) -> None:
-    store = _store(tmp_path)
-    metadata = store.session_metadata("RGS-test")
-    with store.connect() as conn:
-        conn.execute(
-            "update sessions set metadata = ? where session_id = ?",
-            (
-                json.dumps({**metadata, "git_worktree": {"enabled": True}}, sort_keys=True),
-                "RGS-test",
-            ),
-        )
-
-    with pytest.raises(ValueError, match="missing worktree_path"):
-        RunExecutionContext.from_active_session(root=tmp_path, store=store, session_id="RGS-test")
-
-
-def test_run_execution_context_raises_for_path_traversal_outside_root(tmp_path: Path) -> None:
-    store = _store(tmp_path)
-    metadata = store.session_metadata("RGS-test")
-    with store.connect() as conn:
-        conn.execute(
-            "update sessions set metadata = ? where session_id = ?",
-            (
-                json.dumps(
-                    {
-                        **metadata,
-                        "git_worktree": {"enabled": True, "worktree_path": "../../outside"},
-                    },
-                    sort_keys=True,
-                ),
-                "RGS-test",
-            ),
-        )
-    (tmp_path / ".." / ".." / "outside").mkdir(parents=True, exist_ok=True)
-
-    with pytest.raises(ValueError, match="must stay inside repository root"):
-        RunExecutionContext.from_active_session(root=tmp_path, store=store, session_id="RGS-test")
-
-
-def test_run_execution_context_raises_for_missing_worktree_directory(tmp_path: Path) -> None:
-    store = _store(tmp_path)
-    metadata = store.session_metadata("RGS-test")
-    with store.connect() as conn:
-        conn.execute(
-            "update sessions set metadata = ? where session_id = ?",
-            (
-                json.dumps(
-                    {
-                        **metadata,
-                        "git_worktree": {
-                            "enabled": True,
-                            "worktree_path": ".review-gauntlet/worktrees/RGS-test",
-                        },
-                    },
-                    sort_keys=True,
-                ),
-                "RGS-test",
-            ),
-        )
-
-    with pytest.raises(ValueError, match="worktree is missing"):
-        RunExecutionContext.from_active_session(root=tmp_path, store=store, session_id="RGS-test")
 
 
 def test_run_controller_honors_interrupt_requested_during_command(tmp_path: Path) -> None:

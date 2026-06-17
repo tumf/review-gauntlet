@@ -535,7 +535,6 @@ def test_new_dashboard_checklist_rows_and_blocker_classification_hide_internal_n
         ("run_verify_fixes", 4, "Verify fixes"),
         ("resolve_finalize_blockers", 5, "Final checks"),
         ("finalize", 6, "Finalize checkpoint"),
-        ("cleanup_git_worktree", 6, "Finalize checkpoint"),
     ],
 )
 def test_finalize_checklist_uses_next_required_action_for_active_gate(

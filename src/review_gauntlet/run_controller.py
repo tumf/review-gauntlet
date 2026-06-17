@@ -128,26 +128,8 @@ class RunExecutionContext:
     def from_active_session(
         cls, *, root: Path, store: SessionStore, session_id: str
     ) -> RunExecutionContext:
-        metadata = store.session_metadata(session_id)
-        git_metadata = metadata.get("git_worktree")
-        if not isinstance(git_metadata, Mapping):
-            return cls(agent_root=root, state_dir=store.state_dir)
-        typed_git_metadata = cast(Mapping[str, object], git_metadata)
-        if typed_git_metadata.get("enabled") is not True:
-            return cls(agent_root=root, state_dir=store.state_dir)
-        worktree_path = typed_git_metadata.get("worktree_path")
-        if not isinstance(worktree_path, str) or not worktree_path:
-            raise ValueError("Git-worktree-backed session metadata is missing worktree_path")
-        resolved = (root / worktree_path).resolve()
-        try:
-            resolved.relative_to(root.resolve())
-        except ValueError as exc:
-            raise ValueError(
-                f"Git-worktree-backed session worktree must stay inside repository root: {resolved}"
-            ) from exc
-        if not resolved.is_dir():
-            raise ValueError(f"Git-worktree-backed session worktree is missing: {resolved}")
-        return cls(agent_root=resolved, state_dir=store.state_dir)
+        store.session_metadata(session_id)
+        return cls(agent_root=root, state_dir=store.state_dir)
 
 
 class RunController:
@@ -337,26 +319,11 @@ class RunController:
                 command_label=self._command_label,
                 step=step_number,
             )
-            try:
-                execution_context = RunExecutionContext.from_active_session(
-                    root=self.root,
-                    store=self.store,
-                    session_id=session_id,
-                )
-            except ValueError as exc:
-                self._agent_output_progress = None
-                self._agent_status = "failed"
-                self._agent_lifecycle = AgentLifecycle(status="failed")
-                self._agent_step_started_at = None
-                self._agent_timeout_seconds = None
-                self._emit("failed", reason="worktree_error", error=str(exc))
-                return _run_result(
-                    completed=False,
-                    steps=steps,
-                    reason="worktree_error",
-                    error=str(exc),
-                    session_id=session_id,
-                )
+            execution_context = RunExecutionContext.from_active_session(
+                root=self.root,
+                store=self.store,
+                session_id=session_id,
+            )
             try:
                 command_result = self._command_runner(
                     effective_config.adapter,
