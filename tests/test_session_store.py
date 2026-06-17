@@ -1,3 +1,4 @@
+import json
 import sqlite3
 from pathlib import Path
 
@@ -20,6 +21,41 @@ def test_session_store_creates_ledger_inside_tmp_path(tmp_path: Path) -> None:
     with sqlite3.connect(store.ledger_path) as conn:
         assert conn.execute("select count(*) from sessions").fetchone()[0] == 1
         assert conn.execute("select count(*) from review_cells").fetchone()[0] == 1
+
+
+def test_session_store_cancel_active_session_updates_ledger_before_removing_marker(
+    tmp_path: Path,
+) -> None:
+    store = SessionStore(tmp_path)
+    store.create_session(
+        {"session_id": "RGS-cancel", "target_digest": "abc", "target": {}},
+        (ReviewCell(id="RGC-1", file_path="README.md", rule_id="docs", slice_id="docs"),),
+    )
+
+    session_id = store.cancel_active_session()
+
+    assert session_id == "RGS-cancel"
+    assert not store.active_path.exists()
+    with sqlite3.connect(store.ledger_path) as conn:
+        assert (
+            conn.execute(
+                "select state from sessions where session_id = ?", ("RGS-cancel",)
+            ).fetchone()[0]
+            == "cancelled"
+        )
+
+
+def test_session_store_cancel_active_session_rejects_unknown_session_marker(
+    tmp_path: Path,
+) -> None:
+    store = SessionStore(tmp_path)
+    store.initialize()
+    store.active_path.write_text(json.dumps({"session_id": "RGS-missing"}), encoding="utf-8")
+
+    with pytest.raises(LookupError, match="unknown session: RGS-missing"):
+        store.cancel_active_session()
+
+    assert store.active_path.exists()
 
 
 def test_session_store_allows_duplicate_cell_ids_in_different_sessions(

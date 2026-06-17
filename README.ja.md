@@ -189,9 +189,12 @@ review-gauntlet status
 
 # カバレッジが完了し、live findings が閉じられ、status が can_finalize: true を返す場合のみ完了
 review-gauntlet finalize
+
+# 誤った init を破棄する場合。チェックポイントは作成しない
+review-gauntlet cancel
 ```
 
-`review` は 1 回の呼び出しで正確に 1 ステップだけ進みます。`finalize` はクリーンアップコマンドではなくゲートです。必要なカバレッジが完了し、live findings が閉じられるまで失敗します。
+`review` は 1 回の呼び出しで正確に 1 ステップだけ進みます。`finalize` はクリーンアップコマンドではなくゲートです。必要なカバレッジが完了し、live findings が閉じられるまで失敗します。誤った `init` を破棄する場合だけ `cancel` を使ってください。`cancel` はセッションを `cancelled` として記録し、アクティブセッションのマーカーを削除しますが、チェックポイントは作成しません。
 
 ### 便利な `ready` の使い方
 
@@ -269,7 +272,12 @@ review-gauntlet verify-fixes
 review-gauntlet finalize
 # Finalize は Git レビュー可能な JSON/Markdown スナップショットを atomic に書き込む
 git add .review-gauntlet/checkpoints/latest
+
+# init 対象を間違えた場合は finalize ではなく cancel する
+review-gauntlet cancel
 ```
+
+`cancel` は、誤って初期化したアクティブセッションを破棄するための正式なコマンドです。ledger に `sessions.state = 'cancelled'` を記録し、`.review-gauntlet/active-session.json` を削除するため、その後の `status`、`review`、`ready` は新しい `init` まで no-active-session として失敗します。`finalize` と異なり、チェックポイントは書かず、レビュー完了も主張しません。
 
 `status` は `coverage` をレビューセル状態ごとの件数として報告します。
 

@@ -1,4 +1,5 @@
 import json
+import sqlite3
 from pathlib import Path
 from typing import NoReturn
 
@@ -53,6 +54,7 @@ def test_cli_completion_outputs_script_for_supported_shells(
         "findings",
         "mark",
         "finalize",
+        "cancel",
         "validate-verdict",
         "completion",
     ):
@@ -401,7 +403,7 @@ def test_cli_rejects_obsolete_format_choices(command: str, obsolete_format: str)
     assert exc_info.value.code == 64
 
 
-@pytest.mark.parametrize("command", ["init", "status", "mark", "finalize", "findings"])
+@pytest.mark.parametrize("command", ["init", "status", "mark", "finalize", "cancel", "findings"])
 def test_cli_rejects_audience_on_non_review_commands(command: str) -> None:
     argv = [command, ".", "--audience", "agent"]
     if command == "mark":
@@ -544,6 +546,87 @@ def test_cli_init_creates_session_without_run(
     assert data["run_count"] == 0
     assert (tmp_path / ".review-gauntlet" / "active-session.json").exists()
     assert (tmp_path / ".review-gauntlet" / "ledger.sqlite").exists()
+
+
+def test_cli_cancel_removes_active_marker_and_records_cancelled_state(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "README.md").write_text("# docs\n", encoding="utf-8")
+    main(["init", str(tmp_path), "--worktree", "--format", "json"])
+    session_id = json.loads(capsys.readouterr().out)["session_id"]
+
+    main(["cancel", str(tmp_path), "--format", "json"])
+
+    data = json.loads(capsys.readouterr().out)
+    assert data == {"session_id": session_id, "session_state": "cancelled"}
+    state_dir = tmp_path / ".review-gauntlet"
+    assert not (state_dir / "active-session.json").exists()
+    with sqlite3.connect(state_dir / "ledger.sqlite") as conn:
+        assert (
+            conn.execute(
+                "select state from sessions where session_id = ?", (session_id,)
+            ).fetchone()[0]
+            == "cancelled"
+        )
+
+
+@pytest.mark.parametrize("command", ["status", "review", "ready"])
+def test_cli_session_commands_fail_after_cancel_until_reinit(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], command: str
+) -> None:
+    (tmp_path / "README.md").write_text("# docs\n", encoding="utf-8")
+    main(["init", str(tmp_path), "--worktree", "--format", "json"])
+    capsys.readouterr()
+    main(["cancel", str(tmp_path), "--format", "json"])
+    capsys.readouterr()
+
+    with pytest.raises(SystemExit) as exc_info:
+        main([command, str(tmp_path), "--format", "json"])
+
+    assert exc_info.value.code == 1
+    assert "no active review session; run review-gauntlet init" in capsys.readouterr().err
+
+
+def test_cli_cancel_creates_no_review_runs_or_checkpoints(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "README.md").write_text("# docs\n", encoding="utf-8")
+    main(["init", str(tmp_path), "--worktree", "--format", "json"])
+    session_id = json.loads(capsys.readouterr().out)["session_id"]
+
+    main(["cancel", str(tmp_path), "--format", "json"])
+    capsys.readouterr()
+
+    state_dir = tmp_path / ".review-gauntlet"
+    assert not (state_dir / "runs").exists()
+    assert not (state_dir / "checkpoints").exists()
+    with sqlite3.connect(state_dir / "ledger.sqlite") as conn:
+        assert (
+            conn.execute(
+                "select count(*) from runs where session_id = ?", (session_id,)
+            ).fetchone()[0]
+            == 0
+        )
+        assert conn.execute("select count(*) from finding_occurrences").fetchone()[0] == 0
+        assert conn.execute("select count(*) from finding_events").fetchone()[0] == 0
+        assert (
+            conn.execute(
+                "select count(*) from review_cells where session_id = ? and state != 'pending'",
+                (session_id,),
+            ).fetchone()[0]
+            == 0
+        )
+
+
+def test_cli_cancel_requires_active_session(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        main(["cancel", str(tmp_path), "--format", "json"])
+
+    assert exc_info.value.code == 1
+    assert "no active review session; run review-gauntlet init" in capsys.readouterr().err
+    assert not (tmp_path / ".review-gauntlet").exists()
 
 
 def test_cli_mark_json_outputs_string_state(

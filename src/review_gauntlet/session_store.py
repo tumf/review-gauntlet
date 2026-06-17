@@ -74,6 +74,18 @@ class SessionStore:
         data = json.loads(self.active_path.read_text(encoding="utf-8"))
         return str(data["session_id"])
 
+    def cancel_active_session(self) -> str:
+        session_id = self.active_session_id()
+        with self.connect() as conn:
+            cur = conn.execute(
+                "update sessions set state = 'cancelled' where session_id = ?",
+                (session_id,),
+            )
+        if cur.rowcount != 1:
+            raise LookupError(f"unknown session: {session_id}")
+        self.active_path.unlink(missing_ok=True)
+        return session_id
+
     def session_metadata(self, session_id: str | None = None) -> dict[str, Any]:
         sid = session_id or self.active_session_id()
         with self.connect() as conn:

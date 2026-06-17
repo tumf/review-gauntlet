@@ -284,6 +284,10 @@ def build_parser() -> argparse.ArgumentParser:
     _output_format_arg(finalize)
     _allow_non_review_dirty_arg(finalize)
 
+    cancel = subparsers.add_parser("cancel")
+    _root_arg(cancel)
+    _output_format_arg(cancel)
+
     config = subparsers.add_parser("config")
     config_subparsers = config.add_subparsers(
         dest="config_command", required=True, parser_class=UsageArgumentParser
@@ -778,6 +782,8 @@ def _run_session_command(args: argparse.Namespace, root: Path) -> None:
         _emit(result, args.format)
         if not result["can_finalize"]:
             raise SystemExit(1)
+    elif args.command == "cancel":
+        _emit(_cancel(store), args.format)
 
 
 def _cmd_init(args: argparse.Namespace, root: Path, store: SessionStore) -> None:
@@ -2073,6 +2079,11 @@ def _cmd_mark(args: argparse.Namespace, store: SessionStore) -> None:
     )
     store.mark_finding(args.finding_id, mapping[args.state], args.reason, metadata)
     _emit({"finding_id": args.finding_id, "state": mapping[args.state].value}, args.format)
+
+
+def _cancel(store: SessionStore) -> dict[str, object]:
+    session_id = store.cancel_active_session()
+    return {"session_id": session_id, "session_state": "cancelled"}
 
 
 def _status(
