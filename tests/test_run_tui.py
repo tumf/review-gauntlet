@@ -955,6 +955,20 @@ def test_run_tui_source_styles_header_with_brand_accent_and_state_status() -> No
     assert ".panel-failed #header_status { color: $error; }" in source
 
 
+def test_run_tui_source_defines_explicit_dark_dashboard_backgrounds() -> None:
+    source = Path("src/review_gauntlet/run_tui.py").read_text(encoding="utf-8")
+
+    assert "$dashboard-bg: #0f1117;" in source
+    assert "$dashboard-surface: #151923;" in source
+    assert "Screen { layout: vertical; background: $dashboard-bg; }" in source
+    assert "#body { height: 1fr; padding: 1; background: $dashboard-bg; }" in source
+    assert "#session_header {" in source
+    assert "background: $dashboard-surface;" in source
+    assert ".panel {" in source
+    assert "#controls {" in source
+    assert "background: $dashboard-surface-muted;" in source
+
+
 def test_create_run_app_constructs_when_textual_available(tmp_path: Path) -> None:
     if not textual_available():
         pytest.skip("Textual optional dependency is not installed")
