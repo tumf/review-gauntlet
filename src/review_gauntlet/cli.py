@@ -38,6 +38,7 @@ from review_gauntlet.config import (
     resolve_explicit_config_path,
     validate_config_text,
 )
+from review_gauntlet.coverage_projection import build_session_coverage_projection
 from review_gauntlet.findings import FindingState, normalize_ocr_comment
 from review_gauntlet.hooks import create_hook_event_sink
 from review_gauntlet.inventory import (
@@ -1758,7 +1759,9 @@ def _cmd_run(args: argparse.Namespace, root: Path, store: SessionStore) -> dict[
         config_path=args.config,
         max_steps=int(args.max_steps),
         ready_prompt=_ready_prompt,
-        status_snapshot=lambda session_store, repo_root: _status(session_store, repo_root),
+        status_snapshot=lambda session_store, repo_root: _status(
+            session_store, repo_root, include_coverage_projection=True
+        ),
         command_runner=command_runner,
         event_sink=compose_event_sinks(hook_event_sink),
     )
@@ -2149,6 +2152,7 @@ def _status(
     root: Path,
     *,
     allow_non_review_dirty: bool = False,
+    include_coverage_projection: bool = False,
 ) -> dict[str, object]:
     session_id = store.active_session_id()
     with store.connect() as conn:
@@ -2165,7 +2169,7 @@ def _status(
     reasons = _finalize_reasons(
         effective_cell_counts, finding_counts, store, session_id, root, allow_non_review_dirty
     )
-    return {
+    status: dict[str, object] = {
         "session_id": session_id,
         "session_state": "active",
         "coverage": effective_cell_counts,
@@ -2175,6 +2179,9 @@ def _status(
         "finalize_blockers": reasons,
         "next_required_action": _next_action(effective_cell_counts, finding_counts, reasons),
     }
+    if include_coverage_projection:
+        status["coverage_projection"] = build_session_coverage_projection(store, session_id, root)
+    return status
 
 
 def _findings(
