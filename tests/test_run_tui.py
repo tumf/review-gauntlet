@@ -1088,6 +1088,37 @@ def test_activity_panel_uses_command_failure_reason_and_keeps_stderr_evidence() 
     assert "timed out" not in text
 
 
+def test_activity_panel_keeps_quiet_timeout_reason_in_timed_out_family() -> None:
+    snapshot = RunSnapshot(
+        session_id="RGS-quiet-timeout",
+        coverage={"pending": 1},
+        findings={},
+        next_ready_prompt="review pending cells",
+        step=1,
+        agent_status="timed_out",
+        command_argv=("agent",),
+        elapsed_seconds=1,
+        command_label="agent",
+        agent_lifecycle=AgentLifecycle(
+            status="timed_out",
+            timeout_seconds=3600.0,
+            output_tail=(AgentOutputEntry("stdout", "last heartbeat"),),
+        ),
+    )
+    events = (RunEvent("failed", "2026-06-15T12:35:03+00:00", {"reason": "quiet_timeout"}),)
+
+    view = dashboard_state(snapshot, events)
+    agent = run_tui.agent_summary_text(view)
+    text = activity_text(view)
+
+    assert view.status_summary == "TIMED OUT"
+    assert "status  · timed out" in agent
+    assert "event - failed quiet_timeout" in text
+    assert "stdout - last heartbeat" in text
+    assert "command failed" not in agent
+    assert "max steps exhausted" not in agent
+
+
 def test_agent_summary_uses_configured_default_timeout_without_unset_or_duplicate_wording() -> None:
     snapshot = RunSnapshot(
         session_id="RGS-timeout-default",
@@ -1099,12 +1130,12 @@ def test_agent_summary_uses_configured_default_timeout_without_unset_or_duplicat
         command_argv=("agent",),
         elapsed_seconds=600,
         command_label="agent",
-        agent_lifecycle=AgentLifecycle(status="timed_out", timeout_seconds=600.0),
+        agent_lifecycle=AgentLifecycle(status="timed_out", timeout_seconds=3600.0),
     )
 
     text = run_tui.agent_summary_text(dashboard_state(snapshot, ()))
 
-    assert "timeout configured 10m00s" in text
+    assert "timeout configured 1h00m" in text
     assert "timeout not set" not in text
     assert "timeout timeout" not in text
 

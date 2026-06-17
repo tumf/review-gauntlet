@@ -71,7 +71,8 @@ def test_command_adapter_stdout_json_success_and_artifacts(tmp_path: Path) -> No
     assert command["cwd_mode"] == "inherited"
     assert command["env_overrides"] == []
     assert command["output_mode"] == "stdout-json"
-    assert command["timeout_seconds"] == 600
+    assert command["timeout_seconds"] == 3600
+    assert command["quiet_timeout_seconds"] == 600
     assert "input_mode" not in command
 
 
