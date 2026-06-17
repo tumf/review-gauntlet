@@ -575,10 +575,6 @@ source = { editable = "." }
 dependencies = [
     { name = "pydantic" },
     { name = "pydantic-settings" },
-]
-
-[package.optional-dependencies]
-tui = [
     { name = "rich" },
     { name = "textual" },
 ]
@@ -590,19 +586,16 @@ dev = [
     { name = "pyright" },
     { name = "pytest" },
     { name = "pytest-cov" },
-    { name = "rich" },
     { name = "ruff" },
-    { name = "textual" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "pydantic", specifier = ">=2.13.4" },
     { name = "pydantic-settings", specifier = ">=2.14.1" },
-    { name = "rich", marker = "extra == 'tui'", specifier = ">=13" },
-    { name = "textual", marker = "extra == 'tui'", specifier = ">=0.89" },
+    { name = "rich", specifier = ">=13" },
+    { name = "textual", specifier = ">=0.89" },
 ]
-provides-extras = ["tui"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -611,9 +604,7 @@ dev = [
     { name = "pyright", specifier = ">=1.1.410" },
     { name = "pytest", specifier = ">=9.0.3" },
     { name = "pytest-cov", specifier = ">=7.1.0" },
-    { name = "rich", specifier = ">=13" },
     { name = "ruff", specifier = ">=0.15.16" },
-    { name = "textual", specifier = ">=0.89" },
 ]
 
 [[package]]

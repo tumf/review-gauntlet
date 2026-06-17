@@ -1715,6 +1715,7 @@ def _validated_run_result(result: object) -> dict[str, object]:
 
 
 def _cmd_run(args: argparse.Namespace, root: Path, store: SessionStore) -> dict[str, object]:
+    store.active_session_id()
     controller: RunController
     loaded_config = load_config(root, args.config)
     hook_event_sink = None
