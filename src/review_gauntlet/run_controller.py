@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import dataclasses
 import json
 import threading
 from collections.abc import Callable, Mapping
@@ -14,6 +15,7 @@ from review_gauntlet.session_store import SessionStore
 
 RUN_INTERRUPTED_ERROR = "run interrupted by user"
 RUN_INTERRUPTED_REASON = "interrupted"
+AGENT_QUIET_THRESHOLD_SECONDS = 5.0
 
 
 @dataclass(frozen=True)
@@ -40,12 +42,12 @@ class AgentOutputProgress:
                 del self._output_lines[: len(self._output_lines) - self._limit]
 
     def snapshot(self) -> tuple[float | None, tuple[AgentOutputEntry, ...]]:
-        now = datetime.now(UTC)
         with self._lock:
             last_output_at = self._last_output_at
             output_tail = tuple(self._output_lines)
         if last_output_at is None:
             return None, output_tail
+        now = datetime.now(UTC)
         return (now - last_output_at).total_seconds(), output_tail
 
 
@@ -87,7 +89,12 @@ class RunEvent:
             payload=dict(payload),
         )
 
+    _RESERVED_KEYS = frozenset({"type", "timestamp"})
+
     def model_dump(self) -> dict[str, object]:
+        conflicts = self._RESERVED_KEYS & self.payload.keys()
+        if conflicts:
+            raise ValueError(f"RunEvent payload contains reserved key(s): {conflicts}")
         result = dict(self.payload)
         result["type"] = self.type
         result["timestamp"] = self.timestamp
@@ -128,7 +135,7 @@ class RunExecutionContext:
     def from_active_session(
         cls, *, root: Path, store: SessionStore, session_id: str
     ) -> RunExecutionContext:
-        store.session_metadata(session_id)
+        store.session_metadata(session_id)  # raises LookupError if session missing
         return cls(agent_root=root, state_dir=store.state_dir)
 
 
@@ -224,33 +231,39 @@ class RunController:
         if self._agent_status != "running":
             return self._agent_lifecycle
         now = datetime.now(UTC)
-        last_output_age = self._agent_lifecycle.last_output_age_seconds
-        output_tail = self._agent_lifecycle.output_tail
+        # Snapshot mutable fields to avoid TOCTOU races with run() thread
+        lifecycle = self._agent_lifecycle
+        step_started_at = self._agent_step_started_at
+        timeout_seconds = self._agent_timeout_seconds
         output_progress = self._agent_output_progress
+        last_output_age = lifecycle.last_output_age_seconds
+        output_tail = lifecycle.output_tail
         if output_progress is not None:
             progress_age, progress_tail = output_progress.snapshot()
             if progress_tail:
                 last_output_age = progress_age
                 output_tail = progress_tail
-        if last_output_age is None and self._agent_step_started_at is not None:
-            last_output_age = (now - self._agent_step_started_at).total_seconds()
-        timeout_remaining = self._agent_lifecycle.timeout_remaining_seconds
-        if timeout_remaining is None and self._agent_timeout_seconds is not None:
+        if last_output_age is None and step_started_at is not None:
+            last_output_age = (now - step_started_at).total_seconds()
+        timeout_remaining = lifecycle.timeout_remaining_seconds
+        if timeout_remaining is None and timeout_seconds is not None:
             elapsed = (
-                (now - self._agent_step_started_at).total_seconds()
-                if self._agent_step_started_at is not None
-                else 0.0
+                (now - step_started_at).total_seconds() if step_started_at is not None else 0.0
             )
-            timeout_remaining = max(0.0, float(self._agent_timeout_seconds) - elapsed)
-        status = self._agent_lifecycle.status
-        if status == "running" and last_output_age is not None and last_output_age >= 5.0:
+            timeout_remaining = max(0.0, float(timeout_seconds) - elapsed)
+        status = lifecycle.status
+        if (
+            status == "running"
+            and last_output_age is not None
+            and last_output_age >= AGENT_QUIET_THRESHOLD_SECONDS
+        ):
             status = "quiet"
         return AgentLifecycle(
             status=status,
             last_output_age_seconds=last_output_age,
             timeout_remaining_seconds=timeout_remaining,
-            timeout_seconds=self._agent_timeout_seconds,
-            artifact_path=self._agent_lifecycle.artifact_path,
+            timeout_seconds=timeout_seconds,
+            artifact_path=lifecycle.artifact_path,
             output_tail=output_tail,
         )
 
@@ -589,6 +602,8 @@ def checkpoint_generated_files_from_stdout(stdout: str) -> tuple[str, ...]:
     for item in typed_files:
         if not isinstance(item, str):
             continue
+        if "\x00" in item:
+            continue
         relative = Path(item)
         if relative.is_absolute() or ".." in relative.parts:
             continue
@@ -614,7 +629,7 @@ def _run_step_payload(
         "returncode": result.returncode,
         "stdout": result.stdout,
         "stderr": result.stderr,
-        "output_tail": [entry.__dict__ for entry in result.output_tail],
+        "output_tail": [dataclasses.asdict(entry) for entry in result.output_tail],
     }
     if result.stdout_artifact is not None:
         payload["stdout_artifact"] = result.stdout_artifact

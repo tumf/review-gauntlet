@@ -532,6 +532,13 @@ def test_checkpoint_generated_files_from_stdout_deduplicates() -> None:
     assert checkpoint_generated_files_from_stdout(stdout) == (path,)
 
 
+def test_checkpoint_generated_files_from_stdout_rejects_null_byte() -> None:
+    stdout = json.dumps(
+        {"generated_files": [".review-gauntlet/checkpoints/latest/sta\x00tus.json"]}
+    )
+    assert checkpoint_generated_files_from_stdout(stdout) == ()
+
+
 def test_run_controller_honors_interrupt_requested_during_command(tmp_path: Path) -> None:
     store = _store(tmp_path)
 
@@ -635,7 +642,9 @@ def test_run_controller_synthesizes_quiet_liveness_and_timeout_remaining(
     assert snapshots
     status, last_output_age, timeout_remaining = snapshots[0]
     assert status == "quiet"
-    assert last_output_age is not None and last_output_age >= 5.0
+    from review_gauntlet.run_controller import AGENT_QUIET_THRESHOLD_SECONDS
+
+    assert last_output_age is not None and last_output_age >= AGENT_QUIET_THRESHOLD_SECONDS
     assert timeout_remaining is not None and 0 < timeout_remaining <= 594
 
 
@@ -937,9 +946,8 @@ def test_agent_output_progress_ring_buffer_truncation() -> None:
 
 def test_run_event_model_dump_key_collision() -> None:
     event = RunEvent.create("test", type="should_be_overwritten", timestamp="should_be_overwritten")
-    dumped = event.model_dump()
-    assert dumped["type"] == "test"
-    assert dumped["timestamp"] != "should_be_overwritten"
+    with pytest.raises(ValueError, match="reserved key"):
+        event.model_dump()
 
 
 def test_run_controller_max_steps_zero_raises(tmp_path: Path) -> None:
