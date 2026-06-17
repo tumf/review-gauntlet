@@ -158,6 +158,7 @@ class CommandAdapterConfig(BaseModel):
     output: CommandOutputConfig = Field(default_factory=CommandOutputConfig)
     timeout_seconds: float = 3600.0
     quiet_timeout_seconds: float = 600.0
+    verdict_grace_seconds: float = 30.0
     cwd: str | None = None
     env: dict[str, str] = Field(default_factory=dict)
 
@@ -191,6 +192,15 @@ class CommandAdapterConfig(BaseModel):
         if not math.isfinite(value) or value <= 0:
             raise ValueError(
                 "adapter.quiet_timeout_seconds must be a finite value greater than zero"
+            )
+        return value
+
+    @field_validator("verdict_grace_seconds")
+    @classmethod
+    def validate_verdict_grace(cls, value: float) -> float:
+        if not math.isfinite(value) or value <= 0:
+            raise ValueError(
+                "adapter.verdict_grace_seconds must be a finite value greater than zero"
             )
         return value
 

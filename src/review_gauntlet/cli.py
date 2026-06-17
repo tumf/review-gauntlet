@@ -38,6 +38,13 @@ from review_gauntlet.config import (
     resolve_explicit_config_path,
     validate_config_text,
 )
+from review_gauntlet.continuation import (
+    ContinuationVerdictError,
+    compact_previous_turn_context,
+    continuation_metadata,
+    continuation_path_for_task,
+    validate_continuation_verdict,
+)
 from review_gauntlet.coverage_projection import build_session_coverage_projection
 from review_gauntlet.findings import FindingState, normalize_ocr_comment
 from review_gauntlet.hooks import create_hook_event_sink
@@ -1427,7 +1434,9 @@ def _ready_prompt_from_context(store: SessionStore, context: _StatusContext) -> 
     for state in _ACTIONABLE_FINDING_STATES:
         target_findings = findings_by_actionable_state.get(state.value, ())
         if target_findings:
-            return _finding_ready_prompt(state, review_cells, target_findings)
+            return _finding_ready_prompt(
+                state, review_cells, target_findings, store.state_dir, session_id
+            )
     if review_cells_by_state.get(CellState.STALE.value, ()):
         return _review_cell_ready_prompt(
             reason="stale_review_cell",
@@ -1448,14 +1457,22 @@ def _review_cell_ready_prompt(
     review_cells: tuple[_ReadyReviewCell, ...],
     findings: tuple[_ReadyFinding, ...],
     state: CellState,
+    state_dir: Path | None = None,
+    session_id: str | None = None,
 ) -> str:
     target_cells = tuple(cell for cell in review_cells if cell.state == state.value)
     target_file = _first_file_path_from_cells(target_cells)
+    continuation_path = (
+        continuation_path_for_task(state_dir, session_id, reason, target_file)
+        if state_dir is not None and session_id is not None
+        else None
+    )
     return _build_file_scoped_ready_prompt(
         reason=reason,
         file_path=target_file,
         review_cells=tuple(cell for cell in review_cells if cell.file_path == target_file),
         findings=tuple(finding for finding in findings if finding.file_path == target_file),
+        continuation_path=continuation_path,
     )
 
 
@@ -1477,14 +1494,22 @@ def _finding_ready_prompt(
     state: FindingState,
     review_cells: tuple[_ReadyReviewCell, ...],
     findings: tuple[_ReadyFinding, ...],
+    state_dir: Path | None = None,
+    session_id: str | None = None,
 ) -> str:
     target_findings = tuple(finding for finding in findings if finding.state == state.value)
     target_file = _first_file_path_from_findings(target_findings)
+    continuation_path = (
+        continuation_path_for_task(state_dir, session_id, state.value, target_file)
+        if state_dir is not None and session_id is not None
+        else None
+    )
     return _build_file_scoped_ready_prompt(
         reason=state.value,
         file_path=target_file,
         review_cells=tuple(cell for cell in review_cells if cell.file_path == target_file),
         findings=tuple(finding for finding in findings if finding.file_path == target_file),
+        continuation_path=continuation_path,
     )
 
 
@@ -1519,6 +1544,7 @@ def _build_file_scoped_ready_prompt(
     file_path: str,
     review_cells: tuple[_ReadyReviewCell, ...],
     findings: tuple[_ReadyFinding, ...],
+    continuation_path: Path | None = None,
 ) -> str:
     lines = [
         READY_PROMPT_PREFIX,
@@ -1545,7 +1571,54 @@ def _build_file_scoped_ready_prompt(
         "## Findings for this file",
         *_ready_finding_lines(findings),
     ]
+    if continuation_path is not None:
+        lines.extend(_continuation_prompt_sections(continuation_path))
     return "\n".join(lines)
+
+
+def _continuation_prompt_sections(continuation_path: Path) -> list[str]:
+    sections: list[str] = []
+    if continuation_path.exists():
+        try:
+            previous = validate_continuation_verdict(continuation_path)
+        except ContinuationVerdictError as exc:
+            sections.extend(
+                [
+                    "",
+                    "## Previous turn context",
+                    f"warning: ignored invalid previous continuation file: {exc}",
+                ]
+            )
+        else:
+            sections.extend(
+                [
+                    "",
+                    "## Previous turn context",
+                    *compact_previous_turn_context(previous),
+                ]
+            )
+    sections.extend(
+        [
+            "",
+            "## Turn verdict / continuation file",
+            "Before ending this turn, write valid JSON to the following path:",
+            str(continuation_path),
+            "",
+            "Required schema:",
+            "{",
+            '  "schema_version": 1,',
+            '  "verdict": "continue | finish | error",',
+            '  "summary": "What was accomplished this turn.",',
+            '  "completed_finding_ids": ["RGF-0001"],',
+            '  "remaining_finding_ids": ["RGF-0002"],',
+            '  "next_turn_instructions": "Start by checking ...",',
+            '  "error": null',
+            "}",
+            "Valid verdict values: continue, finish, error.",
+            "For verdict=error, set error to a non-empty actionable message.",
+        ]
+    )
+    return sections
 
 
 def _ready_review_cell_lines(cells: tuple[_ReadyReviewCell, ...]) -> list[str]:
@@ -1879,6 +1952,11 @@ def _run_session_command_step(
     output_lock = threading.Lock()
     started_at = time.monotonic()
     last_output_at = started_at
+    continuation_path = _continuation_path_from_prompt(prompt)
+    if continuation_path is not None:
+        continuation_path.parent.mkdir(parents=True, exist_ok=True)
+    verdict_detected_at: float | None = None
+    verdict_metadata: dict[str, object] | None = None
 
     try:
         process = subprocess.Popen(
@@ -1986,6 +2064,23 @@ def _run_session_command_step(
             if returncode is not None:
                 break
             now = time.monotonic()
+            if continuation_path is not None:
+                detected = _detect_continuation_verdict(continuation_path)
+                if detected is not None:
+                    verdict_metadata = detected
+                    if verdict_detected_at is None:
+                        verdict_detected_at = now
+                if verdict_detected_at is not None:
+                    grace_remaining = config.verdict_grace_seconds - (now - verdict_detected_at)
+                    if grace_remaining <= 0:
+                        process.kill()
+                        returncode = process.wait()
+                        break
+                    try:
+                        returncode = process.wait(timeout=min(grace_remaining, 0.1))
+                        break
+                    except subprocess.TimeoutExpired:
+                        continue
             overall_remaining = config.timeout_seconds - (now - started_at)
             quiet_remaining = config.quiet_timeout_seconds - (now - last_output_at)
             if overall_remaining <= 0:
@@ -2024,11 +2119,40 @@ def _run_session_command_step(
     stderr_thread.join()
     stdout, stderr = captured_output()
     failure: dict[str, object] | None = None
-    if returncode != 0:
+    session_still_active = (state_dir / "active-session.json").exists()
+    if returncode != 0 and verdict_metadata is None:
         failure = {
             "reason": "command_failed",
             "error": f"command exited with status {returncode}",
             "returncode": returncode,
+        }
+    if failure is None and continuation_path is not None and verdict_metadata is None:
+        if continuation_path.exists():
+            try:
+                verdict = validate_continuation_verdict(continuation_path)
+            except ContinuationVerdictError as exc:
+                failure = {
+                    "reason": "invalid_step_verdict",
+                    "error": str(exc),
+                    "verdict_path": str(continuation_path),
+                }
+            else:
+                verdict_metadata = continuation_metadata(continuation_path, verdict)
+        elif session_still_active:
+            failure = {
+                "reason": "missing_step_verdict",
+                "error": "command exited without writing required continuation verdict file",
+                "verdict_path": str(continuation_path),
+            }
+    if (
+        failure is None
+        and verdict_metadata is not None
+        and verdict_metadata.get("verdict") == "error"
+    ):
+        failure = {
+            "reason": "step_verdict_error",
+            "error": str(verdict_metadata.get("error") or "continuation verdict reported error"),
+            "verdict_path": str(verdict_metadata.get("path") or continuation_path),
         }
     result = SessionCommandResult(
         argv=argv,
@@ -2037,11 +2161,35 @@ def _run_session_command_step(
         stdout=stdout,
         stderr=stderr,
         failure=failure,
+        verdict_metadata=verdict_metadata,
     )
     return _persist_session_command_artifacts(state_dir, result)
 
 
 run_session_command_step_for_testing = _run_session_command_step
+
+
+def _continuation_path_from_prompt(prompt: str) -> Path | None:
+    lines = prompt.splitlines()
+    for index, line in enumerate(lines):
+        if line.strip() == "Before ending this turn, write valid JSON to the following path:":
+            if index + 1 >= len(lines):
+                return None
+            raw_path = lines[index + 1].strip()
+            if not raw_path:
+                return None
+            return Path(raw_path)
+    return None
+
+
+def _detect_continuation_verdict(path: Path) -> dict[str, object] | None:
+    if not path.exists():
+        return None
+    try:
+        verdict = validate_continuation_verdict(path)
+    except ContinuationVerdictError:
+        return None
+    return continuation_metadata(path, verdict)
 
 
 def _persist_session_command_artifacts(
@@ -2052,12 +2200,32 @@ def _persist_session_command_artifacts(
     stdout_path = run_dir / "agent-stdout.log"
     stderr_path = run_dir / "agent-stderr.log"
     activity_path = run_dir / "activity.jsonl"
+    verdict_artifact_path: Path | None = None
     stdout_path.write_text(result.stdout, encoding="utf-8")
     stderr_path.write_text(result.stderr, encoding="utf-8")
+    if result.verdict_metadata is not None:
+        verdict_source = result.verdict_metadata.get("path")
+        if isinstance(verdict_source, str) and Path(verdict_source).is_file():
+            verdict_artifact_path = run_dir / "verdict.json"
+            verdict_artifact_path.write_text(
+                Path(verdict_source).read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
     output_tail = _agent_output_tail(result.stdout, result.stderr)
     with activity_path.open("w", encoding="utf-8") as handle:
         for entry in output_tail:
             handle.write(json.dumps({"stream": entry.stream, "text": entry.text}) + "\n")
+        if result.verdict_metadata is not None:
+            handle.write(
+                json.dumps(
+                    {
+                        "event": "verdict_detected",
+                        "verdict": result.verdict_metadata,
+                        "artifact": str(verdict_artifact_path) if verdict_artifact_path else None,
+                    }
+                )
+                + "\n"
+            )
         handle.write(
             json.dumps(
                 {
@@ -2079,6 +2247,7 @@ def _persist_session_command_artifacts(
         stderr_artifact=str(stderr_path),
         activity_artifact=str(activity_path),
         output_tail=output_tail,
+        verdict_metadata=result.verdict_metadata,
     )
 
 

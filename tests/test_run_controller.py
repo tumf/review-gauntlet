@@ -1273,3 +1273,150 @@ def test_run_controller_post_loop_completion_session_disappears_on_final_step(
     assert result["reason"] == "completed"
     assert snapshot.agent_status == "finalized"
     assert snapshot.agent_lifecycle.status == "finalized"
+
+
+@pytest.mark.parametrize(
+    ("reason", "expected_status"),
+    [
+        ("step_verdict_error", "verdict_error"),
+        ("invalid_step_verdict", "verdict_invalid"),
+        ("missing_step_verdict", "verdict_missing"),
+        ("no_progress", "no_progress"),
+    ],
+)
+def test_run_controller_maps_verdict_failure_statuses(
+    tmp_path: Path, reason: str, expected_status: str
+) -> None:
+    store = _store(tmp_path)
+
+    def command(
+        _config: CommandAdapterConfig, _root: Path, _state_dir: Path, _prompt: str
+    ) -> SessionCommandResult:
+        return SessionCommandResult(
+            argv=["fake-agent"],
+            cwd=None,
+            returncode=0,
+            stdout="",
+            stderr="",
+            failure={"reason": reason, "error": f"{reason} error"},
+        )
+
+    controller = RunController(
+        root=tmp_path,
+        store=store,
+        config_path=None,
+        max_steps=1,
+        ready_prompt=lambda _store, _root: "ready prompt",
+        status_snapshot=_status,
+        command_runner=command,
+    )
+
+    result = controller.run()
+    snapshot = controller.snapshot()
+
+    assert result["completed"] is False
+    assert result["reason"] == reason
+    assert snapshot.agent_status == expected_status
+    assert snapshot.agent_lifecycle.status == expected_status
+
+
+def test_run_controller_includes_verdict_metadata_in_step_payload(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    metadata: dict[str, object] = {
+        "path": str(
+            tmp_path / ".review-gauntlet" / "turns" / "RGS-test" / "untriaged__aaaaaaaaaaaa.json"
+        ),
+        "task_key": "untriaged__aaaaaaaaaaaa.json",
+        "schema_version": 1,
+        "verdict": "finish",
+        "summary": "done",
+        "completed_finding_ids": [],
+        "remaining_finding_ids": [],
+        "next_turn_instructions": "none",
+        "error": None,
+    }
+
+    def command(
+        _config: CommandAdapterConfig, _root: Path, _state_dir: Path, _prompt: str
+    ) -> SessionCommandResult:
+        store.active_path.unlink()
+        return SessionCommandResult(
+            argv=["fake-agent"],
+            cwd=None,
+            returncode=0,
+            stdout="ok",
+            stderr="",
+            verdict_metadata=metadata,
+        )
+
+    controller = RunController(
+        root=tmp_path,
+        store=store,
+        config_path=None,
+        max_steps=1,
+        ready_prompt=lambda _store, _root: "ready prompt",
+        status_snapshot=_status,
+        command_runner=command,
+    )
+
+    result = controller.run()
+
+    step = cast(dict[str, object], cast(list[object], result["steps"])[0])
+    assert step["verdict_metadata"] == metadata
+
+
+def test_run_controller_stops_no_progress_continue_verdict(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    prompt = """Use the review-gauntlet task execution skill.
+
+## Findings for this file
+- finding_id: RGF-0001; state: untriaged; rule_id: docs
+
+## Turn verdict / continuation file
+Before ending this turn, write valid JSON to the following path:
+.review-gauntlet/turns/RGS-test/untriaged__aaaaaaaaaaaa.json
+"""
+    with store.connect() as conn:
+        conn.execute(
+            """
+            insert into findings(
+              session_id, finding_id, fingerprint, state, path, rule_id, content, metadata
+            ) values (
+              'RGS-test', 'RGF-0001', 'fp-1', 'untriaged', 'README.md', 'docs', 'finding', '{}'
+            )
+            """
+        )
+
+    def command(
+        _config: CommandAdapterConfig, _root: Path, _state_dir: Path, _prompt: str
+    ) -> SessionCommandResult:
+        return SessionCommandResult(
+            argv=["fake-agent"],
+            cwd=None,
+            returncode=0,
+            stdout="ok",
+            stderr="",
+            verdict_metadata={
+                "task_key": "untriaged__aaaaaaaaaaaa.json",
+                "verdict": "continue",
+            },
+        )
+
+    controller = RunController(
+        root=tmp_path,
+        store=store,
+        config_path=None,
+        max_steps=1,
+        ready_prompt=lambda _store, _root: prompt,
+        status_snapshot=_status,
+        command_runner=command,
+    )
+
+    result = controller.run()
+
+    assert result["completed"] is False
+    assert result["reason"] == "no_progress"
+    step = cast(dict[str, object], cast(list[object], result["steps"])[0])
+    failure = cast(dict[str, object], step["failure"])
+    assert failure["task_key"] == "untriaged__aaaaaaaaaaaa.json"
+    assert failure["target_ids"] == ["RGF-0001"]

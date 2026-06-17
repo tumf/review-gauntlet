@@ -75,6 +75,7 @@ class SessionCommandResult:
     stderr_artifact: str | None = None
     activity_artifact: str | None = None
     output_tail: tuple[AgentOutputEntry, ...] = ()
+    verdict_metadata: dict[str, object] | None = None
 
 
 @dataclass(frozen=True)
@@ -142,6 +143,17 @@ def compose_event_sinks(*sinks: EventSink | None) -> EventSink | None:
             sink(event)
 
     return emit_to_all
+
+
+@dataclass(frozen=True)
+class ProgressTarget:
+    finding_ids: tuple[str, ...] = ()
+    cell_ids: tuple[str, ...] = ()
+    task_key: str | None = None
+
+    @property
+    def target_ids(self) -> tuple[str, ...]:
+        return (*self.finding_ids, *self.cell_ids)
 
 
 @dataclass(frozen=True)
@@ -355,6 +367,8 @@ class RunController:
                     error="active session remains but no ready task is actionable",
                     session_id=session_id,
                 )
+            progress_target = _progress_target_from_prompt(prompt)
+            pre_turn_state = _target_state_snapshot(self.store, session_id, progress_target)
             self._emit("step_started", step=step_number, prompt=prompt)
             self._agent_status = "running"
             self._agent_step_started_at = datetime.now(UTC)
@@ -406,6 +420,26 @@ class RunController:
             )
             self._agent_step_started_at = None
             self._agent_timeout_seconds = None
+            if _is_successful_progress_verdict(command_result):
+                post_turn_state = _target_state_snapshot(self.store, session_id, progress_target)
+                if pre_turn_state == post_turn_state:
+                    metadata = command_result.verdict_metadata or {}
+                    command_result = dataclasses.replace(
+                        command_result,
+                        failure={
+                            "reason": "no_progress",
+                            "error": "step verdict reported progress but no targeted state changed",
+                            "task_key": str(
+                                metadata.get("task_key", progress_target.task_key or "")
+                            ),
+                            "target_ids": list(progress_target.target_ids),
+                        },
+                    )
+                    lifecycle_status = _lifecycle_status_from_result(command_result)
+                    self._agent_lifecycle = dataclasses.replace(
+                        self._agent_lifecycle,
+                        status=lifecycle_status,
+                    )
             step_payload = _run_step_payload(step_number, prompt, command_result)
             steps.append(step_payload)
             if self._interrupted:
@@ -532,6 +566,70 @@ class RunController:
             return None
 
 
+def _is_successful_progress_verdict(result: SessionCommandResult) -> bool:
+    if result.failure is not None or result.verdict_metadata is None:
+        return False
+    return result.verdict_metadata.get("verdict") in {"continue", "finish"}
+
+
+def _progress_target_from_prompt(prompt: str) -> ProgressTarget:
+    finding_ids: list[str] = []
+    cell_ids: list[str] = []
+    task_key: str | None = None
+    lines = prompt.splitlines()
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if "finding_id:" in stripped:
+            finding_id = _value_after_label(stripped, "finding_id:")
+            if finding_id and finding_id not in finding_ids:
+                finding_ids.append(finding_id)
+        if "cell_id:" in stripped:
+            cell_id = _value_after_label(stripped, "cell_id:")
+            if cell_id and cell_id not in cell_ids:
+                cell_ids.append(cell_id)
+        if (
+            stripped == "Before ending this turn, write valid JSON to the following path:"
+            and index + 1 < len(lines)
+        ):
+            task_key = Path(lines[index + 1].strip()).name
+    if finding_ids:
+        cell_ids = []
+    return ProgressTarget(tuple(finding_ids), tuple(cell_ids), task_key)
+
+
+def _value_after_label(line: str, label: str) -> str | None:
+    try:
+        remainder = line.split(label, 1)[1]
+    except IndexError:
+        return None
+    value = remainder.split(";", 1)[0].strip()
+    return value or None
+
+
+def _target_state_snapshot(
+    store: SessionStore, session_id: str, target: ProgressTarget
+) -> dict[str, str]:
+    snapshot: dict[str, str] = {}
+    if target.cell_ids:
+        cell_ids = set(target.cell_ids)
+        for row in store.list_cells(session_id):
+            cell_id = str(row["cell_id"])
+            if cell_id in cell_ids:
+                snapshot[f"cell:{cell_id}"] = str(row["state"])
+    if target.finding_ids:
+        finding_ids = set(target.finding_ids)
+        with store.connect() as conn:
+            rows = conn.execute(
+                "select finding_id, state from findings where session_id = ?",
+                (session_id,),
+            ).fetchall()
+        for row in rows:
+            finding_id = str(row["finding_id"])
+            if finding_id in finding_ids:
+                snapshot[f"finding:{finding_id}"] = str(row["state"])
+    return snapshot
+
+
 def _status_unavailable_snapshot(error: Exception) -> dict[str, object]:
     return {
         "coverage": {},
@@ -620,6 +718,14 @@ def _lifecycle_status_from_result(result: SessionCommandResult) -> str:
 def _agent_status_from_failure_reason(reason: str) -> str:
     if reason in {"timeout", "quiet_timeout"}:
         return "timed_out"
+    verdict_statuses = {
+        "step_verdict_error": "verdict_error",
+        "invalid_step_verdict": "verdict_invalid",
+        "missing_step_verdict": "verdict_missing",
+        "no_progress": "no_progress",
+    }
+    if reason in verdict_statuses:
+        return verdict_statuses[reason]
     if reason in {
         "command_failed",
         "startup_error",
@@ -713,6 +819,8 @@ def _run_step_payload(
         payload["stderr_artifact"] = result.stderr_artifact
     if result.activity_artifact is not None:
         payload["activity_artifact"] = result.activity_artifact
+    if result.verdict_metadata is not None:
+        payload["verdict_metadata"] = result.verdict_metadata
     if result.failure is not None:
         payload["failure"] = result.failure
     return payload
