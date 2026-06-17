@@ -14,5 +14,6 @@
   "**/*.kt": "kotlin.md",
   "**/*.rs": "rust.md",
   "**/*.{cpp,cc,hpp}": "cpp.md",
-  "**/*.c": "c.md"
+  "**/*.c": "c.md",
+  "**/*.sol": "solidity.md"
 }
