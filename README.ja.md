@@ -23,27 +23,15 @@ uvx review-gauntlet config init --preset opencode
 # 3. 現在のリポジトリでレビューセッションを開始
 review-gauntlet init
 
-# 4. 設定済みアダプター経由でレビューを 1 バッチ実行
-review-gauntlet review
+# 4. 設定済みエージェントでセッション完了まで ready タスクを実行
+review-gauntlet run
 
-# 5. カバレッジ、指摘、次に必要な操作を確認
+# 5. 最終チェックポイントと指摘を確認
 review-gauntlet status
 review-gauntlet findings
-
-# 6. pending または stale のセルがなくなるまでレビューを継続
-review-gauntlet review
-review-gauntlet status
-
-# 7. live findings をトリアージまたは修正。修正済みにマークして検証を再実行
-review-gauntlet mark <finding-id> fixed --reason "fixed in follow-up"
-review-gauntlet verify-fixes
-review-gauntlet status
-
-# 8. status が can_finalize: true を返す場合のみ完了
-review-gauntlet finalize
 ```
 
-`review` は一度に 1 バッチだけ進めます。`verify-fixes` は `fixed_pending_verification` とマークされた指摘を再確認し、`fixed_verified` または `reopened` に移動します。`finalize` は、必要なカバレッジが完了し、live findings が閉じられ、`status` が `can_finalize: true` を返した場合にのみ成功します。
+`run` は設定済みの外部エージェントを使い、ready タスクを繰り返し実行し、アクティブセッションが finalize されると停止します。`review` は低レベルまたはカスタムワークフロー向けに 1 回の呼び出しで 1 バッチだけ進めます。`verify-fixes` は `fixed_pending_verification` とマークされた指摘を再確認し、`fixed_verified` または `reopened` に移動します。`finalize` は、必要なカバレッジが完了し、live findings が閉じられ、`status` が `can_finalize: true` を返した場合にのみ成功します。
 
 ## AI レビューツールとの違い
 
@@ -130,7 +118,7 @@ review-gauntlet config effective --format json
 uvx review-gauntlet config init --preset opencode
 # （対応する外部レビューエージェントは別途インストール・認証）
 review-gauntlet init
-review-gauntlet review
+review-gauntlet run
 review-gauntlet status
 ```
 
@@ -161,7 +149,7 @@ review-gauntlet --help
 
 ## 基本的な使い方
 
-明示的なレビュー対象を選び、カバレッジが完了するまでレビュー手順を繰り返します。
+明示的なレビュー対象を選び、`run` で設定済みの外部エージェント経由で ready タスクをセッション完了まで実行します。
 
 ```bash
 # 現在のワークスペース diff をレビュー
@@ -173,42 +161,35 @@ review-gauntlet init --from main --to HEAD
 # リポジトリ全体をレビュー
 review-gauntlet init --all
 
-# レビューを 1 ステップ実行。pending または stale カバレッジがなくなるまで繰り返す
-review-gauntlet review
-review-gauntlet status
+# 推奨: アクティブセッションが finalize されるまで ready タスクを実行
+review-gauntlet run
 
-# live findings を確認し、トリアージ判断を記録
+# デバッグや監査結果の確認
+review-gauntlet status
 review-gauntlet findings
-review-gauntlet mark <finding-id> confirmed --reason "valid issue"
-review-gauntlet mark <finding-id> false-positive --reason "not applicable"
-review-gauntlet mark <finding-id> fixed --reason "fixed in follow-up"
-
-# 修正済み指摘を再確認し、再度 status を確認
-review-gauntlet verify-fixes
-review-gauntlet status
-
-# カバレッジが完了し、live findings が閉じられ、status が can_finalize: true を返す場合のみ完了
-review-gauntlet finalize
 
 # 誤った init を破棄する場合。チェックポイントは作成しない
 review-gauntlet cancel
+
+# オプション: Git ブランチとリンク worktree を作成してセッションを分離
+review-gauntlet init --git-worktree
+review-gauntlet run
+review-gauntlet finalize --merge
 ```
 
-`review` は 1 回の呼び出しで正確に 1 ステップだけ進みます。`finalize` はクリーンアップコマンドではなくゲートです。必要なカバレッジが完了し、live findings が閉じられるまで失敗します。誤った `init` を破棄する場合だけ `cancel` を使ってください。`cancel` はセッションを `cancelled` として記録し、アクティブセッションのマーカーを削除しますが、チェックポイントは作成しません。
+`run` は通常の進行コマンドです。`review` の constitution に基づく動作は変わりません: `review` は 1 回の呼び出しで正確に 1 バッチだけ進め、`run` は外部エージェント経由で繰り返し ready タスクを実行します。`finalize` はクリーンアップコマンドではなくゲートです。必要なカバレッジが完了し、live findings が閉じられるまで失敗します。誤った `init` を破棄する場合だけ `cancel` を使ってください。`cancel` はセッションを `cancelled` として記録し、アクティブセッションのマーカーを削除しますが、チェックポイントは作成しません。
 
-### 便利な `ready` の使い方
+`--worktree` と `--git-worktree` は意図的に異なる概念です。`init --worktree` は現在のワークスペース diff をレビュー対象として選択します。`init --git-worktree` は `.review-gauntlet/worktrees/<session-id>/` に分離された Git リンク worktree と `review-gauntlet/<session-id>` ブランチを作成します。`init --worktree --git-worktree` のように組み合わせて、ワークスペース diff をレビューしながらセッション作業を分離することもできます。Git worktree を使うセッションでは、`run` は既定でリンクされたセッション worktree 内で設定済みの外部エージェントを実行するため、ソースの読み取りと編集はセッションブランチ上で行われます。Review Gauntlet の永続状態（実行ログ、ledger、active-session マーカー、チェックポイント）は引き続きベースリポジトリの `.review-gauntlet` ディレクトリに保存されます。`finalize --merge` はチェックポイント artifact を書き込み、セッションブランチをコミットし、記録されたベースブランチにファストフォワードマージし、リンク worktree を削除し、セッションブランチを削除します。マージが成功してもクリーンアップが失敗した場合、コマンドは `cleaned_up: false` を報告し、クリーンアップブロッカーを含め、手動修復用に `next_required_action: cleanup_git_worktree` を残します。
 
-`ready` は次のレビュープロンプトを出力するため、保留中のレビュー単位を外部エージェントへ渡しやすくなります。
+### 高度な `ready` の使い方
+
+`ready` は CI システム、カスタムオーケストレーター、外部統合、デバッグ向けに次のレビュープロンプトを出力します。Review Gauntlet の外部でオーケストレーションループを所有したい場合に使います。
 
 ```bash
 review-gauntlet ready | opencode run
 ```
 
-レビュー単位がなくなるまで ready プロンプトを opencode に渡し続ける場合:
-
-```bash
-while p=$(review-gauntlet ready); do opencode run "$p"; done
-```
+カスタムオーケストレーターは `ready` を繰り返し呼び出せますが、通常のセッション進行には `review-gauntlet run` を推奨します。
 
 ## シェル補完
 
@@ -255,14 +236,17 @@ review-gauntlet init --commit <commit-oid>
 # review-gauntlet 専用の全リポジトリレビュー: 対象となる inventory ファイルすべて
 review-gauntlet init --all
 
-# 初期化済みセッションに対してレビューを 1 ステップ実行
+# 推奨: 設定済みの外部エージェントで ready タスクをオーケストレーション
+review-gauntlet run
+
+# 低レベル/カスタムワークフロー向けにレビューを 1 ステップだけ実行
 review-gauntlet review
 
 # 最大 20 セルを選択し、最大 4 アダプター呼び出しを同時実行
 review-gauntlet review --budget 20 --concurrency 4
 ```
 
-レビュー手順の後は、セッション状態と指摘を確認し、必要に応じて人間の判断を記録し、カバレッジと指摘が両方閉じられた場合のみ finalize します。
+`run` またはレビュー手順の後は、セッション状態と指摘を確認し、必要に応じて人間の判断を記録し、カバレッジと指摘が両方閉じられた場合のみ finalize します。
 
 ```bash
 review-gauntlet status
@@ -304,7 +288,7 @@ review-gauntlet cancel
 
 `finalize` が成功するには、カバレッジと live findings が閉じられ、レビュー対象 universe のファイルが `HEAD` と一致している必要があります。dirty な tracked、staged、unstaged、または対象となる untracked ファイルがあるとチェックポイント作成はブロックされます。`status.json`、`findings.json`、`events.json`、`summary.md` を `.review-gauntlet/checkpoints/<checkpoint_id>/` のような生成済みチェックポイントディレクトリへ書き込み、`.review-gauntlet/checkpoints/latest` をそのチェックポイントへのポインターとして更新し、アクティブセッションをクリアします。次のコマンドは `review-gauntlet init` になります。独立した checkpoint コマンドは意図的にありません。
 
-`review --concurrency` の既定値は `8` で、正の整数である必要があります。`--budget` は 1 回のレビュー実行で選択される合計セル数を引き続き制限します。`--concurrency` は、その中で同時に実行されるアダプター呼び出し数だけを制限します。ネストされた外部アダプターコマンドへ concurrency フラグを自動的に渡すものではありません。
+`review --concurrency` の既定値は `3` で、正の整数である必要があります。`--budget` は 1 回のレビュー実行で選択される合計セル数を引き続き制限します。`--concurrency` は、その中で同時に実行されるアダプター呼び出し数だけを制限します。ネストされた外部アダプターコマンドへ concurrency フラグを自動的に渡すものではありません。
 
 ### 診断およびレガシー計画コマンド
 

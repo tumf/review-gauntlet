@@ -199,10 +199,6 @@ review-gauntlet findings
 # Abandon an accidental init without writing a checkpoint.
 review-gauntlet cancel
 
-# Optional isolation workflow: create a Git branch and linked worktree for the session.
-review-gauntlet init --git-worktree
-review-gauntlet run
-review-gauntlet finalize --merge
 ```
 
 `run` is the normal progression command. It does not change the constitution-backed
@@ -212,22 +208,6 @@ is still a gate, not a cleanup command: it fails until required coverage is comp
 and live findings are closed. Use `cancel` only to abandon an accidental `init`; it
 marks the session `cancelled` and clears the active-session marker without producing
 checkpoint artifacts.
-
-`--worktree` and `--git-worktree` are intentionally different concepts. `init
---worktree` selects the current workspace diff as the review target. `init
---git-worktree` creates an isolated Git linked worktree under
-`.review-gauntlet/worktrees/<session-id>/` and a `review-gauntlet/<session-id>` branch
-for the session. They can be combined as `init --worktree --git-worktree` to review the
-workspace diff while isolating session work. For Git-worktree-backed sessions,
-`run` executes the configured external agent inside the linked session worktree by
-default, so source reads and edits happen on the session branch. Review Gauntlet's
-durable state, including run logs, the ledger, active-session marker, and checkpoints,
-continues to live under the base repository `.review-gauntlet` directory. `finalize
---merge` writes checkpoint artifacts, commits the session branch, fast-forward
-merges it into the recorded base branch, removes the linked worktree, and deletes the
-session branch. If merge succeeds but cleanup fails, the command reports
-`cleaned_up: false`, includes cleanup blockers, and leaves `next_required_action:
-cleanup_git_worktree` for manual repair.
 
 ### Advanced `ready` usage
 
@@ -358,7 +338,7 @@ checkpoint directory such as `.review-gauntlet/checkpoints/<checkpoint_id>/`, th
 active session so the next command is `review-gauntlet init`. There is intentionally
 no separate checkpoint command.
 
-`review --concurrency` defaults to `8` and must be a positive integer. `--budget`
+`review --concurrency` defaults to `3` and must be a positive integer. `--budget`
 still caps the total cells selected for one review run; `--concurrency` only limits
 how many of those selected adapter invocations run at the same time. It does not
 automatically pass a concurrency flag through to the nested external adapter
