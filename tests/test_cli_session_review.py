@@ -5,7 +5,7 @@ import subprocess
 import sys
 import threading
 from pathlib import Path
-from typing import Any, NoReturn
+from typing import Any
 
 import pytest
 
@@ -785,7 +785,9 @@ def test_resource_exhaustion_startup_failure_persists_sibling_successes(
             raise OSError(errno.EMFILE, "Too many open files")
         return original_popen(argv, *args, **kwargs)
 
-    monkeypatch.setattr("review_gauntlet.review_adapter.subprocess.Popen", raise_emfile_for_one_cell)
+    monkeypatch.setattr(
+        "review_gauntlet.review_adapter.subprocess.Popen", raise_emfile_for_one_cell
+    )
 
     with pytest.raises(SystemExit) as excinfo:
         main(["review", str(tmp_path), "--budget", "3", "--concurrency", "2", "--format", "json"])
