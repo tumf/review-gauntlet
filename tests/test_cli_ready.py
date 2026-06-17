@@ -10,6 +10,7 @@ import review_gauntlet.cli as cli
 from review_gauntlet.cli import main
 from review_gauntlet.findings import FindingState
 from review_gauntlet.review_cells import CellState
+from review_gauntlet.run_controller import RunController, SessionCommandResult
 from review_gauntlet.session_store import SessionStore
 from review_gauntlet.targets import target_digest
 
@@ -141,6 +142,35 @@ def _assert_skill_directed_short_prompt(prompt: str, expected_phrase: str) -> No
         assert forbidden not in lowered
 
 
+def test_run_snapshot_readiness_reuses_target_digest_work(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    session_id = _init_session(tmp_path, capsys)
+    store = SessionStore(tmp_path)
+    store.create_run(session_id, "previous-digest")
+    counts = {"file_digests": 0, "target_digest": 0}
+
+    def counted_file_digests(root: Path) -> dict[str, str]:
+        counts["file_digests"] += 1
+        return {"README.md": "digest"}
+
+    def counted_target_digest(root: Path) -> str:
+        counts["target_digest"] += 1
+        return "current-digest"
+
+    monkeypatch.setattr(cli, "file_digests", counted_file_digests)
+    monkeypatch.setattr(cli, "target_digest", counted_target_digest)
+    provider = cli.RunSnapshotReadinessProvider()
+
+    status = provider.status_snapshot(store, tmp_path)
+    prompt = provider.ready_prompt(store, tmp_path)
+
+    assert status["coverage"] == {CellState.STALE.value: 1}
+    assert prompt is not None
+    assert "stale review cells need refreshed coverage" in prompt
+    assert counts == {"file_digests": 1, "target_digest": 1}
+
+
 def test_ready_command_outputs_prompt_only_json_and_text(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -199,7 +229,9 @@ def test_ready_skips_empty_review_cell_bucket_without_traceback(
     _init_session(tmp_path, capsys)
     _set_all_cells(tmp_path, CellState.REVIEWED)
 
-    def drifted_coverage(_store: object, _session_id: str, _root: Path) -> dict[str, int]:
+    def drifted_coverage(
+        _store: object, _session_id: str, _current_cells: dict[str, Any]
+    ) -> dict[str, int]:
         return {aggregate_state.value: 1}
 
     def fail_if_empty_review_cell_prompt_is_requested(
@@ -214,7 +246,7 @@ def test_ready_skips_empty_review_cell_bucket_without_traceback(
             f"reason={reason} state={state.value} review_cells={review_cells} findings={findings}"
         )
 
-    monkeypatch.setattr(cli, "_effective_current_target_coverage", drifted_coverage)
+    monkeypatch.setattr(cli, "_effective_current_target_coverage_for_cells", drifted_coverage)
     monkeypatch.setattr(
         cli,
         "_review_cell_ready_prompt",
@@ -237,10 +269,12 @@ def test_ready_falls_through_from_empty_review_cell_bucket_to_next_finding(
     _set_all_cells(tmp_path, CellState.REVIEWED)
     _insert_finding(tmp_path, FindingState.UNTRIAGED, 1)
 
-    def drifted_coverage(_store: object, _session_id: str, _root: Path) -> dict[str, int]:
+    def drifted_coverage(
+        _store: object, _session_id: str, _current_cells: dict[str, Any]
+    ) -> dict[str, int]:
         return {aggregate_state.value: 1}
 
-    monkeypatch.setattr(cli, "_effective_current_target_coverage", drifted_coverage)
+    monkeypatch.setattr(cli, "_effective_current_target_coverage_for_cells", drifted_coverage)
 
     prompt = _ready_prompt(tmp_path, capsys)
 
@@ -501,6 +535,45 @@ def test_ready_keeps_stale_only_review_cells_reachable(
 
     assert prompt is not None
     _assert_skill_directed_short_prompt(prompt, "stale review cells need refreshed coverage")
+
+
+def test_run_snapshot_reuses_status_target_state_for_ready_prompt(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _init_commit_target_session(tmp_path, capsys)
+    _mark_finalize_ready(tmp_path)
+    calls = {"file_digests": 0, "target_digest": 0}
+    original_file_digests = cli.file_digests
+    original_target_digest = cli.target_digest
+
+    def counted_file_digests(root: Path) -> dict[str, str]:
+        calls["file_digests"] += 1
+        return original_file_digests(root)
+
+    def counted_target_digest(root: Path) -> str:
+        calls["target_digest"] += 1
+        return original_target_digest(root)
+
+    monkeypatch.setattr(cli, "file_digests", counted_file_digests)
+    monkeypatch.setattr(cli, "target_digest", counted_target_digest)
+    snapshot_readiness = cli.RunSnapshotReadinessProvider()
+    store = SessionStore(tmp_path)
+    controller = RunController(
+        root=tmp_path,
+        store=store,
+        config_path=None,
+        max_steps=1,
+        ready_prompt=snapshot_readiness.ready_prompt,
+        status_snapshot=snapshot_readiness.status_snapshot,
+        command_runner=lambda _config, _root, _state_dir, _prompt: SessionCommandResult(
+            argv=[], cwd=None, returncode=0, stdout="", stderr=""
+        ),
+    )
+
+    snapshot = controller.snapshot()
+
+    assert snapshot.session_id is not None
+    assert calls == {"file_digests": 1, "target_digest": 1}
 
 
 def test_status_reports_reviewed_current_cell_as_stale_after_digest_change(

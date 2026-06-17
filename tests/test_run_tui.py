@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast
@@ -8,6 +9,7 @@ from typing import Any, cast
 import pytest
 
 from review_gauntlet import run_tui
+from review_gauntlet.review_cells import CellState, ReviewCell
 from review_gauntlet.run_controller import (
     AgentLifecycle,
     AgentOutputEntry,
@@ -37,6 +39,13 @@ from review_gauntlet.run_tui import (
     textual_available,
 )
 from review_gauntlet.session_store import SessionStore
+
+
+def _open_fd_count() -> int:
+    for fd_dir in (Path("/proc/self/fd"), Path("/dev/fd")):
+        if fd_dir.exists():
+            return len(os.listdir(fd_dir))
+    pytest.skip("open file descriptor counting is unavailable on this platform")
 
 
 def _advance_flash_state(
@@ -1297,6 +1306,62 @@ def test_run_tui_source_defines_explicit_dark_dashboard_backgrounds() -> None:
     assert ".panel {" in source
     assert "#controls {" in source
     assert "background: $dashboard-surface-muted;" in source
+
+
+def test_run_controller_repeated_snapshots_do_not_accumulate_sqlite_fds(tmp_path: Path) -> None:
+    store = SessionStore(tmp_path)
+    store.create_session(
+        {
+            "session_id": "RGS-fd-smoke",
+            "root": str(tmp_path),
+            "target": {
+                "kind": "worktree",
+                "base_ref": None,
+                "head_ref": None,
+                "commit": None,
+                "head_mode": "moving",
+            },
+        },
+        (
+            ReviewCell(
+                id="cell-1",
+                file_path="README.md",
+                rule_id="docs-accuracy",
+                slice_id="docs",
+                state=CellState.PENDING,
+                content_digest="digest",
+            ),
+        ),
+    )
+
+    def status_snapshot(session_store: SessionStore, _root: Path) -> dict[str, object]:
+        session_id = session_store.active_session_id()
+        return {"coverage": {"pending": len(session_store.list_cells(session_id))}, "findings": {}}
+
+    def ready_prompt(session_store: SessionStore, _root: Path) -> str | None:
+        session_store.session_metadata(session_store.active_session_id())
+        return "ready prompt"
+
+    controller = RunController(
+        root=tmp_path,
+        store=store,
+        config_path=None,
+        max_steps=1,
+        ready_prompt=ready_prompt,
+        status_snapshot=status_snapshot,
+        command_runner=lambda _config, _root, _state_dir, _prompt: SessionCommandResult(
+            argv=[], cwd=None, returncode=0, stdout="", stderr=""
+        ),
+    )
+    before = _open_fd_count()
+    snapshot = controller.snapshot()
+
+    for _ in range(999):
+        snapshot = controller.snapshot()
+
+    after = _open_fd_count()
+    assert snapshot.next_ready_prompt == "ready prompt"
+    assert after <= before + 8
 
 
 def test_create_run_app_constructs_when_textual_available(tmp_path: Path) -> None:

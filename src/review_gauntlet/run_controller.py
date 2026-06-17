@@ -225,19 +225,22 @@ class RunController:
         else:
             try:
                 status = self._status_snapshot(self.store, self.root)
-            except OSError as exc:
+            except Exception as exc:
                 status = _status_unavailable_snapshot(exc)
                 ready = None
             else:
-                try:
-                    ready = self._ready_prompt(self.store, self.root)
-                except LookupError:
-                    session_id = None
-                    status = {"coverage": {}, "findings": {}}
-                    ready = None
-                except OSError as exc:
-                    ready = None
-                    status = _with_finalize_blocker(status, _readiness_unavailable_blocker(exc))
+                if "_next_ready_prompt" in status:
+                    ready = _string_or_none(status.get("_next_ready_prompt"))
+                else:
+                    try:
+                        ready = self._ready_prompt(self.store, self.root)
+                    except LookupError:
+                        session_id = None
+                        status = {"coverage": {}, "findings": {}}
+                        ready = None
+                    except Exception as exc:
+                        ready = None
+                        status = _with_finalize_blocker(status, _readiness_unavailable_blocker(exc))
         return RunSnapshot(
             session_id=session_id,
             coverage=_object_dict(status.get("coverage", {})),
@@ -524,19 +527,27 @@ class RunController:
             return None
 
 
-def _status_unavailable_snapshot(error: OSError) -> dict[str, object]:
-    blocker = subprocess_startup_failure_blocker("git status checks", ("git", "status"), error)
+def _status_unavailable_snapshot(error: Exception) -> dict[str, object]:
     return {
         "coverage": {},
         "findings": {},
         "can_finalize": False,
-        "finalize_blockers": (blocker,),
+        "finalize_blockers": (_snapshot_unavailable_blocker("status snapshot", error),),
         "next_required_action": "resolve_finalize_blockers",
     }
 
 
-def _readiness_unavailable_blocker(error: OSError) -> str:
-    return subprocess_startup_failure_blocker("git status checks", ("git", "status"), error)
+def _readiness_unavailable_blocker(error: Exception) -> str:
+    return _snapshot_unavailable_blocker("ready prompt", error)
+
+
+def _snapshot_unavailable_blocker(operation: str, error: Exception) -> str:
+    if isinstance(error, OSError):
+        return subprocess_startup_failure_blocker("git status checks", ("git", "status"), error)
+    return (
+        f"{operation} unavailable: {error.__class__.__name__}: {error}; "
+        "next_action=retry_after_resolving_runtime_error"
+    )
 
 
 def _with_finalize_blocker(status: dict[str, object], blocker: str) -> dict[str, object]:

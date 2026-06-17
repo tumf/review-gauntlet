@@ -1355,20 +1355,47 @@ class _ReadyFinding:
     imprecise: bool
 
 
+@dataclass(frozen=True)
+class _StatusContext:
+    root: Path
+    session_id: str
+    finding_counts: dict[str, int]
+    run_count: int
+    current_cells: dict[str, ReviewCell]
+    effective_cell_counts: dict[str, int]
+    finalize_reasons: list[str]
+
+
+class RunSnapshotReadinessProvider:
+    def __init__(self) -> None:
+        self._status_context: _StatusContext | None = None
+
+    def status_snapshot(self, store: SessionStore, root: Path) -> dict[str, object]:
+        self._status_context = None
+        context = _build_status_context(store, root)
+        self._status_context = context
+        return _status_from_context(context)
+
+    def ready_prompt(self, store: SessionStore, root: Path) -> str | None:
+        try:
+            session_id = store.active_session_id()
+        except LookupError:
+            self._status_context = None
+            raise
+        context = self._status_context
+        self._status_context = None
+        if context is None or context.root != root or context.session_id != session_id:
+            context = _build_status_context(store, root)
+        return _ready_prompt_from_context(store, context)
+
+
 def _ready_prompt(store: SessionStore, root: Path) -> str | None:
-    session_id = store.active_session_id()
-    with store.connect() as conn:
-        finding_counts = dict(
-            conn.execute(
-                "select state, count(*) as count from findings where session_id = ? group by state",
-                (session_id,),
-            ).fetchall()
-        )
-    effective_cell_counts = _effective_current_target_coverage(store, session_id, root)
-    finalize_reasons = _finalize_reasons(
-        effective_cell_counts, finding_counts, store, session_id, root, allow_non_review_dirty=False
-    )
-    review_cells = _ready_review_cells(store, session_id, root)
+    return _ready_prompt_from_context(store, _build_status_context(store, root))
+
+
+def _ready_prompt_from_context(store: SessionStore, context: _StatusContext) -> str | None:
+    session_id = context.session_id
+    review_cells = _ready_review_cells(store, session_id, context.current_cells)
     review_cells_by_state = _ready_review_cells_by_state(review_cells)
     findings = _ready_findings(store, session_id)
     if review_cells_by_state.get(CellState.PENDING.value, ()):
@@ -1390,7 +1417,9 @@ def _ready_prompt(store: SessionStore, root: Path) -> str | None:
             findings=findings,
             state=CellState.STALE,
         )
-    if not finalize_reasons or _finalize_blockers_are_commit_resolvable(finalize_reasons):
+    if not context.finalize_reasons or _finalize_blockers_are_commit_resolvable(
+        context.finalize_reasons
+    ):
         return _FINALIZE_READY_PROMPT
     return None
 
@@ -1536,14 +1565,8 @@ def _line_range_text(finding: _ReadyFinding) -> str:
 
 
 def _ready_review_cells(
-    store: SessionStore, session_id: str, root: Path
+    store: SessionStore, session_id: str, current_cells: dict[str, ReviewCell]
 ) -> tuple[_ReadyReviewCell, ...]:
-    metadata = store.session_metadata(session_id)
-    target = TargetSpec.model_validate(metadata["target"])
-    current_cells = {
-        cell.id: cell
-        for cell in cells_from_plan(_build_target_plan(root, target), file_digests(root))
-    }
     fixed_pending_paths = store.fixed_pending_paths(session_id)
     rows = {str(row["cell_id"]): row for row in store.list_cells(session_id)}
     ready_cells: list[_ReadyReviewCell] = []
@@ -1636,15 +1659,20 @@ def _git_status_unavailable_blocker(error: OSError, argv: tuple[str, ...]) -> st
     return subprocess_startup_failure_blocker(_GIT_STATUS_CHECKS_UNAVAILABLE, argv, error)
 
 
-def _effective_current_target_coverage(
+def _current_target_cells(
     store: SessionStore, session_id: str, root: Path
-) -> dict[str, int]:
+) -> dict[str, ReviewCell]:
     metadata = store.session_metadata(session_id)
     target = TargetSpec.model_validate(metadata["target"])
-    current_cells = {
+    return {
         cell.id: cell
         for cell in cells_from_plan(_build_target_plan(root, target), file_digests(root))
     }
+
+
+def _effective_current_target_coverage_for_cells(
+    store: SessionStore, session_id: str, current_cells: dict[str, ReviewCell]
+) -> dict[str, int]:
     fixed_pending_paths = store.fixed_pending_paths(session_id)
     persisted_cells = {str(row["cell_id"]): row for row in store.list_cells(session_id)}
     counts: dict[str, int] = {}
@@ -1751,13 +1779,14 @@ def _cmd_run(args: argparse.Namespace, root: Path, store: SessionStore) -> dict[
             output_progress=controller.agent_output_progress,
         )
 
+    snapshot_readiness = RunSnapshotReadinessProvider()
     controller = RunController(
         root=root,
         store=store,
         config_path=args.config,
         max_steps=int(args.max_steps),
-        ready_prompt=_ready_prompt,
-        status_snapshot=lambda session_store, repo_root: _status(session_store, repo_root),
+        ready_prompt=snapshot_readiness.ready_prompt,
+        status_snapshot=snapshot_readiness.status_snapshot,
         command_runner=command_runner,
         event_sink=compose_event_sinks(hook_event_sink),
     )
@@ -2117,6 +2146,17 @@ def _status(
     *,
     allow_non_review_dirty: bool = False,
 ) -> dict[str, object]:
+    return _status_from_context(
+        _build_status_context(store, root, allow_non_review_dirty=allow_non_review_dirty)
+    )
+
+
+def _build_status_context(
+    store: SessionStore,
+    root: Path,
+    *,
+    allow_non_review_dirty: bool = False,
+) -> _StatusContext:
     session_id = store.active_session_id()
     with store.connect() as conn:
         finding_counts = dict(
@@ -2128,19 +2168,36 @@ def _status(
         run_count = conn.execute(
             "select count(*) as count from runs where session_id = ?", (session_id,)
         ).fetchone()["count"]
-    effective_cell_counts = _effective_current_target_coverage(store, session_id, root)
+    current_cells = _current_target_cells(store, session_id, root)
+    effective_cell_counts = _effective_current_target_coverage_for_cells(
+        store, session_id, current_cells
+    )
     reasons = _finalize_reasons(
         effective_cell_counts, finding_counts, store, session_id, root, allow_non_review_dirty
     )
+    return _StatusContext(
+        root=root,
+        session_id=session_id,
+        finding_counts=finding_counts,
+        run_count=int(run_count),
+        current_cells=current_cells,
+        effective_cell_counts=effective_cell_counts,
+        finalize_reasons=reasons,
+    )
+
+
+def _status_from_context(context: _StatusContext) -> dict[str, object]:
     return {
-        "session_id": session_id,
+        "session_id": context.session_id,
         "session_state": "active",
-        "coverage": effective_cell_counts,
-        "finding_state_counts": finding_counts,
-        "run_count": int(run_count),
-        "can_finalize": not reasons,
-        "finalize_blockers": reasons,
-        "next_required_action": _next_action(effective_cell_counts, finding_counts, reasons),
+        "coverage": context.effective_cell_counts,
+        "finding_state_counts": context.finding_counts,
+        "run_count": context.run_count,
+        "can_finalize": not context.finalize_reasons,
+        "finalize_blockers": context.finalize_reasons,
+        "next_required_action": _next_action(
+            context.effective_cell_counts, context.finding_counts, context.finalize_reasons
+        ),
     }
 
 

@@ -1,4 +1,5 @@
 import json
+import os
 import sqlite3
 from pathlib import Path
 
@@ -6,6 +7,24 @@ import pytest
 
 from review_gauntlet.review_cells import CellState, ReviewCell
 from review_gauntlet.session_store import SessionStore
+
+
+def _open_fd_count() -> int:
+    for fd_dir in (Path("/proc/self/fd"), Path("/dev/fd")):
+        if fd_dir.exists():
+            return len(os.listdir(fd_dir))
+    pytest.skip("open file descriptor counting is unavailable on this platform")
+
+
+def test_session_store_connect_closes_connection_after_context_exit(tmp_path: Path) -> None:
+    store = SessionStore(tmp_path)
+    store.initialize()
+
+    with store.connect() as conn:
+        conn.execute("select 1")
+
+    with pytest.raises(sqlite3.ProgrammingError, match="closed"):
+        conn.execute("select 1")
 
 
 def test_session_store_creates_ledger_inside_tmp_path(tmp_path: Path) -> None:
@@ -21,6 +40,32 @@ def test_session_store_creates_ledger_inside_tmp_path(tmp_path: Path) -> None:
     with sqlite3.connect(store.ledger_path) as conn:
         assert conn.execute("select count(*) from sessions").fetchone()[0] == 1
         assert conn.execute("select count(*) from review_cells").fetchone()[0] == 1
+
+
+def test_session_store_connect_closes_connection_after_context(tmp_path: Path) -> None:
+    store = SessionStore(tmp_path)
+    store.initialize()
+
+    with store.connect() as conn:
+        assert conn.execute("select count(*) from sessions").fetchone()[0] == 0
+
+    with pytest.raises(sqlite3.ProgrammingError, match="closed"):
+        conn.execute("select 1")
+
+
+def test_session_store_repeated_connect_does_not_accumulate_file_descriptors(
+    tmp_path: Path,
+) -> None:
+    store = SessionStore(tmp_path)
+    store.initialize()
+    before = _open_fd_count()
+
+    for _ in range(1_000):
+        with store.connect() as conn:
+            conn.execute("select count(*) from sessions").fetchone()
+
+    after = _open_fd_count()
+    assert after - before <= 8
 
 
 def test_session_store_cancel_active_session_updates_ledger_before_removing_marker(
