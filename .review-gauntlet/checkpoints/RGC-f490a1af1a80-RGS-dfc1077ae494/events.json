@@ -1,0 +1,206 @@
+{
+  "checkpoint_id": "RGC-f490a1af1a80-RGS-dfc1077ae494",
+  "events": [
+    {
+      "checkpoint_id": "RGC-f490a1af1a80-RGS-dfc1077ae494",
+      "created_at": "2026-06-17 02:25:52",
+      "event_id": 1247,
+      "finding_id": "RGF-0704",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Renamed shadowed seconds variable to secs in format_elapsed_time divmod result",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-f490a1af1a80-RGS-dfc1077ae494",
+      "created_at": "2026-06-17 02:25:53",
+      "event_id": 1248,
+      "finding_id": "RGF-0708",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Duplicate of RGF-0704 \u2014 same seconds shadowing fix applied (renamed to secs)",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-f490a1af1a80-RGS-dfc1077ae494",
+      "created_at": "2026-06-17 02:25:55",
+      "event_id": 1249,
+      "finding_id": "RGF-0706",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Added early truncation (limit*4) before secret-redaction regex to bound processing cost",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-f490a1af1a80-RGS-dfc1077ae494",
+      "created_at": "2026-06-17 02:25:56",
+      "event_id": 1250,
+      "finding_id": "RGF-0707",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Split _plain_text into bracket-escaping-free base and _rich_safe_text for Rich contexts",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-f490a1af1a80-RGS-dfc1077ae494",
+      "created_at": "2026-06-17 02:25:57",
+      "event_id": 1251,
+      "finding_id": "RGF-0705",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Added str-to-int conversion path in _count_value for JSON string-encoded integers",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-f490a1af1a80-RGS-dfc1077ae494",
+      "created_at": "2026-06-17 02:26:01",
+      "event_id": 1252,
+      "finding_id": "RGF-0709",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "session_header is intentionally styled via #session_header CSS selector, not .panel class \u2014 the different set_class behavior is by design",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-f490a1af1a80-RGS-dfc1077ae494",
+      "created_at": "2026-06-17 02:28:00",
+      "event_id": 1253,
+      "finding_id": "RGF-0707",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-f490a1af1a80-RGS-dfc1077ae494",
+      "created_at": "2026-06-17 02:28:00",
+      "event_id": 1254,
+      "finding_id": "RGF-0708",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-f490a1af1a80-RGS-dfc1077ae494",
+      "created_at": "2026-06-17 02:28:00",
+      "event_id": 1255,
+      "finding_id": "RGF-0705",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-f490a1af1a80-RGS-dfc1077ae494",
+      "created_at": "2026-06-17 02:28:00",
+      "event_id": 1256,
+      "finding_id": "RGF-0706",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-f490a1af1a80-RGS-dfc1077ae494",
+      "created_at": "2026-06-17 02:28:00",
+      "event_id": 1257,
+      "finding_id": "RGF-0704",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-f490a1af1a80-RGS-dfc1077ae494",
+      "created_at": "2026-06-17 02:28:46",
+      "event_id": 1258,
+      "finding_id": "RGF-0714",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Textual framework convention uses id= as widget parameter name \u2014 shadowing builtin id is standard practice",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-f490a1af1a80-RGS-dfc1077ae494",
+      "created_at": "2026-06-17 02:28:47",
+      "event_id": 1259,
+      "finding_id": "RGF-0713",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Secrets beyond limit*4 are truncated by _summarize_text(limit) and never appear in output \u2014 no leak possible",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-f490a1af1a80-RGS-dfc1077ae494",
+      "created_at": "2026-06-17 02:28:47",
+      "event_id": 1260,
+      "finding_id": "RGF-0712",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Dead code marked with pyright reportUnusedFunction suppression \u2014 positional args in unused function are not actionable",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-f490a1af1a80-RGS-dfc1077ae494",
+      "created_at": "2026-06-17 02:28:47",
+      "event_id": 1261,
+      "finding_id": "RGF-0711",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Changed .get('prompt', '') to .get('prompt') or '' to handle explicit None values",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-f490a1af1a80-RGS-dfc1077ae494",
+      "created_at": "2026-06-17 02:28:47",
+      "event_id": 1262,
+      "finding_id": "RGF-0710",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Changed .get('reason', 'command failed') to .get('reason') or 'command failed' to handle explicit None values",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-f490a1af1a80-RGS-dfc1077ae494",
+      "created_at": "2026-06-17 02:30:51",
+      "event_id": 1263,
+      "finding_id": "RGF-0711",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-f490a1af1a80-RGS-dfc1077ae494",
+      "created_at": "2026-06-17 02:30:51",
+      "event_id": 1264,
+      "finding_id": "RGF-0710",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-f490a1af1a80-RGS-dfc1077ae494",
+      "created_at": "2026-06-17 02:32:22",
+      "event_id": 1265,
+      "finding_id": "RGF-0715",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "_NEXT_ACTION_GATE_INDEX values are 1-6 and derive_finalize_gates always returns exactly 6 gates, so gates[mapped_index-1] is always in bounds. Both are co-maintained in the same file.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-f490a1af1a80-RGS-dfc1077ae494",
+      "created_at": "2026-06-17 02:32:22",
+      "event_id": 1266,
+      "finding_id": "RGF-0716",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "In valid ISO 8601 timestamps, Z only appears as the timezone suffix. The date/time portion uses digits, hyphens, colons, and dots only. Even if input were malformed, the subsequent fromisoformat() call would raise ValueError caught by the except clause.",
+      "to_state": "false_positive"
+    }
+  ],
+  "schema_version": 1
+}

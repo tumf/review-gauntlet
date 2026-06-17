@@ -1,0 +1,279 @@
+{
+  "checkpoint_id": "RGC-f490a1af1a80-RGS-dfc1077ae494",
+  "findings": [
+    {
+      "checkpoint_id": "RGC-f490a1af1a80-RGS-dfc1077ae494",
+      "content": "Variable `seconds` (the function parameter) is shadowed by the `seconds` variable from `divmod(remainder, 60)`. While currently not a bug because `total_seconds` is already derived, any future maintenance that references `seconds` after line 425 will silently use the divmod remainder (an int) instead of the original float parameter. Rename the divmod output to avoid confusion.",
+      "finding_id": "RGF-0704",
+      "fingerprint": "c37f48aad5c4d1fd1de1c54771aa5811d99d466226132165226fd06183d52bed",
+      "latest_occurrence": {
+        "cell_id": "RGC-8610c7a6f661b70a",
+        "end_line": 428,
+        "finding_id": "RGF-0704",
+        "imprecise": 0,
+        "occurrence_id": 704,
+        "path": "src/review_gauntlet/run_tui.py",
+        "run_id": 235,
+        "start_line": 424
+      },
+      "metadata": "{\"fingerprint\":\"c37f48aad5c4d1fd1de1c54771aa5811d99d466226132165226fd06183d52bed\",\"path\":\"src/review_gauntlet/run_tui.py\",\"rule_id\":\"data-validation\",\"content\":\"Variable `seconds` (the function parameter) is shadowed by the `seconds` variable from `divmod(remainder, 60)`. While currently not a bug because `total_seconds` is already derived, any future maintenance that references `seconds` after line 425 will silently use the divmod remainder (an int) instead of the original float parameter. Rename the divmod output to avoid confusion.\",\"suggestion_code\":\"    hours, remainder = divmod(total_seconds, 3600)\\n    minutes, secs = divmod(remainder, 60)\\n    if hours:\\n        return f\\\"{hours:d}:{minutes:02d}:{secs:02d}\\\"\\n    return f\\\"{minutes:02d}:{secs:02d}\\\"\",\"existing_code\":\"    hours, remainder = divmod(total_seconds, 3600)\\n    minutes, seconds = divmod(remainder, 60)\",\"start_line\":424,\"end_line\":428,\"thinking\":\"The parameter `seconds: float` is shadowed by the loop variable `seconds` from `divmod(remainder, 60)` on line 425. Python allows this silently. The original float is no longer accessible after line 425. This is fragile for future edits.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_tui.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-dfc1077ae494",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-f490a1af1a80-RGS-dfc1077ae494",
+      "content": "`_count_value` silently returns 0 for string-encoded integers (e.g. `\"3\"`), which is a common representation in JSON-derived data. If `coverage` or `findings` dictionaries ever contain string values from a JSON source that doesn't coerce types, all counts will silently read as zero, producing a dashboard that looks idle when work is actually tracked. Consider adding a `str` \u2192 `int` conversion path.",
+      "finding_id": "RGF-0705",
+      "fingerprint": "8579ddf3cccd7abee24fd9e65477795f1d166ce0c435984c96ace8769cd756ab",
+      "latest_occurrence": {
+        "cell_id": "RGC-8610c7a6f661b70a",
+        "end_line": 1324,
+        "finding_id": "RGF-0705",
+        "imprecise": 0,
+        "occurrence_id": 705,
+        "path": "src/review_gauntlet/run_tui.py",
+        "run_id": 235,
+        "start_line": 1315
+      },
+      "metadata": "{\"fingerprint\":\"8579ddf3cccd7abee24fd9e65477795f1d166ce0c435984c96ace8769cd756ab\",\"path\":\"src/review_gauntlet/run_tui.py\",\"rule_id\":\"data-validation\",\"content\":\"`_count_value` silently returns 0 for string-encoded integers (e.g. `\\\"3\\\"`), which is a common representation in JSON-derived data. If `coverage` or `findings` dictionaries ever contain string values from a JSON source that doesn't coerce types, all counts will silently read as zero, producing a dashboard that looks idle when work is actually tracked. Consider adding a `str` \u2192 `int` conversion path.\",\"suggestion_code\":\"def _count_value(value: object) -> int:\\n    if isinstance(value, bool):\\n        return 0\\n    if isinstance(value, int):\\n        return max(0, value)\\n    if isinstance(value, float) and not value.is_integer():\\n        return 0\\n    if isinstance(value, float):\\n        return max(0, int(value))\\n    if isinstance(value, str):\\n        try:\\n            return max(0, int(value))\\n        except (ValueError, OverflowError):\\n            return 0\\n    return 0\",\"existing_code\":\"def _count_value(value: object) -> int:\\n    if isinstance(value, bool):\\n        return 0\\n    if isinstance(value, int):\\n        return max(0, value)\\n    if isinstance(value, float) and not value.is_integer():\\n        return 0\\n    if isinstance(value, float):\\n        return max(0, int(value))\\n    return 0\",\"start_line\":1315,\"end_line\":1324,\"thinking\":\"This function is the sole gatekeeper for numeric values from coverage and findings dicts. JSON payloads sometimes encode integers as strings. The current code returns 0 for any string, meaning string-encoded counts are silently dropped. This is a data-validation gap that could mask real review progress.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_tui.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-dfc1077ae494",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-f490a1af1a80-RGS-dfc1077ae494",
+      "content": "`sanitize_agent_output_line` applies three regex substitutions on the full (potentially unbounded) input string before truncating via `_summarize_text` at the end. For very long agent output lines, this does unnecessary work. Truncate early \u2014 before applying the secret-redaction regexes \u2014 to bound the cost and avoid processing data that will be discarded anyway. Use a generous early limit (e.g., 2\u00d7 `limit`) to avoid cutting a secret token in half before redaction can match it.",
+      "finding_id": "RGF-0706",
+      "fingerprint": "8650926d27a2ac7b8157ab0e0ff8ec69d59acc21602507a615279293c19c62c6",
+      "latest_occurrence": {
+        "cell_id": "RGC-8610c7a6f661b70a",
+        "end_line": 1203,
+        "finding_id": "RGF-0706",
+        "imprecise": 0,
+        "occurrence_id": 706,
+        "path": "src/review_gauntlet/run_tui.py",
+        "run_id": 235,
+        "start_line": 1192
+      },
+      "metadata": "{\"fingerprint\":\"8650926d27a2ac7b8157ab0e0ff8ec69d59acc21602507a615279293c19c62c6\",\"path\":\"src/review_gauntlet/run_tui.py\",\"rule_id\":\"data-validation\",\"content\":\"`sanitize_agent_output_line` applies three regex substitutions on the full (potentially unbounded) input string before truncating via `_summarize_text` at the end. For very long agent output lines, this does unnecessary work. Truncate early \u2014 before applying the secret-redaction regexes \u2014 to bound the cost and avoid processing data that will be discarded anyway. Use a generous early limit (e.g., 2\u00d7 `limit`) to avoid cutting a secret token in half before redaction can match it.\",\"suggestion_code\":\"def sanitize_agent_output_line(value: object, *, limit: int = 120) -> str:\\n    text = re.sub(r\\\"\\\\x1b\\\\[[0-?]*[ -/]*[@-~]\\\", \\\"\\\", str(value))\\n    text = text.replace(\\\"\\\\r\\\", \\\"\\\\n\\\")\\n    text = \\\" \\\".join(_plain_text(text).split())\\n    text = text[: limit * 4]\\n    secret_patterns = (\\n        r\\\"\\\\b[A-Z0-9_]*(?:TOKEN|SECRET|KEY|PASSWORD)=\\\\S+\\\",\\n        r\\\"\\\\b(?:authorization|x-api-key)\\\\s*:\\\\s*\\\\S+(?:\\\\s+\\\\S+)?\\\",\\n        r\\\"[\\\\\\\"']?\\\\b(?:api[_-]?key|token|secret|password)\\\\b[\\\\\\\"']?\\\\s*[:=]\\\\s*[\\\\\\\"']?\\\\S+[\\\\\\\"']?\\\",\\n    )\\n    for pattern in secret_patterns:\\n        text = re.sub(pattern, \\\"<redacted>\\\", text, flags=re.IGNORECASE)\\n    return _summarize_text(text, limit=limit)\",\"existing_code\":\"def sanitize_agent_output_line(value: object, *, limit: int = 120) -> str:\\n    text = re.sub(r\\\"\\\\x1b\\\\[[0-?]*[ -/]*[@-~]\\\", \\\"\\\", str(value))\\n    text = text.replace(\\\"\\\\r\\\", \\\"\\\\n\\\")\\n    text = \\\" \\\".join(_plain_text(text).split())\\n    secret_patterns = (\\n        r\\\"\\\\b[A-Z0-9_]*(?:TOKEN|SECRET|KEY|PASSWORD)=\\\\S+\\\",\\n        r\\\"\\\\b(?:authorization|x-api-key)\\\\s*:\\\\s*\\\\S+(?:\\\\s+\\\\S+)?\\\",\\n        r\\\"[\\\\\\\"']?\\\\b(?:api[_-]?key|token|secret|password)\\\\b[\\\\\\\"']?\\\\s*[:=]\\\\s*[\\\\\\\"']?\\\\S+[\\\\\\\"']?\\\",\\n    )\\n    for pattern in secret_patterns:\\n        text = re.sub(pattern, \\\"<redacted>\\\", text, flags=re.IGNORECASE)\\n    return _summarize_text(text, limit=limit)\",\"start_line\":1192,\"end_line\":1203,\"thinking\":\"Agent output can be arbitrarily long. The function runs ANSI stripping, character-by-character sanitization via _plain_text, whitespace normalization, and three regex substitutions on the entire string before truncating. An early coarse truncation before the expensive operations bounds the cost without affecting correctness \u2014 a 4x margin ensures secrets that span the display boundary are still caught and redacted.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_tui.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-dfc1077ae494",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-f490a1af1a80-RGS-dfc1077ae494",
+      "content": "Rich markup escaping leaks into plain-text output. `_plain_text` unconditionally replaces `[` with `\\[` (a Rich-specific escape), but this function is also called from plain-text rendering paths (e.g., `_summarize_text`, `sanitize_agent_output_line`, `short_session_id`, `terminal_state`). In non-Rich contexts, users will see literal `\\[` instead of `[` in any text that contains square brackets.",
+      "finding_id": "RGF-0707",
+      "fingerprint": "152c0e6a832cba9dfd43c8ed67570476b348d635fa52500cd39929f0ab08d71f",
+      "latest_occurrence": {
+        "cell_id": "RGC-c1ad423b70f325a0",
+        "end_line": 1282,
+        "finding_id": "RGF-0707",
+        "imprecise": 0,
+        "occurrence_id": 707,
+        "path": "src/review_gauntlet/run_tui.py",
+        "run_id": 235,
+        "start_line": 1282
+      },
+      "metadata": "{\"fingerprint\":\"152c0e6a832cba9dfd43c8ed67570476b348d635fa52500cd39929f0ab08d71f\",\"path\":\"src/review_gauntlet/run_tui.py\",\"rule_id\":\"test-evidence\",\"content\":\"Rich markup escaping leaks into plain-text output. `_plain_text` unconditionally replaces `[` with `\\\\[` (a Rich-specific escape), but this function is also called from plain-text rendering paths (e.g., `_summarize_text`, `sanitize_agent_output_line`, `short_session_id`, `terminal_state`). In non-Rich contexts, users will see literal `\\\\[` instead of `[` in any text that contains square brackets.\",\"suggestion_code\":\"    return \\\"\\\".join(_plain_character(character) for character in str(value))\",\"existing_code\":\"    return \\\"\\\"join(_plain_character(character) for character in str(value)).replace(\\\"[\\\", r\\\"\\\\[\\\")\",\"start_line\":1282,\"end_line\":1282,\"thinking\":\"The _plain_text function is used in both Rich (TUI) and plain-text rendering paths. The Rich-specific bracket escaping should be applied only when rendering for Rich, not universally. Consider splitting into two functions or adding a parameter to control escaping.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_tui.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-dfc1077ae494",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-f490a1af1a80-RGS-dfc1077ae494",
+      "content": "Variable shadowing: the `seconds` parameter of `format_elapsed_time` is overwritten by `minutes, seconds = divmod(remainder, 60)` on line 425. While this doesn't cause a runtime bug because `total_seconds` already captured the sanitized value, it silently rebinds the parameter to an `int`, which would mask bugs if future edits reference `seconds` expecting the original `float` argument.",
+      "finding_id": "RGF-0708",
+      "fingerprint": "69e9cc38e3fc639a44ff3142225f1cc5afa63bbf89997edb810c98c399a02954",
+      "latest_occurrence": {
+        "cell_id": "RGC-c1ad423b70f325a0",
+        "end_line": 425,
+        "finding_id": "RGF-0708",
+        "imprecise": 0,
+        "occurrence_id": 708,
+        "path": "src/review_gauntlet/run_tui.py",
+        "run_id": 235,
+        "start_line": 425
+      },
+      "metadata": "{\"fingerprint\":\"69e9cc38e3fc639a44ff3142225f1cc5afa63bbf89997edb810c98c399a02954\",\"path\":\"src/review_gauntlet/run_tui.py\",\"rule_id\":\"test-evidence\",\"content\":\"Variable shadowing: the `seconds` parameter of `format_elapsed_time` is overwritten by `minutes, seconds = divmod(remainder, 60)` on line 425. While this doesn't cause a runtime bug because `total_seconds` already captured the sanitized value, it silently rebinds the parameter to an `int`, which would mask bugs if future edits reference `seconds` expecting the original `float` argument.\",\"suggestion_code\":\"    minutes, secs = divmod(remainder, 60)\",\"existing_code\":\"    minutes, seconds = divmod(remainder, 60)\",\"start_line\":425,\"end_line\":425,\"thinking\":\"The function parameter is named `seconds` (float), and the divmod result rebinds that name to an int. Using a different name like `secs` avoids the shadowing.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_tui.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-dfc1077ae494",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-f490a1af1a80-RGS-dfc1077ae494",
+      "content": "In `refresh_view`, the `session_header` widget never gets the base `\"panel\"` CSS class toggled, unlike the other panel widgets. Line 216 sets `session_header.set_class(state_class == view.state_class, state_class)` for all state classes, but skips `enabled` (which includes the `\"panel\"` base class). If a CSS rule targets `.panel` on the session header, it will never be applied.",
+      "finding_id": "RGF-0709",
+      "fingerprint": "5d2cbfc5532d872952ce308e53c681bd6338346945d097ef814f077c5943d80a",
+      "latest_occurrence": {
+        "cell_id": "RGC-c1ad423b70f325a0",
+        "end_line": 220,
+        "finding_id": "RGF-0709",
+        "imprecise": 0,
+        "occurrence_id": 709,
+        "path": "src/review_gauntlet/run_tui.py",
+        "run_id": 235,
+        "start_line": 216
+      },
+      "metadata": "{\"fingerprint\":\"5d2cbfc5532d872952ce308e53c681bd6338346945d097ef814f077c5943d80a\",\"path\":\"src/review_gauntlet/run_tui.py\",\"rule_id\":\"test-evidence\",\"content\":\"In `refresh_view`, the `session_header` widget never gets the base `\\\"panel\\\"` CSS class toggled, unlike the other panel widgets. Line 216 sets `session_header.set_class(state_class == view.state_class, state_class)` for all state classes, but skips `enabled` (which includes the `\\\"panel\\\"` base class). If a CSS rule targets `.panel` on the session header, it will never be applied.\",\"suggestion_code\":\"                enabled = state_class == \\\"panel\\\" or state_class == view.state_class\\n                session_header.set_class(enabled if state_class == \\\"panel\\\" else state_class == view.state_class, state_class)\\n                finalize_path_panel.set_class(enabled, state_class)\\n                agent_panel_container.set_class(enabled, state_class)\\n                session_panel_container.set_class(enabled, state_class)\",\"existing_code\":\"                enabled = state_class == \\\"panel\\\" or state_class == view.state_class\\n                session_header.set_class(state_class == view.state_class, state_class)\\n                finalize_path_panel.set_class(enabled, state_class)\\n                agent_panel_container.set_class(enabled, state_class)\\n                session_panel_container.set_class(enabled, state_class)\",\"start_line\":216,\"end_line\":220,\"thinking\":\"session_header uses a different condition than the other panels for set_class. The intent for session_header is to only toggle the dynamic state classes (panel-active, panel-blocked, etc.) and not the base 'panel' class. This might be intentional since session_header uses its own #session_header CSS id, but it's inconsistent with how the other containers are handled and the 'enabled' variable computed on the same line is unused for session_header.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_tui.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-dfc1077ae494",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-f490a1af1a80-RGS-dfc1077ae494",
+      "content": "`payload.get(\"reason\", \"command failed\")` only returns the default when the key is missing, not when it is explicitly `None`. If the payload contains `{\"reason\": None}`, `_summarize_text(None, ...)` renders as the string `\"None\"` via `str(None)` instead of the intended fallback. Use `event.payload.get(\"reason\") or \"command failed\"` to cover both cases.",
+      "finding_id": "RGF-0710",
+      "fingerprint": "ea31c863b64c1d8b49e34bd4d53ce02961db2276c8643a55c9e491da8d72c0c7",
+      "latest_occurrence": {
+        "cell_id": "RGC-8610c7a6f661b70a",
+        "end_line": 1269,
+        "finding_id": "RGF-0710",
+        "imprecise": 0,
+        "occurrence_id": 710,
+        "path": "src/review_gauntlet/run_tui.py",
+        "run_id": 236,
+        "start_line": 1269
+      },
+      "metadata": "{\"fingerprint\":\"ea31c863b64c1d8b49e34bd4d53ce02961db2276c8643a55c9e491da8d72c0c7\",\"path\":\"src/review_gauntlet/run_tui.py\",\"rule_id\":\"data-validation\",\"content\":\"`payload.get(\\\"reason\\\", \\\"command failed\\\")` only returns the default when the key is missing, not when it is explicitly `None`. If the payload contains `{\\\"reason\\\": None}`, `_summarize_text(None, ...)` renders as the string `\\\"None\\\"` via `str(None)` instead of the intended fallback. Use `event.payload.get(\\\"reason\\\") or \\\"command failed\\\"` to cover both cases.\",\"suggestion_code\":\"        return _summarize_text(event.payload.get(\\\"reason\\\") or \\\"command failed\\\", limit=64)\",\"existing_code\":\"        return _summarize_text(event.payload.get(\\\"reason\\\", \\\"command failed\\\"), limit=64)\",\"start_line\":1269,\"end_line\":1269,\"thinking\":\"event.payload is typed as dict[str, object], so values can be None. The .get() default only triggers on missing keys, not on None values. This would cause the TUI to display the literal string 'None' for a failed event whose reason is explicitly set to None in the payload.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_tui.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-dfc1077ae494",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-f490a1af1a80-RGS-dfc1077ae494",
+      "content": "Same `None`-value issue: if `payload[\"prompt\"]` is explicitly `None`, `str(None)` produces `\"None\"`, which `format_task_title` would fail to match any mapping and display as `\"READY TASK None\"`. Use `event.payload.get(\"prompt\") or \"\"` for safe fallback.",
+      "finding_id": "RGF-0711",
+      "fingerprint": "b6e62b1de4bc91963f02a09ac6eaaa2b625a9b0ea17d5117699b5e538ae67a38",
+      "latest_occurrence": {
+        "cell_id": "RGC-8610c7a6f661b70a",
+        "end_line": 1264,
+        "finding_id": "RGF-0711",
+        "imprecise": 0,
+        "occurrence_id": 711,
+        "path": "src/review_gauntlet/run_tui.py",
+        "run_id": 236,
+        "start_line": 1264
+      },
+      "metadata": "{\"fingerprint\":\"b6e62b1de4bc91963f02a09ac6eaaa2b625a9b0ea17d5117699b5e538ae67a38\",\"path\":\"src/review_gauntlet/run_tui.py\",\"rule_id\":\"data-validation\",\"content\":\"Same `None`-value issue: if `payload[\\\"prompt\\\"]` is explicitly `None`, `str(None)` produces `\\\"None\\\"`, which `format_task_title` would fail to match any mapping and display as `\\\"READY TASK None\\\"`. Use `event.payload.get(\\\"prompt\\\") or \\\"\\\"` for safe fallback.\",\"suggestion_code\":\"        return format_task_title(str(event.payload.get(\\\"prompt\\\") or \\\"\\\")).title\",\"existing_code\":\"        return format_task_title(str(event.payload.get(\\\"prompt\\\", \\\"\\\"))).title\",\"start_line\":1264,\"end_line\":1264,\"thinking\":\"event.payload values may be None even when the key exists. The default empty string in .get() only applies when the key is absent. str(None) produces 'None' which would be displayed as an unexpected task title.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_tui.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-dfc1077ae494",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-f490a1af1a80-RGS-dfc1077ae494",
+      "content": "The positional-arg construction of `RunSnapshot` is fragile. If the dataclass fields are reordered or a field is inserted, this call silently passes the wrong values to the wrong parameters with no type error. Use keyword arguments.",
+      "finding_id": "RGF-0712",
+      "fingerprint": "f6203df1cc4c6e1c44676f6beb346dd75ea665828a5d5589aafea3cdaa282271",
+      "latest_occurrence": {
+        "cell_id": "RGC-c1ad423b70f325a0",
+        "end_line": 1227,
+        "finding_id": "RGF-0712",
+        "imprecise": 0,
+        "occurrence_id": 712,
+        "path": "src/review_gauntlet/run_tui.py",
+        "run_id": 236,
+        "start_line": 1227
+      },
+      "metadata": "{\"fingerprint\":\"f6203df1cc4c6e1c44676f6beb346dd75ea665828a5d5589aafea3cdaa282271\",\"path\":\"src/review_gauntlet/run_tui.py\",\"rule_id\":\"test-evidence\",\"content\":\"The positional-arg construction of `RunSnapshot` is fragile. If the dataclass fields are reordered or a field is inserted, this call silently passes the wrong values to the wrong parameters with no type error. Use keyword arguments.\",\"suggestion_code\":\"    empty = RunSnapshot(\\n        session_id=None,\\n        coverage={},\\n        findings={},\\n        next_ready_prompt=None,\\n        step=0,\\n        agent_status=\\\"idle\\\",\\n        finalize_blockers=(),\\n        elapsed_seconds=0,\\n    )\",\"existing_code\":\"    empty = RunSnapshot(None, {}, {}, None, 0, \\\"idle\\\", (), 0)\",\"start_line\":1227,\"end_line\":1227,\"thinking\":\"RunSnapshot has 8+ fields. Using positional args for a dataclass this wide is a correctness hazard \u2014 any field reorder or insertion silently corrupts the snapshot. Keyword args make the intent explicit and fail loudly if the dataclass changes.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_tui.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-dfc1077ae494",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-f490a1af1a80-RGS-dfc1077ae494",
+      "content": "Secret redaction runs after a `limit * 4` truncation, so secrets positioned beyond that offset survive into the returned string (which is then truncated to `limit`). If `limit` is large (e.g. passed explicitly), the gap between redaction scope and output scope grows. Move the truncation after redaction, or apply redaction to the full text.",
+      "finding_id": "RGF-0713",
+      "fingerprint": "7be8b6d33d817911d12ab4602f40543dd609456c04fff4eba3a5ded065b8888d",
+      "latest_occurrence": {
+        "cell_id": "RGC-c1ad423b70f325a0",
+        "end_line": 1204,
+        "finding_id": "RGF-0713",
+        "imprecise": 0,
+        "occurrence_id": 713,
+        "path": "src/review_gauntlet/run_tui.py",
+        "run_id": 236,
+        "start_line": 1196
+      },
+      "metadata": "{\"fingerprint\":\"7be8b6d33d817911d12ab4602f40543dd609456c04fff4eba3a5ded065b8888d\",\"path\":\"src/review_gauntlet/run_tui.py\",\"rule_id\":\"test-evidence\",\"content\":\"Secret redaction runs after a `limit * 4` truncation, so secrets positioned beyond that offset survive into the returned string (which is then truncated to `limit`). If `limit` is large (e.g. passed explicitly), the gap between redaction scope and output scope grows. Move the truncation after redaction, or apply redaction to the full text.\",\"suggestion_code\":\"    secret_patterns = (\\n        r\\\"\\\\b[A-Z0-9_]*(?:TOKEN|SECRET|KEY|PASSWORD)=\\\\S+\\\",\\n        r\\\"\\\\b(?:authorization|x-api-key)\\\\s*:\\\\s*\\\\S+(?:\\\\s+\\\\S+)?\\\",\\n        r\\\"[\\\\\\\"']?\\\\b(?:api[_-]?key|token|secret|password)\\\\b[\\\\\\\"']?\\\\s*[:=]\\\\s*[\\\\\\\"']?\\\\S+[\\\\\\\"']?\\\",\\n    )\\n    for pattern in secret_patterns:\\n        text = re.sub(pattern, \\\"<redacted>\\\", text, flags=re.IGNORECASE)\\n    return _summarize_text(text, limit=limit)\",\"existing_code\":\"    text = text[: limit * 4]\\n    secret_patterns = (\\n        r\\\"\\\\b[A-Z0-9_]*(?:TOKEN|SECRET|KEY|PASSWORD)=\\\\S+\\\",\\n        r\\\"\\\\b(?:authorization|x-api-key)\\\\s*:\\\\s*\\\\S+(?:\\\\s+\\\\S+)?\\\",\\n        r\\\"[\\\\\\\"']?\\\\b(?:api[_-]?key|token|secret|password)\\\\b[\\\\\\\"']?\\\\s*[:=]\\\\s*[\\\\\\\"']?\\\\S+[\\\\\\\"']?\\\",\\n    )\\n    for pattern in secret_patterns:\\n        text = re.sub(pattern, \\\"<redacted>\\\", text, flags=re.IGNORECASE)\\n    return _summarize_text(text, limit=limit)\",\"start_line\":1196,\"end_line\":1204,\"thinking\":\"The pre-truncation to limit*4 is a performance guard against running regexes on very long strings, but it creates a window where secrets between limit and limit*4 are redacted while secrets beyond limit*4 are not. Since _summarize_text truncates to limit at the end, the practical risk is low for the default limit=120 (secrets beyond 480 chars are truncated away). However, removing the pre-truncation is safer and the performance cost on realistic agent output lines is negligible.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_tui.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-dfc1077ae494",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-f490a1af1a80-RGS-dfc1077ae494",
+      "content": "The `id` parameter shadows the built-in `id` function. While harmless inside this closure, it can confuse linters and readers. Rename to `panel_id` or `widget_id`.",
+      "finding_id": "RGF-0714",
+      "fingerprint": "3005efe8b745bac7fa33011b9d1362132ef324832c745b4bfc89ff7f465cab1d",
+      "latest_occurrence": {
+        "cell_id": "RGC-c1ad423b70f325a0",
+        "end_line": 48,
+        "finding_id": "RGF-0714",
+        "imprecise": 0,
+        "occurrence_id": 714,
+        "path": "src/review_gauntlet/run_tui.py",
+        "run_id": 236,
+        "start_line": 46
+      },
+      "metadata": "{\"fingerprint\":\"3005efe8b745bac7fa33011b9d1362132ef324832c745b4bfc89ff7f465cab1d\",\"path\":\"src/review_gauntlet/run_tui.py\",\"rule_id\":\"test-evidence\",\"content\":\"The `id` parameter shadows the built-in `id` function. While harmless inside this closure, it can confuse linters and readers. Rename to `panel_id` or `widget_id`.\",\"suggestion_code\":\"    def titled_panel(\\n        title: str, body: Static, *, panel_id: str | None = None, classes: str = \\\"panel\\\"\\n    ) -> Vertical:\",\"existing_code\":\"    def titled_panel(\\n        title: str, body: Static, *, id: str | None = None, classes: str = \\\"panel\\\"\\n    ) -> Vertical:\",\"start_line\":46,\"end_line\":48,\"thinking\":\"Shadowing built-in `id` is a common Python anti-pattern. In Textual widget constructors `id=` is the standard kwarg name so callers will need updating too, but inside project-internal code this is under the author's control.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_tui.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-dfc1077ae494",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-f490a1af1a80-RGS-dfc1077ae494",
+      "content": "`select_active_gate` indexes into `gates` with `gates[mapped_index - 1]` without a bounds check. While `_NEXT_ACTION_GATE_INDEX` values (1\u20136) currently match the 6-element tuple from `derive_finalize_gates`, adding a new action mapping or changing gate count would silently produce an `IndexError` at runtime. A guard `if 1 <= mapped_index <= len(gates)` before the index access makes this robust against future drift.",
+      "finding_id": "RGF-0715",
+      "fingerprint": "43bfab0f6611c1474508c82125ffc09dd9e9c67f7c1420ee4da542e68295dae1",
+      "latest_occurrence": {
+        "cell_id": "RGC-8610c7a6f661b70a",
+        "end_line": 541,
+        "finding_id": "RGF-0715",
+        "imprecise": 0,
+        "occurrence_id": 715,
+        "path": "src/review_gauntlet/run_tui.py",
+        "run_id": 237,
+        "start_line": 539
+      },
+      "metadata": "{\"fingerprint\":\"43bfab0f6611c1474508c82125ffc09dd9e9c67f7c1420ee4da542e68295dae1\",\"path\":\"src/review_gauntlet/run_tui.py\",\"rule_id\":\"data-validation\",\"content\":\"`select_active_gate` indexes into `gates` with `gates[mapped_index - 1]` without a bounds check. While `_NEXT_ACTION_GATE_INDEX` values (1\u20136) currently match the 6-element tuple from `derive_finalize_gates`, adding a new action mapping or changing gate count would silently produce an `IndexError` at runtime. A guard `if 1 <= mapped_index <= len(gates)` before the index access makes this robust against future drift.\",\"suggestion_code\":\"    mapped_index = _NEXT_ACTION_GATE_INDEX.get(snapshot.next_required_action or \\\"\\\")\\n    if mapped_index is not None and 1 <= mapped_index <= len(gates):\\n        return gates[mapped_index - 1]\",\"existing_code\":\"    mapped_index = _NEXT_ACTION_GATE_INDEX.get(snapshot.next_required_action or \\\"\\\")\\n    if mapped_index is not None:\\n        return gates[mapped_index - 1]\",\"start_line\":539,\"end_line\":541,\"thinking\":\"The _NEXT_ACTION_GATE_INDEX dict maps action names to 1-based gate indices (1\u20136). derive_finalize_gates always returns exactly 6 gates, so currently this is safe. However, the two constants (_NEXT_ACTION_GATE_INDEX and the gate list in derive_finalize_gates) are maintained independently. If they drift out of sync, this becomes an unguarded IndexError. A simple bounds check is cheap insurance.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_tui.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-dfc1077ae494",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-f490a1af1a80-RGS-dfc1077ae494",
+      "content": "`format_event_time` uses `timestamp.replace(\"Z\", \"+00:00\")` which replaces every occurrence of the character \"Z\" in the string, not just a trailing UTC designator. Although ISO 8601 timestamps won't normally have \"Z\" elsewhere, validating untrusted or malformed input could produce unexpected parse results before the `except ValueError` fires. Consider anchoring the replacement to the end of the string.",
+      "finding_id": "RGF-0716",
+      "fingerprint": "a9acf6ceef7d70cab0de635a49f9d66cd44bd1a405441839057a8de32a1fa7c2",
+      "latest_occurrence": {
+        "cell_id": "RGC-8610c7a6f661b70a",
+        "end_line": 450,
+        "finding_id": "RGF-0716",
+        "imprecise": 0,
+        "occurrence_id": 716,
+        "path": "src/review_gauntlet/run_tui.py",
+        "run_id": 237,
+        "start_line": 450
+      },
+      "metadata": "{\"fingerprint\":\"a9acf6ceef7d70cab0de635a49f9d66cd44bd1a405441839057a8de32a1fa7c2\",\"path\":\"src/review_gauntlet/run_tui.py\",\"rule_id\":\"data-validation\",\"content\":\"`format_event_time` uses `timestamp.replace(\\\"Z\\\", \\\"+00:00\\\")` which replaces every occurrence of the character \\\"Z\\\" in the string, not just a trailing UTC designator. Although ISO 8601 timestamps won't normally have \\\"Z\\\" elsewhere, validating untrusted or malformed input could produce unexpected parse results before the `except ValueError` fires. Consider anchoring the replacement to the end of the string.\",\"suggestion_code\":\"        normalized = timestamp[:-1] + \\\"+00:00\\\" if timestamp.endswith(\\\"Z\\\") else timestamp\\n        return datetime.fromisoformat(normalized).strftime(\\\"%H:%M:%S\\\")\",\"existing_code\":\"        return datetime.fromisoformat(timestamp.replace(\\\"Z\\\", \\\"+00:00\\\")).strftime(\\\"%H:%M:%S\\\")\",\"start_line\":450,\"end_line\":450,\"thinking\":\"str.replace replaces all occurrences. If a malformed timestamp somehow contained 'Z' in a non-trailing position (e.g. from corrupted event data), the blanket replace would silently mutate the string before fromisoformat sees it, potentially producing a wrong time rather than falling through to the except branch. Anchoring to endswith('Z') is more precise and preserves the safety net.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/run_tui.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-dfc1077ae494",
+      "state": "false_positive"
+    }
+  ],
+  "schema_version": 1
+}
