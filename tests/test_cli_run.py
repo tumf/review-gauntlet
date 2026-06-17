@@ -34,6 +34,7 @@ def _write_config(
     *,
     timeout: float = 5.0,
     quiet_timeout: float | None = None,
+    verdict_grace: float | None = None,
     cwd: str | None = None,
     hooks: dict[str, object] | None = None,
 ) -> Path:
@@ -46,6 +47,8 @@ def _write_config(
     }
     if quiet_timeout is not None:
         adapter["quiet_timeout_seconds"] = quiet_timeout
+    if verdict_grace is not None:
+        adapter["verdict_grace_seconds"] = verdict_grace
     if cwd is not None:
         adapter["cwd"] = cwd
     payload: dict[str, object] = {"adapter": adapter}
@@ -79,6 +82,20 @@ def _mark_cells_reviewed(root: Path) -> None:
             where session_id = ?
             """,
             (CellState.REVIEWED.value, session_id),
+        )
+
+
+def _insert_untriaged_finding(root: Path, finding_id: str = "RGF-0001") -> None:
+    store = SessionStore(root)
+    session_id = store.active_session_id()
+    with store.connect() as conn:
+        conn.execute(
+            """
+            insert into findings(
+              session_id, finding_id, fingerprint, state, path, rule_id, content, metadata
+            ) values (?, ?, ?, 'untriaged', 'README.md', 'docs-accuracy', 'finding', '{}')
+            """,
+            (session_id, finding_id, f"fp-{finding_id}"),
         )
 
 
@@ -607,6 +624,194 @@ def test_run_quiet_timeout_persists_output_tail_after_initial_output(
         "stdout before quiet",
         "stderr before quiet",
     }
+
+
+def test_run_detects_continuation_verdict_and_terminates_lingering_agent(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    script = tmp_path / "agent.py"
+    script.write_text(
+        """
+import json
+import re
+import sys
+import time
+from pathlib import Path
+prompt = sys.argv[1]
+marker = "Before ending this turn, write valid JSON to the following path:\\n"
+if marker not in prompt:
+    raise SystemExit("missing continuation path")
+path = Path(prompt.split(marker, 1)[1].splitlines()[0].strip())
+path.parent.mkdir(parents=True, exist_ok=True)
+path.write_text(json.dumps({
+    "schema_version": 1,
+    "verdict": "continue",
+    "summary": "triaged one finding",
+    "completed_finding_ids": ["RGF-0001"],
+    "remaining_finding_ids": [],
+    "next_turn_instructions": "continue if needed",
+    "error": None,
+}), encoding="utf-8")
+time.sleep(2)
+""".strip(),
+        encoding="utf-8",
+    )
+    _write_config(
+        tmp_path,
+        sys.executable,
+        [str(script), "{prompt}"],
+        timeout=5.0,
+        quiet_timeout=5.0,
+        verdict_grace=0.1,
+    )
+    _init_session(tmp_path, capsys)
+    _mark_cells_reviewed(tmp_path)
+    _insert_untriaged_finding(tmp_path)
+
+    started_at = time.monotonic()
+    with pytest.raises(SystemExit) as exc_info:
+        main(["run", str(tmp_path), "--max-steps", "1", "--format", "json"])
+    elapsed = time.monotonic() - started_at
+
+    assert exc_info.value.code == 1
+    result = json.loads(capsys.readouterr().out)
+    assert elapsed < 1.0
+    assert result["reason"] == "no_progress"
+    step = result["steps"][0]
+    assert step["verdict_metadata"]["verdict"] == "continue"
+    activity = Path(step["activity_artifact"]).read_text(encoding="utf-8")
+    assert "verdict_detected" in activity
+    assert (Path(step["activity_artifact"]).parent / "verdict.json").is_file()
+
+
+def test_run_reports_no_progress_for_continue_without_ledger_change(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    script = tmp_path / "agent.py"
+    script.write_text(
+        """
+import json
+import re
+import sys
+from pathlib import Path
+prompt = sys.argv[1]
+marker = "Before ending this turn, write valid JSON to the following path:\\n"
+if marker not in prompt:
+    raise SystemExit("missing continuation path")
+path = Path(prompt.split(marker, 1)[1].splitlines()[0].strip())
+path.parent.mkdir(parents=True, exist_ok=True)
+path.write_text(json.dumps({
+    "schema_version": 1,
+    "verdict": "continue",
+    "summary": "no ledger changes",
+    "completed_finding_ids": [],
+    "remaining_finding_ids": ["RGF-0001"],
+    "next_turn_instructions": "try again",
+    "error": None,
+}), encoding="utf-8")
+""".strip(),
+        encoding="utf-8",
+    )
+    _write_config(tmp_path, sys.executable, [str(script), "{prompt}"], quiet_timeout=5.0)
+    _init_session(tmp_path, capsys)
+    _mark_cells_reviewed(tmp_path)
+    _insert_untriaged_finding(tmp_path)
+
+    with pytest.raises(SystemExit) as exc_info:
+        main(["run", str(tmp_path), "--max-steps", "1", "--format", "json"])
+
+    assert exc_info.value.code == 1
+    result = json.loads(capsys.readouterr().out)
+    assert result["reason"] == "no_progress"
+    failure = result["steps"][0]["failure"]
+    assert failure["reason"] == "no_progress"
+    assert failure["target_ids"] == ["RGF-0001"]
+
+
+def test_run_reports_missing_and_invalid_continuation_verdict(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _write_config(
+        tmp_path, sys.executable, ["-c", "print('no verdict')", "{prompt}"], quiet_timeout=5
+    )
+    _init_session(tmp_path, capsys)
+    _mark_cells_reviewed(tmp_path)
+    _insert_untriaged_finding(tmp_path)
+
+    with pytest.raises(SystemExit) as exc_info:
+        main(["run", str(tmp_path), "--max-steps", "1", "--format", "json"])
+
+    assert exc_info.value.code == 1
+    result = json.loads(capsys.readouterr().out)
+    assert result["reason"] == "missing_step_verdict"
+
+    invalid_root = tmp_path / "invalid"
+    invalid_root.mkdir()
+    bad_script = invalid_root / "bad_agent.py"
+    bad_script.write_text(
+        """
+import sys
+from pathlib import Path
+marker = "Before ending this turn, write valid JSON to the following path:\\n"
+if marker not in sys.argv[1]:
+    raise SystemExit("missing continuation path")
+path = Path(sys.argv[1].split(marker, 1)[1].splitlines()[0].strip())
+path.parent.mkdir(parents=True, exist_ok=True)
+path.write_text('{', encoding='utf-8')
+""".strip(),
+        encoding="utf-8",
+    )
+    _write_config(invalid_root, sys.executable, [str(bad_script), "{prompt}"], quiet_timeout=5)
+    _init_session(invalid_root, capsys)
+    _mark_cells_reviewed(invalid_root)
+    _insert_untriaged_finding(invalid_root)
+
+    with pytest.raises(SystemExit) as exc_info:
+        main(["run", str(invalid_root), "--max-steps", "1", "--format", "json"])
+
+    assert exc_info.value.code == 1
+    result = json.loads(capsys.readouterr().out)
+    assert result["reason"] == "invalid_step_verdict"
+
+
+def test_run_reports_error_continuation_verdict(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    script = tmp_path / "error_agent.py"
+    script.write_text(
+        """
+import json
+import sys
+from pathlib import Path
+marker = "Before ending this turn, write valid JSON to the following path:\\n"
+if marker not in sys.argv[1]:
+    raise SystemExit("missing continuation path")
+path = Path(sys.argv[1].split(marker, 1)[1].splitlines()[0].strip())
+path.parent.mkdir(parents=True, exist_ok=True)
+path.write_text(json.dumps({
+    "schema_version": 1,
+    "verdict": "error",
+    "summary": "blocked",
+    "completed_finding_ids": [],
+    "remaining_finding_ids": ["RGF-0001"],
+    "next_turn_instructions": "operator action needed",
+    "error": "cannot continue",
+}), encoding="utf-8")
+""".strip(),
+        encoding="utf-8",
+    )
+    _write_config(tmp_path, sys.executable, [str(script), "{prompt}"], quiet_timeout=5)
+    _init_session(tmp_path, capsys)
+    _mark_cells_reviewed(tmp_path)
+    _insert_untriaged_finding(tmp_path)
+
+    with pytest.raises(SystemExit) as exc_info:
+        main(["run", str(tmp_path), "--max-steps", "1", "--format", "json"])
+
+    assert exc_info.value.code == 1
+    result = json.loads(capsys.readouterr().out)
+    assert result["reason"] == "step_verdict_error"
+    assert result["error"] == "cannot continue"
 
 
 def test_run_reports_max_steps_exhaustion(

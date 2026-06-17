@@ -185,7 +185,6 @@ def test_ready_command_outputs_prompt_only_json_and_text(
     text = capsys.readouterr().out.strip()
     assert text == prompt
     assert "prompt:" not in text
-    assert "{" not in text
 
 
 def test_ready_actionable_prompt_returns_success_without_system_exit(
@@ -891,3 +890,80 @@ def test_ready_does_not_change_status_schema(
 
     assert set(after) == set(before)
     assert "prompt" not in after
+
+
+def test_ready_prompt_keeps_grouped_findings_and_declares_continuation_file(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_session(tmp_path, capsys)
+    _set_all_cells(tmp_path, CellState.REVIEWED)
+    _insert_finding(tmp_path, FindingState.UNTRIAGED, 1)
+    _insert_finding(tmp_path, FindingState.UNTRIAGED, 2)
+
+    prompt = _ready_prompt(tmp_path, capsys)
+
+    assert "finding_id: RGF-0001" in prompt
+    assert "finding_id: RGF-0002" in prompt
+    assert "## Turn verdict / continuation file" in prompt
+    assert ".review-gauntlet/turns/" in prompt
+    assert '"verdict": "continue | finish | error"' in prompt
+    assert "Valid verdict values: continue, finish, error." in prompt
+
+
+def test_ready_prompt_injects_valid_previous_continuation_context(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    session_id = _init_session(tmp_path, capsys)
+    _set_all_cells(tmp_path, CellState.REVIEWED)
+    _insert_finding(tmp_path, FindingState.UNTRIAGED, 1)
+    prompt = _ready_prompt(tmp_path, capsys)
+    path_line = prompt.split(
+        "Before ending this turn, write valid JSON to the following path:\n", 1
+    )[1]
+    continuation_path = Path(path_line.splitlines()[0])
+    continuation_path.parent.mkdir(parents=True, exist_ok=True)
+    assert session_id in continuation_path.parts
+    continuation_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "verdict": "continue",
+                "summary": "triaged one finding",
+                "completed_finding_ids": ["RGF-0001"],
+                "remaining_finding_ids": ["RGF-0002"],
+                "next_turn_instructions": "check the remaining finding",
+                "error": None,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    next_prompt = _ready_prompt(tmp_path, capsys)
+
+    assert "## Previous turn context" in next_prompt
+    assert "verdict: continue" in next_prompt
+    assert "summary: triaged one finding" in next_prompt
+    assert "completed_finding_ids: RGF-0001" in next_prompt
+    assert "remaining_finding_ids: RGF-0002" in next_prompt
+    assert "next_turn_instructions: check the remaining finding" in next_prompt
+
+
+def test_ready_prompt_warns_for_invalid_previous_continuation(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_session(tmp_path, capsys)
+    _set_all_cells(tmp_path, CellState.REVIEWED)
+    _insert_finding(tmp_path, FindingState.UNTRIAGED, 1)
+    prompt = _ready_prompt(tmp_path, capsys)
+    path_line = prompt.split(
+        "Before ending this turn, write valid JSON to the following path:\n", 1
+    )[1]
+    continuation_path = Path(path_line.splitlines()[0])
+    continuation_path.parent.mkdir(parents=True, exist_ok=True)
+    continuation_path.write_text("{", encoding="utf-8")
+
+    next_prompt = _ready_prompt(tmp_path, capsys)
+
+    assert "## Previous turn context" in next_prompt
+    assert "warning: ignored invalid previous continuation file" in next_prompt
+    assert "## Turn verdict / continuation file" in next_prompt

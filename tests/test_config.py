@@ -202,6 +202,7 @@ def test_command_adapter_config_accepts_prompt_and_defaults_timeouts() -> None:
     assert config.env == {"MESSAGE": "{prompt}"}
     assert config.timeout_seconds == 3600.0
     assert config.quiet_timeout_seconds == 600.0
+    assert config.verdict_grace_seconds == 30.0
 
 
 def test_command_adapter_config_preserves_explicit_timeouts() -> None:
@@ -211,11 +212,13 @@ def test_command_adapter_config_preserves_explicit_timeouts() -> None:
             "command": "tool",
             "timeout_seconds": 12.5,
             "quiet_timeout_seconds": 3.5,
+            "verdict_grace_seconds": 1.25,
         }
     )
 
     assert config.timeout_seconds == 12.5
     assert config.quiet_timeout_seconds == 3.5
+    assert config.verdict_grace_seconds == 1.25
 
 
 @pytest.mark.parametrize("name", ["MESSAGE", "_TOKEN", "A1", "PATH_WITH_UNDERSCORES"])
@@ -279,6 +282,18 @@ def test_command_adapter_config_rejects_invalid_quiet_timeout(quiet_timeout: flo
         )
 
 
+@pytest.mark.parametrize("verdict_grace", [0, -1, math.inf, -math.inf, math.nan])
+def test_command_adapter_config_rejects_invalid_verdict_grace(verdict_grace: float) -> None:
+    with pytest.raises(ValueError, match="adapter.verdict_grace_seconds"):
+        CommandAdapterConfig.model_validate(
+            {
+                "type": "command",
+                "command": "tool",
+                "verdict_grace_seconds": verdict_grace,
+            }
+        )
+
+
 def test_command_adapter_config_rejects_prompt_in_output_path_but_not_args_or_env() -> None:
     with pytest.raises(ValueError, match="adapter.output.path must not use .*prompt"):
         CommandAdapterConfig.model_validate(
@@ -329,7 +344,7 @@ def test_effective_config_merges_global_then_project(
     global_config.parent.mkdir(parents=True)
     global_config.write_text(
         '{"adapter":{"type":"command","command":"global","args":["old"],'
-        '"env":{"A":"1"},"timeout_seconds":10}}',
+        '"env":{"A":"1"},"timeout_seconds":10,"verdict_grace_seconds":4}}',
         encoding="utf-8",
     )
     project_config = tmp_path / ".review-gauntlet" / "config.jsonc"
@@ -346,6 +361,7 @@ def test_effective_config_merges_global_then_project(
     assert resolved.config.adapter.args == ("new",)
     assert resolved.config.adapter.env == {"A": "1", "B": "2"}
     assert resolved.config.adapter.timeout_seconds == 10
+    assert resolved.config.adapter.verdict_grace_seconds == 4
     assert resolved.sources == (global_config, project_config)
 
 
