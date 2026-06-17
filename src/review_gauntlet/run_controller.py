@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import dataclasses
 import json
 import threading
 from collections.abc import Callable, Mapping
@@ -14,6 +15,7 @@ from review_gauntlet.session_store import SessionStore
 
 RUN_INTERRUPTED_ERROR = "run interrupted by user"
 RUN_INTERRUPTED_REASON = "interrupted"
+AGENT_QUIET_THRESHOLD_SECONDS = 5.0
 
 
 @dataclass(frozen=True)
@@ -243,7 +245,11 @@ class RunController:
             )
             timeout_remaining = max(0.0, float(self._agent_timeout_seconds) - elapsed)
         status = self._agent_lifecycle.status
-        if status == "running" and last_output_age is not None and last_output_age >= 5.0:
+        if (
+            status == "running"
+            and last_output_age is not None
+            and last_output_age >= AGENT_QUIET_THRESHOLD_SECONDS
+        ):
             status = "quiet"
         return AgentLifecycle(
             status=status,
@@ -589,6 +595,8 @@ def checkpoint_generated_files_from_stdout(stdout: str) -> tuple[str, ...]:
     for item in typed_files:
         if not isinstance(item, str):
             continue
+        if "\x00" in item:
+            continue
         relative = Path(item)
         if relative.is_absolute() or ".." in relative.parts:
             continue
@@ -614,7 +622,7 @@ def _run_step_payload(
         "returncode": result.returncode,
         "stdout": result.stdout,
         "stderr": result.stderr,
-        "output_tail": [entry.__dict__ for entry in result.output_tail],
+        "output_tail": [dataclasses.asdict(entry) for entry in result.output_tail],
     }
     if result.stdout_artifact is not None:
         payload["stdout_artifact"] = result.stdout_artifact
