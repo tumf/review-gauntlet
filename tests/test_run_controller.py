@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import errno
 import json
+import sqlite3
 import subprocess
 import threading
 from datetime import UTC, datetime, timedelta, tzinfo
@@ -893,6 +894,79 @@ def test_run_controller_refresh_snapshot_exposes_status(tmp_path: Path) -> None:
     assert snapshot.next_ready_prompt == "ready prompt"
 
 
+def test_run_controller_snapshot_blocks_readiness_operational_error_without_raising(
+    tmp_path: Path,
+) -> None:
+    store = _store(tmp_path)
+
+    def raise_db_ready(_store: SessionStore, _root: Path) -> str | None:
+        raise sqlite3.OperationalError("unable to open database file")
+
+    controller = RunController(
+        root=tmp_path,
+        store=store,
+        config_path=None,
+        max_steps=1,
+        ready_prompt=raise_db_ready,
+        status_snapshot=lambda _store, _root: {
+            "coverage": {"reviewed": 1},
+            "finding_state_counts": {},
+            "can_finalize": True,
+            "finalize_blockers": [],
+            "next_required_action": "finalize",
+        },
+        command_runner=lambda _config, _root, _state_dir, _prompt: SessionCommandResult(
+            argv=[], cwd=None, returncode=0, stdout="", stderr=""
+        ),
+    )
+
+    snapshot = controller.snapshot()
+
+    assert snapshot.session_id == "RGS-test"
+    assert snapshot.coverage == {"reviewed": 1}
+    assert snapshot.next_ready_prompt is None
+    assert snapshot.can_finalize is False
+    assert snapshot.next_required_action == "resolve_finalize_blockers"
+    assert any(
+        "ready prompt unavailable: OperationalError" in blocker
+        for blocker in snapshot.finalize_blockers
+    )
+
+
+def test_run_controller_snapshot_status_operational_error_returns_blocked_snapshot(
+    tmp_path: Path,
+) -> None:
+    store = _store(tmp_path)
+
+    def raise_db_status(_store: SessionStore, _root: Path) -> dict[str, object]:
+        raise sqlite3.OperationalError("unable to open database file")
+
+    controller = RunController(
+        root=tmp_path,
+        store=store,
+        config_path=None,
+        max_steps=1,
+        ready_prompt=lambda _store, _root: "ready prompt",
+        status_snapshot=raise_db_status,
+        command_runner=lambda _config, _root, _state_dir, _prompt: SessionCommandResult(
+            argv=[], cwd=None, returncode=0, stdout="", stderr=""
+        ),
+    )
+
+    snapshot = controller.snapshot()
+
+    assert snapshot.session_id == "RGS-test"
+    assert snapshot.coverage == {}
+    assert snapshot.findings == {}
+    assert snapshot.next_ready_prompt is None
+    assert snapshot.can_finalize is False
+    assert snapshot.next_required_action == "resolve_finalize_blockers"
+    assert any(
+        "status snapshot unavailable: OperationalError" in blocker
+        for blocker in snapshot.finalize_blockers
+    )
+
+
 def test_run_controller_snapshot_blocks_readiness_emfile_without_raising(
     tmp_path: Path,
 ) -> None:
@@ -962,6 +1036,79 @@ def test_run_controller_snapshot_status_emfile_returns_blocked_snapshot(tmp_path
     assert any(
         "startup_error_reason=resource_exhaustion" in blocker
         for blocker in snapshot.finalize_blockers
+    )
+
+
+def test_run_controller_snapshot_status_sqlite_error_returns_blocked_snapshot(
+    tmp_path: Path,
+) -> None:
+    store = _store(tmp_path)
+
+    def raise_sqlite_status(_store: SessionStore, _root: Path) -> dict[str, object]:
+        raise sqlite3.OperationalError("unable to open database file")
+
+    controller = RunController(
+        root=tmp_path,
+        store=store,
+        config_path=None,
+        max_steps=1,
+        ready_prompt=lambda _store, _root: "ready prompt",
+        status_snapshot=raise_sqlite_status,
+        command_runner=lambda _config, _root, _state_dir, _prompt: SessionCommandResult(
+            argv=[], cwd=None, returncode=0, stdout="", stderr=""
+        ),
+    )
+
+    snapshot = controller.snapshot()
+
+    assert snapshot.session_id == "RGS-test"
+    assert snapshot.coverage == {}
+    assert snapshot.findings == {}
+    assert snapshot.next_ready_prompt is None
+    assert snapshot.can_finalize is False
+    assert snapshot.next_required_action == "resolve_finalize_blockers"
+    assert snapshot.finalize_blockers == (
+        "status snapshot unavailable: OperationalError: unable to open database file; "
+        "next_action=retry_after_resolving_runtime_error",
+    )
+
+
+def test_run_controller_snapshot_ready_sqlite_error_returns_blocked_snapshot(
+    tmp_path: Path,
+) -> None:
+    store = _store(tmp_path)
+
+    def raise_sqlite_ready(_store: SessionStore, _root: Path) -> str | None:
+        raise sqlite3.OperationalError("database is locked")
+
+    controller = RunController(
+        root=tmp_path,
+        store=store,
+        config_path=None,
+        max_steps=1,
+        ready_prompt=raise_sqlite_ready,
+        status_snapshot=lambda _store, _root: {
+            "coverage": {"reviewed": 1},
+            "finding_state_counts": {},
+            "can_finalize": True,
+            "finalize_blockers": [],
+            "next_required_action": "finalize",
+        },
+        command_runner=lambda _config, _root, _state_dir, _prompt: SessionCommandResult(
+            argv=[], cwd=None, returncode=0, stdout="", stderr=""
+        ),
+    )
+
+    snapshot = controller.snapshot()
+
+    assert snapshot.session_id == "RGS-test"
+    assert snapshot.coverage == {"reviewed": 1}
+    assert snapshot.next_ready_prompt is None
+    assert snapshot.can_finalize is False
+    assert snapshot.next_required_action == "resolve_finalize_blockers"
+    assert snapshot.finalize_blockers == (
+        "ready prompt unavailable: OperationalError: database is locked; "
+        "next_action=retry_after_resolving_runtime_error",
     )
 
 

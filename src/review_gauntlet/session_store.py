@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Generator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
@@ -31,10 +33,15 @@ class SessionStore:
         with self.connect() as conn:
             _create_schema(conn)
 
-    def connect(self) -> sqlite3.Connection:
+    @contextmanager
+    def connect(self) -> Generator[sqlite3.Connection, None, None]:
         conn = sqlite3.connect(self.ledger_path)
         conn.row_factory = sqlite3.Row
-        return conn
+        try:
+            with conn:
+                yield conn
+        finally:
+            conn.close()
 
     def create_session(self, metadata: dict[str, Any], cells: tuple[ReviewCell, ...]) -> str:
         self.initialize()
