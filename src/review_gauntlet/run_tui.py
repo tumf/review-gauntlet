@@ -1261,12 +1261,12 @@ def _event_detail(event: RunEvent) -> str:
             parts.append(_summarize_text(reason, limit=48))
         return "; ".join(parts)
     if event.type == "step_started":
-        return format_task_title(str(event.payload.get("prompt", ""))).title
+        return format_task_title(str(event.payload.get("prompt") or "")).title
     if event.type == "agent_started":
         label = event.payload.get("command_label")
         return _summarize_text(label, limit=64) if label is not None else "command resolving..."
     if event.type == "failed":
-        return _summarize_text(event.payload.get("reason", "command failed"), limit=64)
+        return _summarize_text(event.payload.get("reason") or "command failed", limit=64)
     return ""
 
 
@@ -1326,4 +1326,9 @@ def _count_value(value: object) -> int:
         return 0
     if isinstance(value, float):
         return max(0, int(value))
+    if isinstance(value, str):
+        try:
+            return max(0, int(value))
+        except (ValueError, OverflowError):
+            return 0
     return 0
