@@ -437,6 +437,30 @@ directory, omitted `env` inherits the parent environment without fixed automatic
 variables, explicit `env` values override that inherited environment, and omitted
 `timeout_seconds` defaults to 600 seconds.
 
+Use `adapter.env` when the configured agent command needs environment variables
+that should travel with the Review Gauntlet config, such as model selection,
+feature flags, or wrapper-specific paths:
+
+```jsonc
+{
+  "adapter": {
+    "type": "command",
+    "command": "opencode",
+    "args": ["run", "{prompt}"],
+    "env": {
+      "OPENCODE_MODEL": "anthropic/claude-sonnet-4",
+      "REVIEW_GAUNTLET_REPO": "{repo_root}",
+      "REVIEW_GAUNTLET_STATE": "{state_dir}"
+    }
+  }
+}
+```
+
+Environment values are expanded with the same template syntax as adapter
+arguments. They are added on top of the parent process environment, so they can
+also override inherited variables. Keep provider credentials in the external CLI
+or secret manager rather than committing them to project config.
+
 The verdict must be JSON with OCR-style comments:
 
 ```json
