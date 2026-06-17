@@ -10,6 +10,8 @@ from review_gauntlet.cli import (
     _agent_output_tail,  # pyright: ignore[reportPrivateUsage]
     _config_init_output_path,  # pyright: ignore[reportPrivateUsage]
     _expand_session_template,  # pyright: ignore[reportPrivateUsage]
+    _finalize_blocker_is_commit_resolvable,  # pyright: ignore[reportPrivateUsage]
+    _finalize_blockers_are_commit_resolvable,  # pyright: ignore[reportPrivateUsage]
     _finding_int_field,  # pyright: ignore[reportPrivateUsage]
     _finding_sort_key,  # pyright: ignore[reportPrivateUsage]
     _is_expired,  # pyright: ignore[reportPrivateUsage]
@@ -17,6 +19,7 @@ from review_gauntlet.cli import (
     _non_negative_int,  # pyright: ignore[reportPrivateUsage]
     _normalize_finding_path,  # pyright: ignore[reportPrivateUsage]
     _process_session_output_text,  # pyright: ignore[reportPrivateUsage]
+    _validated_run_result,  # pyright: ignore[reportPrivateUsage]
 )
 from review_gauntlet.run_controller import AgentOutputEntry
 
@@ -257,3 +260,75 @@ def test_non_negative_int_accepts_zero() -> None:
 
 def test_non_negative_int_accepts_positive() -> None:
     assert _non_negative_int("5") == 5
+
+
+# --- _validated_run_result (RGF-0773) ---
+
+
+def test_validated_run_result_accepts_complete_dict() -> None:
+    result: dict[str, object] = {
+        "completed": True,
+        "reason": "done",
+        "steps": [],
+        "step_count": 0,
+    }
+    assert _validated_run_result(result) is result
+
+
+def test_validated_run_result_rejects_non_dict() -> None:
+    with pytest.raises(RuntimeError, match="did not return a result dictionary"):
+        _validated_run_result("not a dict")
+
+
+def test_validated_run_result_rejects_incomplete_dict() -> None:
+    with pytest.raises(RuntimeError, match="missing=completed, steps"):
+        _validated_run_result({"reason": "x", "step_count": 0})
+
+
+# --- _finalize_blockers_are_commit_resolvable / _finalize_blocker_is_commit_resolvable ---
+
+
+def test_finalize_blocker_is_commit_resolvable_dirty_review() -> None:
+    assert _finalize_blocker_is_commit_resolvable(
+        "review-universe files are dirty relative to HEAD: foo.py"
+    )
+
+
+def test_finalize_blocker_is_commit_resolvable_dirty_non_review() -> None:
+    assert _finalize_blocker_is_commit_resolvable(
+        "working tree has uncommitted non-review files: bar.py"
+    )
+
+
+def test_finalize_blocker_is_commit_resolvable_other_reason() -> None:
+    assert not _finalize_blocker_is_commit_resolvable("something else")
+
+
+def test_finalize_blockers_are_commit_resolvable_empty() -> None:
+    assert not _finalize_blockers_are_commit_resolvable([])
+
+
+def test_finalize_blockers_are_commit_resolvable_all_dirty() -> None:
+    assert _finalize_blockers_are_commit_resolvable(
+        [
+            "review-universe files are dirty relative to HEAD: a.py",
+            "working tree has uncommitted non-review files: b.py",
+        ]
+    )
+
+
+def test_finalize_blockers_are_commit_resolvable_digest_drift_with_dirty_review() -> None:
+    assert _finalize_blockers_are_commit_resolvable(
+        [
+            "review-universe files are dirty relative to HEAD: a.py",
+            "target digest has changed since the last review run",
+        ]
+    )
+
+
+def test_finalize_blockers_are_commit_resolvable_digest_drift_alone() -> None:
+    assert not _finalize_blockers_are_commit_resolvable(
+        [
+            "target digest has changed since the last review run",
+        ]
+    )

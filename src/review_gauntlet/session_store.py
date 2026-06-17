@@ -210,6 +210,30 @@ class SessionStore:
                 f"unknown review cell path: session_id={session_id} file_path={file_path}"
             )
 
+    _TERMINAL_FINDING_STATES_CLAUSE = (
+        "('fixed_verified', 'false_positive', 'waived', 'accepted_risk')"
+    )
+
+    def count_terminally_complete_cells(self, session_id: str) -> int:
+        with self.connect() as conn:
+            row = conn.execute(
+                f"""
+                select count(*) as count from review_cells rc
+                where rc.session_id = ?
+                  and rc.state = 'reviewed'
+                  and not exists (
+                    select 1 from finding_occurrences fo
+                    inner join findings f
+                      on f.finding_id = fo.finding_id
+                      and f.session_id = ?
+                      and f.state not in {self._TERMINAL_FINDING_STATES_CLAUSE}
+                    where fo.cell_id = rc.cell_id
+                  )
+                """,
+                (session_id, session_id),
+            ).fetchone()
+            return int(row["count"]) if row else 0
+
     def fixed_pending_paths(self, session_id: str) -> set[str]:
         return {str(row["path"]) for row in self.list_fixed_pending_findings(session_id)}
 

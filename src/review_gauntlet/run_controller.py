@@ -119,6 +119,7 @@ class RunSnapshot:
     finalize_blockers: tuple[str, ...] = ()
     next_required_action: str | None = None
     run_count: int = 0
+    cell_terminal_count: int = 0
     agent_lifecycle: AgentLifecycle = AgentLifecycle()
     coverage_projection: CoverageProjection = empty_coverage_projection()
 
@@ -258,6 +259,7 @@ class RunController:
             finalize_blockers=_string_tuple(status.get("finalize_blockers", ())),
             next_required_action=_string_or_none(status.get("next_required_action")),
             run_count=_int_or_zero(status.get("run_count", self._step)),
+            cell_terminal_count=_int_or_zero(status.get("cell_terminal_count", 0)),
             agent_lifecycle=self._current_agent_lifecycle(),
             coverage_projection=_coverage_projection_or_empty(status.get("coverage_projection")),
         )

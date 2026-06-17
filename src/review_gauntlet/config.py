@@ -275,11 +275,8 @@ def discover_global_config_path() -> Path | None:
 
 def resolve_explicit_config_path(root: Path, explicit: Path) -> Path:
     repo_root = root.resolve()
-    resolved = (
-        explicit.expanduser().resolve()
-        if explicit.is_absolute()
-        else (repo_root / explicit).resolve()
-    )
+    expanded = explicit.expanduser()
+    resolved = expanded.resolve() if expanded.is_absolute() else (repo_root / expanded).resolve()
     if not resolved.exists():
         raise ConfigError(f"review config does not exist: {explicit}")
     if not resolved.is_file():

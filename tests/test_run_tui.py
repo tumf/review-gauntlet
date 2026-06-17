@@ -85,7 +85,8 @@ def test_progress_metrics_exclude_superseded_and_only_count_known_completed_stat
 
     assert metrics.completed == 3
     assert metrics.total == 7
-    assert metrics.percent == 42
+    assert metrics.percent == 0
+    assert metrics.terminal == 0
     assert metrics.incomplete == 3
     assert metrics.pending == 2
     assert metrics.stale == 1
@@ -115,7 +116,8 @@ def test_progress_metrics_never_exceed_total() -> None:
     metrics = calculate_progress_metrics({"reviewed": 5})
 
     assert metrics.completed == metrics.total
-    assert metrics.percent == 100
+    assert metrics.percent == 0
+    assert metrics.terminal == 0
 
 
 def test_actionable_finding_summary_derives_open_count_without_open_key() -> None:
@@ -286,7 +288,7 @@ def test_session_coverage_flash_marks_only_changed_completed_count_fragment() ->
     )
 
     assert "header.cov" in _flash_keys(state)
-    assert "50% [████████████░░░░░░░░░░░░] 1/2   pend 1" in rendered.plain
+    assert "0% [░░░░░░░░░░░░░░░░░░░░░░░░] 0/2   pend 1" in rendered.plain
 
 
 def test_agent_step_flash_marks_only_changed_step_value_fragment() -> None:
@@ -445,9 +447,9 @@ def test_coverage_and_findings_render_dashboard_metrics_without_old_markers() ->
     coverage = coverage_text(snapshot)
     findings = findings_text(snapshot)
 
-    assert "50%" in coverage
-    assert "reviewed / total cells: 2 / 4" in coverage
-    assert "reviewed 2 | pending 1 | stale 1 | superseded 1" in coverage
+    assert "0%" in coverage
+    assert "terminal / total cells: 0 / 4" in coverage
+    assert "reviewed 2 | terminal 0 | pending 1 | stale 1 | superseded 1" in coverage
     assert "current cells" not in coverage
     assert "! pending" not in coverage
     assert "! stale" not in coverage
@@ -1468,8 +1470,8 @@ def test_overview_renders_projections_without_full_matrix_grid() -> None:
     assert "Next review queue" in overview
     assert "Rule coverage" in overview
     assert "File hotlist" in overview
-    assert "P1 pending  secret-handling" in overview
-    assert "P1 path-safety" in overview
+    assert "P1 2 cells src/a.py" in overview
+    assert "rules: secret-handling, path-safety" in overview
     assert "src/a.py | secret-handling | path-safety" not in overview
     assert "src/b.py | docs-accuracy | test-evidence" not in overview
 

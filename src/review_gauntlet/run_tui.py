@@ -7,7 +7,7 @@ import re
 import time
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from review_gauntlet.__about__ import __version__
 from review_gauntlet.coverage_projection import (
@@ -396,6 +396,7 @@ class ProgressMetrics:
     incomplete: int
     pending: int = 0
     stale: int = 0
+    terminal: int = 0
 
 
 @dataclass(frozen=True)
@@ -500,7 +501,9 @@ class RunViewState:
     elapsed: str
 
 
-def calculate_progress_metrics(coverage: dict[str, object]) -> ProgressMetrics:
+def calculate_progress_metrics(
+    coverage: dict[str, object], *, cell_terminal_count: int = 0
+) -> ProgressMetrics:
     total = 0
     completed = 0
     superseded = 0
@@ -515,9 +518,16 @@ def calculate_progress_metrics(coverage: dict[str, object]) -> ProgressMetrics:
         if state in COMPLETED_COVERAGE_STATES:
             completed += count
     displayed_completed = min(completed, total)
-    percent = int((displayed_completed / total) * 100) if total else 0
+    percent = min(int((cell_terminal_count / total) * 100), 100) if total else 0
     return ProgressMetrics(
-        displayed_completed, total, percent, superseded, pending + stale, pending, stale
+        displayed_completed,
+        total,
+        percent,
+        superseded,
+        pending + stale,
+        pending,
+        stale,
+        terminal=cell_terminal_count,
     )
 
 
@@ -620,7 +630,9 @@ def dashboard_state(
         format_agent_output_entry(entry) for entry in snapshot.agent_lifecycle.output_tail[-6:]
     )
     liveness_detail = agent_liveness_detail(snapshot)
-    coverage = calculate_progress_metrics(snapshot.coverage)
+    coverage = calculate_progress_metrics(
+        snapshot.coverage, cell_terminal_count=snapshot.cell_terminal_count
+    )
     findings_summary = actionable_finding_summary(snapshot.findings)
     task = format_task_title(snapshot.next_ready_prompt)
     artifact_path = snapshot.agent_lifecycle.artifact_path
@@ -910,8 +922,8 @@ def header_title_text() -> str:
 def header_status_text(view: RunViewState) -> str:
     blocker = " · finalize BLOCKED" if view.state_class == "panel-blocked" else ""
     cov = view.coverage
-    bar = _progress_bar(cov.completed, cov.total)
-    parts = [f"Coverage {cov.percent}% {bar} {cov.completed}/{cov.total}"]
+    bar = _progress_bar(cov.terminal, cov.total)
+    parts = [f"Finalize {cov.percent}% {bar} {cov.terminal}/{cov.total}"]
     if cov.pending:
         parts.append(f"pend {cov.pending}")
     if cov.stale:
@@ -934,14 +946,16 @@ def header_agent_text(view: RunViewState) -> str:
 
 def header_coverage_text(view: RunViewState) -> str:
     cov = view.coverage
-    bar = _progress_bar(cov.completed, cov.total)
+    bar = _progress_bar(cov.terminal, cov.total)
     parts = [
-        f"Coverage {cov.percent}% {bar}  {cov.completed}/{cov.total}",
+        f"Finalize {cov.percent}% {bar}  {cov.terminal}/{cov.total}",
     ]
     if cov.pending:
         parts.append(f"pending {cov.pending}")
     if cov.stale:
         parts.append(f"stale {cov.stale}")
+    if cov.completed > cov.terminal:
+        parts.append(f"reviewed {cov.completed}")
     if view.open_findings:
         parts.append(f"open {view.open_findings}")
     return "   ".join(parts)
@@ -1025,8 +1039,8 @@ def render_tui_lines(
 def header_status_tui_lines(view: RunViewState) -> tuple[TuiLine, ...]:
     blocker = " · finalize BLOCKED" if view.state_class == "panel-blocked" else ""
     cov = view.coverage
-    bar = _progress_bar(cov.completed, cov.total)
-    coverage_parts = [f"{cov.percent}% {bar} {cov.completed}/{cov.total}"]
+    bar = _progress_bar(cov.terminal, cov.total)
+    coverage_parts = [f"{cov.percent}% {bar} {cov.terminal}/{cov.total}"]
     if cov.pending:
         coverage_parts.append(f"pend {cov.pending}")
     if cov.stale:
@@ -1042,7 +1056,11 @@ def header_status_tui_lines(view: RunViewState) -> tuple[TuiLine, ...]:
                 _literal(" · ", key="header.sep.s2"),
                 _field("header.gate", view.gate_label, compare=view.active_gate.index),
                 _literal("   ", key="header.sep.s3"),
-                _field("header.cov", coverage_text, compare=(cov.percent, cov.total)),
+                _field(
+                    "header.cov",
+                    coverage_text,
+                    compare=(cov.terminal, cov.completed, cov.total, cov.percent),
+                ),
             )
         ),
     )
@@ -1118,7 +1136,9 @@ def queue_tui_lines(view: RunViewState, *, limit: int = 4) -> tuple[TuiLine, ...
         return ()
     lines: list[TuiLine] = []
     for index, entry in enumerate(entries, start=1):
-        prefix = f"queue.{entry.cell_id}"
+        prefix = f"queue.{entry.file_path}"
+        cell_label = f"{entry.cell_count} cells" if entry.cell_count > 1 else "1 cell"
+        cell_label = f"{cell_label:<7}"
         lines.append(
             TuiLine(
                 (
@@ -1128,24 +1148,14 @@ def queue_tui_lines(view: RunViewState, *, limit: int = 4) -> tuple[TuiLine, ...
                         f"{entry.priority_label} ",
                         _PRIORITY_COLORS.get(entry.priority_label, ""),
                     ),
-                    _colored_field(
-                        f"{prefix}.state",
-                        f"{entry.state:<8}",
-                        _STATE_COLORS.get(entry.state, ""),
-                        compare=entry.state,
-                    ),
-                    _literal(" ", key=f"{prefix}.state_space"),
-                    _colored_field(
-                        f"{prefix}.rule",
-                        f"{entry.rule_id:<16}",
-                        _RULE_ID_COLOR,
-                        compare=entry.rule_id,
-                    ),
-                    _literal(" ", key=f"{prefix}.rule_space"),
+                    _field(f"{prefix}.cells", cell_label, compare=entry.cell_count),
+                    _literal(" ", key=f"{prefix}.cells_space"),
                     _field(f"{prefix}.file", _summarize_text(entry.file_path, limit=36)),
                     _literal(" · ", key=f"{prefix}.why_sep"),
                     _field(
-                        f"{prefix}.why", _summarize_text(entry.why, limit=36), compare=entry.why
+                        f"{prefix}.why",
+                        _summarize_text(entry.why, limit=48),
+                        compare=entry.why,
                     ),
                 )
             )
@@ -1186,7 +1196,9 @@ def session_summary_tui_lines(view: RunViewState) -> tuple[TuiLine, ...]:
         TuiLine(
             (
                 _literal("Coverage  ", key="session.coverage.label"),
-                _field("session.coverage.percent", f"{coverage.percent}%", compare="derived"),
+                _field(
+                    "session.coverage.percent", f"{coverage.percent}%", compare=coverage.percent
+                ),
                 _literal("   ", key="session.coverage.percent_sep"),
                 _field(
                     "session.coverage.completed",
@@ -1417,28 +1429,144 @@ def finalize_path_text(view: RunViewState) -> str:
 
 
 def coverage_text(snapshot: RunSnapshot) -> str:
-    metrics = calculate_progress_metrics(snapshot.coverage)
+    metrics = calculate_progress_metrics(
+        snapshot.coverage, cell_terminal_count=snapshot.cell_terminal_count
+    )
     return "\n".join(
         [
-            f"{metrics.percent:3d}% {_progress_bar(metrics.completed, metrics.total)}",
-            f"reviewed / total cells: {metrics.completed} / {metrics.total}",
+            f"{metrics.percent:3d}% {_progress_bar(metrics.terminal, metrics.total)}",
+            f"terminal / total cells: {metrics.terminal} / {metrics.total}",
             (
-                f"reviewed {metrics.completed} | pending {metrics.pending} | "
-                f"stale {metrics.stale} | superseded {metrics.superseded}"
+                f"reviewed {metrics.completed} | terminal {metrics.terminal} | "
+                f"pending {metrics.pending} | stale {metrics.stale} | "
+                f"superseded {metrics.superseded}"
             ),
         ]
     )
 
 
+@dataclass(frozen=True)
+class FileQueueEntry:
+    file_path: str
+    cell_count: int
+    priority_label: str
+    priority_score: int
+    actionable_finding_count: int
+    finding_count: int
+    pending_count: int
+    stale_count: int
+    reviewed_count: int
+    rule_ids: tuple[str, ...]
+    why: str
+
+
+def group_queue_by_file(
+    entries: tuple[QueueEntry, ...], *, limit: int | None = None
+) -> tuple[FileQueueEntry, ...]:
+    groups: dict[str, list[QueueEntry]] = {}
+    for entry in entries:
+        groups.setdefault(entry.file_path, []).append(entry)
+
+    file_groups: list[dict[str, object]] = []
+    for file_path, cell_entries in groups.items():
+        highest_priority_label: str = "P3"
+        highest_priority_score: int = 0
+        actionable_finding_count = 0
+        finding_count = 0
+        pending_count = 0
+        stale_count = 0
+        reviewed_count = 0
+        rule_ids: list[str] = []
+        whys: list[str] = []
+        for entry in cell_entries:
+            actionable_finding_count += entry.actionable_finding_count
+            finding_count += entry.finding_count
+            if entry.state == "pending":
+                pending_count += 1
+            elif entry.state == "stale":
+                stale_count += 1
+            else:
+                reviewed_count += 1
+            if entry.rule_id not in rule_ids:
+                rule_ids.append(entry.rule_id)
+            if entry.why not in whys:
+                whys.append(entry.why)
+            if _priority_rank(str(entry.priority_label)) < _priority_rank(highest_priority_label):
+                highest_priority_label = str(entry.priority_label)
+                highest_priority_score = entry.priority_score
+            elif entry.priority_score > highest_priority_score:
+                highest_priority_score = entry.priority_score
+        file_groups.append(
+            {
+                "file_path": file_path,
+                "cell_count": len(cell_entries),
+                "highest_priority_label": highest_priority_label,
+                "highest_priority_score": highest_priority_score,
+                "actionable_finding_count": actionable_finding_count,
+                "finding_count": finding_count,
+                "pending_count": pending_count,
+                "stale_count": stale_count,
+                "reviewed_count": reviewed_count,
+                "rule_ids": rule_ids,
+                "whys": whys,
+            }
+        )
+
+    file_groups.sort(
+        key=lambda g: (-int(cast(int, g["highest_priority_score"])), str(g["file_path"]))
+    )
+    entries_out: list[FileQueueEntry] = []
+    for g in file_groups:
+        parts: list[str] = []
+        state_parts: list[str] = []
+        pending = cast(int, g["pending_count"])
+        stale = cast(int, g["stale_count"])
+        reviewed = cast(int, g["reviewed_count"])
+        actionable = cast(int, g["actionable_finding_count"])
+        if pending:
+            state_parts.append(f"{pending} pending")
+        if stale:
+            state_parts.append(f"{stale} stale")
+        if reviewed:
+            state_parts.append(f"{reviewed} reviewed")
+        if state_parts:
+            parts.append(", ".join(state_parts))
+        if actionable:
+            parts.append(f"{actionable} actionable finding(s)")
+        rules_str = ", ".join(cast(list[str], g["rule_ids"]))
+        parts.append(f"rules: {rules_str}")
+        why = " · ".join(parts)
+        entries_out.append(
+            FileQueueEntry(
+                file_path=str(g["file_path"]),
+                cell_count=cast(int, g["cell_count"]),
+                priority_label=str(g["highest_priority_label"]),
+                priority_score=cast(int, g["highest_priority_score"]),
+                actionable_finding_count=actionable,
+                finding_count=cast(int, g["finding_count"]),
+                pending_count=pending,
+                stale_count=stale,
+                reviewed_count=reviewed,
+                rule_ids=tuple(cast(list[str], g["rule_ids"])),
+                why=why,
+            )
+        )
+    return tuple(entries_out[:limit] if limit is not None else entries_out)
+
+
+def _priority_rank(label: str) -> int:
+    return {"P0": 0, "P1": 1, "P2": 2, "P3": 3}.get(label, 99)
+
+
 def actionable_queue_entries(
     view: RunViewState, *, limit: int | None = None
-) -> tuple[QueueEntry, ...]:
+) -> tuple[FileQueueEntry, ...]:
     entries = tuple(
         entry for entry in view.coverage_projection.queue if _entry_is_actionable(entry)
     )
     if not entries:
         entries = view.coverage_projection.queue
-    return entries[:limit] if limit is not None else entries
+    return group_queue_by_file(entries, limit=limit)
 
 
 def queue_text(view: RunViewState, *, limit: int = 4) -> str:
@@ -1788,7 +1916,6 @@ def sanitize_agent_output_line(value: object, *, limit: int = 120) -> str:
     text = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", str(value))
     text = text.replace("\r", "\n")
     text = " ".join(_plain_text(text).split())
-    text = text[: limit * 4]
     secret_patterns = (
         r"\b[A-Z0-9_]*(?:TOKEN|SECRET|KEY|PASSWORD)=\S+",
         r"\b(?:authorization|x-api-key)\s*:\s*\S+(?:\s+\S+)?",
@@ -1816,11 +1943,6 @@ def activity_text(view: RunViewState) -> str:
         suffix = f" - {event.detail}" if event.detail else ""
         lines.append(f"{event.time} {event.label}{suffix}")
     return "\n".join(lines)
-
-
-def _events_text(events: tuple[RunEvent, ...]) -> str:  # pyright: ignore[reportUnusedFunction]
-    empty = RunSnapshot(None, {}, {}, None, 0, "idle", (), 0)
-    return activity_text(dashboard_state(empty, events))
 
 
 def footer_text() -> str:
@@ -1891,10 +2013,6 @@ def _agent_text(snapshot: RunSnapshot) -> str:  # pyright: ignore[reportUnusedFu
 
 def _plain_text(value: object) -> str:
     return "".join(_plain_character(character) for character in str(value))
-
-
-def _rich_safe_text(value: object) -> str:  # pyright: ignore[reportUnusedFunction]
-    return _plain_text(value).replace("[", r"\[")
 
 
 def _plain_character(character: str) -> str:

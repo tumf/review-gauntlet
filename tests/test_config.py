@@ -8,11 +8,15 @@ from review_gauntlet.config import (
     ConfigError,
     HookCommandConfig,
     ReviewGauntletConfig,
+    _strip_jsonc,  # pyright: ignore[reportPrivateUsage]
     deep_merge,
     discover_config_path,
+    list_presets,
     load_config,
     read_preset,
     resolve_effective_config,
+    resolve_explicit_config_path,
+    validate_config_text,
 )
 
 CONFIG_PAYLOAD = '{"adapter":{"type":"command","command":"tool"}}'
@@ -415,3 +419,53 @@ def test_hook_command_config_accepts_portable_env_names(name: str) -> None:
     config = HookCommandConfig.model_validate({"command": "tool", "env": {name: "value"}})
 
     assert config.env == {name: "value"}
+
+
+def test_resolve_explicit_config_path_expands_tilde(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    home = tmp_path / "fakehome"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    conf = home / "my.json"
+    conf.write_text(CONFIG_PAYLOAD, encoding="utf-8")
+
+    result = resolve_explicit_config_path(tmp_path, Path("~/my.json"))
+
+    assert result == conf.resolve()
+
+
+def test_resolve_explicit_config_path_rejects_directory(tmp_path: Path) -> None:
+    d = tmp_path / "adir"
+    d.mkdir()
+
+    with pytest.raises(ConfigError, match="not a file"):
+        resolve_explicit_config_path(tmp_path, d)
+
+
+def test_validate_config_text_valid() -> None:
+    config = validate_config_text(CONFIG_PAYLOAD, source="test")
+
+    assert config.adapter.command == "tool"
+
+
+def test_validate_config_text_invalid() -> None:
+    with pytest.raises(ConfigError, match="invalid review config test"):
+        validate_config_text("not json", source="test")
+
+
+def test_strip_jsonc_unterminated_block_comment() -> None:
+    with pytest.raises(ConfigError, match="unterminated"):
+        _strip_jsonc("/* never closed")
+
+
+def test_list_presets_returns_non_empty_tuple() -> None:
+    names = list_presets()
+
+    assert isinstance(names, tuple)
+    assert len(names) > 0
+
+
+def test_read_preset_unknown_name() -> None:
+    with pytest.raises(ConfigError, match="unknown config preset"):
+        read_preset("nonexistent_preset")

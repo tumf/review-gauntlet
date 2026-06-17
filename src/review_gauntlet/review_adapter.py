@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
 import subprocess
 import threading
+import time
 from pathlib import Path
-from typing import NoReturn, Protocol, cast
+from typing import IO, NoReturn, Protocol, cast
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
@@ -26,6 +28,14 @@ class ReviewAdapterError(RuntimeError):
     def __init__(self, message: str, *, failure: dict[str, object] | None = None) -> None:
         super().__init__(message)
         self.failure = failure or {"error": message}
+
+
+class _QuietTimeoutExpired(Exception):
+    def __init__(self, timeout: float, stdout: str, stderr: str) -> None:
+        super().__init__(f"no output for {timeout:.1f}s")
+        self.timeout = timeout
+        self.stdout = stdout
+        self.stderr = stderr
 
 
 class ReviewAdapterResult(BaseModel):
@@ -220,8 +230,11 @@ class CommandReviewAdapter:
         with self._process_lock:
             processes = tuple(self._active_processes)
         for process in processes:
-            if process.poll() is None:
-                process.terminate()
+            try:
+                if process.poll() is None:
+                    process.terminate()
+            except OSError:
+                pass
 
     def review(self, cell: ReviewCell) -> ReviewAdapterResult:
         cells_dir = (self._run_dir / "cells").resolve()
@@ -284,8 +297,6 @@ class CommandReviewAdapter:
             stderr_file=stderr_file,
             failure_file=failure_file,
         )
-        stdout_file.write_text(completed.stdout, encoding="utf-8")
-        stderr_file.write_text(completed.stderr, encoding="utf-8")
         if completed.returncode != 0:
             self._fail(
                 f"command exited with status {completed.returncode}",
@@ -356,33 +367,105 @@ class CommandReviewAdapter:
             self._active_processes.add(process)
         try:
             try:
-                stdout, stderr = process.communicate(timeout=self._config.timeout_seconds)
-            except subprocess.TimeoutExpired:
-                process.terminate()
-                try:
-                    stdout, stderr = process.communicate(timeout=2)
-                except subprocess.TimeoutExpired:
-                    process.kill()
-                    stdout, stderr = process.communicate()
-                stdout_file.write_text(_process_output_text(stdout), encoding="utf-8")
-                stderr_file.write_text(_process_output_text(stderr), encoding="utf-8")
+                stdout, stderr = self._communicate(process)
+            except subprocess.TimeoutExpired as exc:
+                stdout_file.write_text(_process_output_text(exc.stdout), encoding="utf-8")
+                stderr_file.write_text(_process_output_text(exc.stderr), encoding="utf-8")
                 self._fail(
                     f"command timed out after {self._config.timeout_seconds} seconds",
                     failure_file,
                     {"argv": argv, "timeout_seconds": self._config.timeout_seconds},
                 )
-            stdout_file.write_text(stdout, encoding="utf-8")
-            stderr_file.write_text(stderr, encoding="utf-8")
+            except _QuietTimeoutExpired as exc:
+                stdout_file.write_text(_process_output_text(exc.stdout), encoding="utf-8")
+                stderr_file.write_text(_process_output_text(exc.stderr), encoding="utf-8")
+                self._fail(
+                    f"command produced no output for {self._config.quiet_timeout_seconds}s",
+                    failure_file,
+                    {"argv": argv, "quiet_timeout_seconds": self._config.quiet_timeout_seconds},
+                )
+            except Exception as exc:
+                stdout_file.write_text("", encoding="utf-8")
+                stderr_file.write_text("", encoding="utf-8")
+                self._fail(
+                    f"unexpected error communicating with command: {exc}",
+                    failure_file,
+                    {"argv": argv, "error": str(exc), "error_type": type(exc).__name__},
+                )
+            stdout_file.write_text(_process_output_text(stdout), encoding="utf-8")
+            stderr_file.write_text(_process_output_text(stderr), encoding="utf-8")
             if process.returncode is not None and process.returncode < 0:
                 self._fail(
                     "command cancelled",
                     failure_file,
                     {"argv": argv, "returncode": process.returncode, "cancelled": True},
                 )
-            return subprocess.CompletedProcess(argv, process.returncode or 0, stdout, stderr)
+            if process.returncode is None:
+                raise ReviewAdapterError("returncode unset after communicate()")
+            return subprocess.CompletedProcess(argv, process.returncode, stdout, stderr)
         finally:
             with self._process_lock:
                 self._active_processes.discard(process)
+            if process.poll() is None:
+                with contextlib.suppress(OSError):
+                    process.kill()
+
+    def _communicate(self, process: subprocess.Popen[str]) -> tuple[str, str]:
+        assert process.stdout is not None
+        assert process.stderr is not None
+        stdout_chunks: list[str] = []
+        stderr_chunks: list[str] = []
+        last_activity = [time.monotonic()]
+        activity_lock = threading.Lock()
+
+        def _read(pipe: IO[str], buf: list[str]) -> None:
+            for chunk in iter(lambda: pipe.read(4096), ""):
+                with activity_lock:
+                    last_activity[0] = time.monotonic()
+                buf.append(chunk)
+
+        threads = [
+            threading.Thread(target=_read, args=(process.stdout, stdout_chunks), daemon=True),
+            threading.Thread(target=_read, args=(process.stderr, stderr_chunks), daemon=True),
+        ]
+        for t in threads:
+            t.start()
+
+        start = time.monotonic()
+        timeout_exc: subprocess.TimeoutExpired | _QuietTimeoutExpired | None = None
+        while any(t.is_alive() for t in threads):
+            threads[0].join(timeout=0.05)
+            now = time.monotonic()
+            if now - start >= self._config.timeout_seconds:
+                timeout_exc = subprocess.TimeoutExpired(process.args, self._config.timeout_seconds)
+                break
+            with activity_lock:
+                idle = now - last_activity[0]
+            if idle >= self._config.quiet_timeout_seconds:
+                timeout_exc = _QuietTimeoutExpired(self._config.quiet_timeout_seconds, "", "")
+                break
+
+        if timeout_exc is not None:
+            process.terminate()
+            for t in threads:
+                t.join(timeout=2)
+            if process.poll() is None:
+                with contextlib.suppress(OSError):
+                    process.kill()
+            for t in threads:
+                t.join(timeout=1)
+            stdout = "".join(stdout_chunks)
+            stderr = "".join(stderr_chunks)
+            if isinstance(timeout_exc, _QuietTimeoutExpired):
+                raise _QuietTimeoutExpired(self._config.quiet_timeout_seconds, stdout, stderr)
+            raise subprocess.TimeoutExpired(
+                process.args, self._config.timeout_seconds, stdout, stderr
+            )
+
+        for t in threads:
+            t.join()
+        process.wait()
+        return "".join(stdout_chunks), "".join(stderr_chunks)
 
     def _read_cell_file_metadata(self, cell: ReviewCell) -> FileMetadata:
         file_path = (self._root / cell.file_path).resolve()
@@ -471,7 +554,15 @@ class CommandReviewAdapter:
                 failure_file,
                 {"output_path": str(output_path)},
             )
-        output_size = output_path.stat().st_size
+        try:
+            content = output_path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            self._fail(
+                f"cannot read verdict output file: {exc}",
+                failure_file,
+                {"output_path": str(output_path), "error": str(exc)},
+            )
+        output_size = len(content.encode("utf-8"))
         if output_size > VERDICT_OUTPUT_SIZE_LIMIT_BYTES:
             self._fail(
                 "verdict output file exceeds "
@@ -483,7 +574,7 @@ class CommandReviewAdapter:
                     "size_limit_bytes": VERDICT_OUTPUT_SIZE_LIMIT_BYTES,
                 },
             )
-        return output_path.read_text(encoding="utf-8")
+        return content
 
     def _fail(self, message: str, failure_file: Path, details: dict[str, object]) -> NoReturn:
         payload = {"error": message, **details}

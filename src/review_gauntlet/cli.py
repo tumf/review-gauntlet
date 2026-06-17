@@ -1366,6 +1366,7 @@ class _StatusContext:
     current_cells: dict[str, ReviewCell]
     effective_cell_counts: dict[str, int]
     finalize_reasons: list[str]
+    cell_terminal_count: int = 0
 
 
 class RunSnapshotReadinessProvider:
@@ -1377,7 +1378,7 @@ class RunSnapshotReadinessProvider:
 
     def status_snapshot(self, store: SessionStore, root: Path) -> dict[str, object]:
         self._status_context = None
-        context = _build_status_context(store, root)
+        context = _build_status_context(store, root, allow_non_review_dirty=True)
         self._status_context = context
         status = _status_from_context(context)
         if self._include_coverage_projection:
@@ -1402,7 +1403,7 @@ class RunSnapshotReadinessProvider:
         context = self._status_context
         self._status_context = None
         if context is None or context.root != root or context.session_id != session_id:
-            context = _build_status_context(store, root)
+            context = _build_status_context(store, root, allow_non_review_dirty=True)
         return _ready_prompt_from_context(store, context)
 
 
@@ -2226,6 +2227,7 @@ def _build_status_context(
     effective_cell_counts = _effective_current_target_coverage_for_cells(
         store, session_id, current_cells
     )
+    cell_terminal_count = store.count_terminally_complete_cells(session_id)
     reasons = _finalize_reasons(
         effective_cell_counts, finding_counts, store, session_id, root, allow_non_review_dirty
     )
@@ -2237,6 +2239,7 @@ def _build_status_context(
         current_cells=current_cells,
         effective_cell_counts=effective_cell_counts,
         finalize_reasons=reasons,
+        cell_terminal_count=cell_terminal_count,
     )
 
 
@@ -2252,6 +2255,7 @@ def _status_from_context(context: _StatusContext) -> dict[str, object]:
         "next_required_action": _next_action(
             context.effective_cell_counts, context.finding_counts, context.finalize_reasons
         ),
+        "cell_terminal_count": context.cell_terminal_count,
     }
 
 
