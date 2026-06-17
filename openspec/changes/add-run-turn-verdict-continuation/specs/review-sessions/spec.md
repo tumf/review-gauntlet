@@ -60,6 +60,42 @@ Continuation verdict files SHALL be handoff artifacts only. The session ledger S
 **And**: the failure includes the task key and targeted IDs
 **And**: the run does not continue indefinitely with the same unchanged actionable work
 
+#### Scenario: Partial verdict file write is not treated as invalid verdict
+
+**Given**: `review-gauntlet run` starts an external agent subprocess for a continuation-aware finding turn
+**And**: the subprocess creates the continuation JSON file but has not finished writing valid JSON yet
+**When**: `review-gauntlet run` polls the continuation file during agent execution
+**Then**: the incomplete file is treated as not-yet-written
+**And**: polling continues normally without reporting `invalid_step_verdict`
+**And**: the verdict is detected only after the file contains valid JSON with a recognized `verdict` value
+
+#### Scenario: Verdict file overwrite updates detected verdict
+
+**Given**: `review-gauntlet run` starts an external agent subprocess for a continuation-aware finding turn
+**And**: the subprocess writes a valid continuation JSON file with `verdict: continue`
+**And**: the subprocess later overwrites the same file with `verdict: finish`
+**And**: the grace period from the first detection has not yet expired
+**When**: `review-gauntlet run` detects the updated verdict
+**Then**: the run uses the most recently validated verdict (`finish`) for step classification
+
+#### Scenario: Verdict grace period defaults to adapter configuration
+
+**Given**: a command adapter configuration with `verdict_grace_seconds: 10`
+**And**: `review-gauntlet run` starts a continuation-aware finding turn
+**And**: the agent writes a valid verdict file and continues running
+**When**: 10 seconds elapse after verdict detection
+**Then**: the subprocess is terminated
+**And**: the run step uses the detected verdict for classification
+**And**: the default 30-second grace period is not applied
+
+#### Scenario: Continuation path traversal is rejected
+
+**Given**: a continuation-aware finding turn
+**And**: the task key computation would produce a path component containing `../`
+**When**: `review-gauntlet run` computes the continuation file path
+**Then**: the path is rejected before being included in the prompt
+**And**: no file is read or written outside `.review-gauntlet/turns/<session-id>/`
+
 ## MODIFIED Requirements
 
 ### Requirement: Run agent liveness SHALL reflect actual output activity
@@ -68,7 +104,7 @@ Continuation verdict files SHALL be handoff artifacts only. The session ledger S
 
 Output activity SHALL also reset quiet-timeout enforcement. stdout and stderr output lines SHALL both count as liveness. When no output has ever been produced for a running subprocess, quiet-timeout elapsed time SHALL be measured from the agent step start time.
 
-Continuation verdict file detection SHALL be a separate liveness/completion signal for continuation-aware run turns. A valid verdict file MAY start a verdict grace period and terminate a lingering child before quiet timeout, but it SHALL NOT be treated as stdout/stderr output for the purpose of hiding actual output silence.
+Continuation verdict file detection SHALL be a separate liveness/completion signal for continuation-aware run turns. A valid verdict file MAY start a verdict grace period and terminate a lingering child before quiet timeout, but it SHALL NOT be treated as stdout/stderr output for the purpose of hiding actual output silence. The verdict grace period SHALL be configurable via `adapter.verdict_grace_seconds` and SHALL default to 30 seconds when not explicitly configured.
 
 #### Scenario: Periodic output prevents quiet timeout
 
