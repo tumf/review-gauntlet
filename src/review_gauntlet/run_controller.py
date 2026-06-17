@@ -42,12 +42,12 @@ class AgentOutputProgress:
                 del self._output_lines[: len(self._output_lines) - self._limit]
 
     def snapshot(self) -> tuple[float | None, tuple[AgentOutputEntry, ...]]:
-        now = datetime.now(UTC)
         with self._lock:
             last_output_at = self._last_output_at
             output_tail = tuple(self._output_lines)
         if last_output_at is None:
             return None, output_tail
+        now = datetime.now(UTC)
         return (now - last_output_at).total_seconds(), output_tail
 
 
@@ -89,7 +89,12 @@ class RunEvent:
             payload=dict(payload),
         )
 
+    _RESERVED_KEYS = frozenset({"type", "timestamp"})
+
     def model_dump(self) -> dict[str, object]:
+        conflicts = self._RESERVED_KEYS & self.payload.keys()
+        if conflicts:
+            raise ValueError(f"RunEvent payload contains reserved key(s): {conflicts}")
         result = dict(self.payload)
         result["type"] = self.type
         result["timestamp"] = self.timestamp

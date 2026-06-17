@@ -51,14 +51,18 @@ def create_run_app(controller: RunController) -> object:
     class RunApp(App[dict[str, object]]):
         CSS = """
         $brand: #d97757;
-        Screen { layout: vertical; }
-        #body { height: 1fr; padding: 1; }
+        $dashboard-bg: #0f1117;
+        $dashboard-surface: #151923;
+        $dashboard-surface-muted: #11151d;
+        Screen { layout: vertical; background: $dashboard-bg; }
+        #body { height: 1fr; padding: 1; background: $dashboard-bg; }
         #session_header {
             border: round $primary;
             border-title-color: $brand;
             border-title-style: bold;
             padding: 1;
             height: auto;
+            background: $dashboard-surface;
         }
         #header_status { text-style: bold; }
         #header_meta { color: $text-muted; }
@@ -75,6 +79,7 @@ def create_run_app(controller: RunController) -> object:
             border-title-style: bold;
             padding: 1;
             height: auto;
+            background: $dashboard-surface;
         }
         .panel-active { border: round $success; border-title-color: $success; }
         .panel-blocked { border: round $warning; border-title-color: $warning; }
@@ -82,7 +87,11 @@ def create_run_app(controller: RunController) -> object:
         .panel-finalized { border: round $success; border-title-color: $success; }
         #activity_panel { height: 1fr; }
         #activity_timeline { height: 1fr; }
-        #controls { color: $text-muted; height: auto; }        """
+        #controls {
+            color: $text-muted;
+            height: auto;
+            background: $dashboard-surface-muted;
+        }        """
         BINDINGS = [
             ("q", "stop_after_current_step", "Stop after current step"),
             ("ctrl+c", "interrupt", "Interrupt"),
