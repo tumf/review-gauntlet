@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import posixpath
@@ -1938,6 +1939,7 @@ def _cmd_run(args: argparse.Namespace, root: Path, store: SessionStore) -> dict[
             state_dir,
             prompt,
             output_progress=controller.agent_output_progress,
+            cancel_event=controller.cancel_event,
         )
 
     snapshot_readiness = RunSnapshotReadinessProvider(include_coverage_projection=True)
@@ -1977,6 +1979,7 @@ def _run_session_command_step_from_config(
     prompt: str,
     *,
     output_progress: AgentOutputProgress | None = None,
+    cancel_event: threading.Event | None = None,
 ) -> SessionCommandResult:
     return _run_session_command_step(
         config=config,
@@ -1984,6 +1987,7 @@ def _run_session_command_step_from_config(
         state_dir=state_dir,
         prompt=prompt,
         output_progress=output_progress,
+        cancel_event=cancel_event,
     )
 
 
@@ -1994,6 +1998,7 @@ def _run_session_command_step(
     state_dir: Path,
     prompt: str,
     output_progress: AgentOutputProgress | None = None,
+    cancel_event: threading.Event | None = None,
 ) -> SessionCommandResult:
     variables = {
         "repo_root": str(root.resolve()),
@@ -2077,6 +2082,10 @@ def _run_session_command_step(
                     last_output_at = time.monotonic()
                 if output_progress is not None:
                     output_progress.push(stream_name, stripped_line)
+                if cancel_event is not None and cancel_event.is_set():
+                    with contextlib.suppress(OSError):
+                        process.kill()
+                    break
         finally:
             pipe.close()
 

@@ -195,6 +195,7 @@ class RunController:
         self._events: list[RunEvent] = []
         self._stop_after_current_step = False
         self._interrupted = False
+        self.cancel_event = threading.Event()
         self._step = 0
         self._agent_status = "idle"
         self._command_argv: tuple[str, ...] = ()
@@ -222,6 +223,7 @@ class RunController:
 
     def interrupt(self) -> None:
         self._interrupted = True
+        self.cancel_event.set()
         self._emit("interrupt_requested")
 
     def refresh(self) -> RunSnapshot:
@@ -333,6 +335,7 @@ class RunController:
         self.refresh()
         for step_number in range(1, self.max_steps + 1):
             self._step = step_number
+            self.cancel_event.clear()
             if self._interrupted:
                 return self._interrupted_result(
                     steps, error="run interrupted by controller request"

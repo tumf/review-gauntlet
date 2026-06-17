@@ -925,6 +925,8 @@ def terminal_state(agent_status: str) -> tuple[str, str]:
     status = _plain_text(agent_status)
     if status == "running":
         return "RUNNING", "panel-active"
+    if status == "starting":
+        return "STARTING", "panel-active"
     if status == "blocked":
         return "BLOCKED", "panel-blocked"
     if status in _FAILED_AGENT_STATUSES:
