@@ -1955,6 +1955,7 @@ def _run_session_command_step(
     continuation_path = _continuation_path_from_prompt(prompt)
     if continuation_path is not None:
         continuation_path.parent.mkdir(parents=True, exist_ok=True)
+        continuation_path.unlink(missing_ok=True)
     verdict_detected_at: float | None = None
     verdict_metadata: dict[str, object] | None = None
 

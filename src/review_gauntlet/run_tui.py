@@ -578,12 +578,6 @@ def format_task_title(prompt: str | None) -> TaskDisplay:
         return TaskDisplay("WAITING FOR READY TASK", "No actionable ready prompt is available.")
     normalized = " ".join(prompt.lower().split())
     mappings = (
-        (
-            ("pending", "review"),
-            "REVIEW PENDING CELLS",
-            "Review cells that have not received coverage yet.",
-        ),
-        (("stale", "review"), "REVIEW STALE CELLS", "Refresh reviews whose coverage is stale."),
         (("untriaged",), "TRIAGE FINDINGS", "Classify open findings that still need triage."),
         (
             ("confirmed", "fix"),
@@ -597,6 +591,12 @@ def format_task_title(prompt: str | None) -> TaskDisplay:
             "FINALIZE SESSION",
             "Finalize the review session when all required work is complete.",
         ),
+        (
+            ("pending", "review"),
+            "REVIEW PENDING CELLS",
+            "Review cells that have not received coverage yet.",
+        ),
+        (("stale", "review"), "REVIEW STALE CELLS", "Refresh reviews whose coverage is stale."),
     )
     for needles, title, description in mappings:
         if all(needle in normalized for needle in needles):
@@ -944,23 +944,6 @@ def header_agent_text(view: RunViewState) -> str:
     return " · ".join(parts)
 
 
-def header_coverage_text(view: RunViewState) -> str:
-    cov = view.coverage
-    bar = _progress_bar(cov.terminal, cov.total)
-    parts = [
-        f"Finalize {cov.percent}% {bar}  {cov.terminal}/{cov.total}",
-    ]
-    if cov.pending:
-        parts.append(f"pending {cov.pending}")
-    if cov.stale:
-        parts.append(f"stale {cov.stale}")
-    if cov.completed > cov.terminal:
-        parts.append(f"reviewed {cov.completed}")
-    if view.open_findings:
-        parts.append(f"open {view.open_findings}")
-    return "   ".join(parts)
-
-
 def header_meta_text(view: RunViewState) -> str:
     return f"{view.session_short_id} · agent {view.agent_name} · {view.liveness_detail}"
 
@@ -1231,22 +1214,21 @@ def activity_tui_lines(view: RunViewState) -> tuple[TuiLine, ...]:
     if not view.timeline_events:
         return (TuiLine((_field("activity.empty", "--:--:-- waiting for run activity"),)),)
     lines: list[TuiLine] = []
-    for event in view.timeline_events:
+    for i, event in enumerate(view.timeline_events):
         identity = _activity_identity(event)
+        prefix = f"activity.{i}.{identity}"
         suffix = f" - {event.detail}" if event.detail else ""
         lines.append(
             TuiLine(
                 (
-                    _field(f"activity.{identity}.time", event.time, compare="timestamp"),
-                    _literal(" ", key=f"activity.{identity}.time_space"),
+                    _field(f"{prefix}.time", event.time, compare="timestamp"),
+                    _literal(" ", key=f"{prefix}.time_space"),
                     _colored_field(
-                        f"activity.{identity}.label",
+                        f"{prefix}.label",
                         event.label,
                         _ACTIVITY_LABEL_COLORS.get(event.label, ""),
                     ),
-                    _field(
-                        f"activity.{identity}.detail", suffix, compare=(event.label, event.detail)
-                    ),
+                    _field(f"{prefix}.detail", suffix, compare=(event.label, event.detail)),
                 )
             )
         )
@@ -1491,10 +1473,12 @@ def group_queue_by_file(
                 rule_ids.append(entry.rule_id)
             if entry.why not in whys:
                 whys.append(entry.why)
-            if _priority_rank(str(entry.priority_label)) < _priority_rank(highest_priority_label):
+            entry_rank = _priority_rank(str(entry.priority_label))
+            highest_rank = _priority_rank(highest_priority_label)
+            if entry_rank < highest_rank:
                 highest_priority_label = str(entry.priority_label)
                 highest_priority_score = entry.priority_score
-            elif entry.priority_score > highest_priority_score:
+            elif entry_rank == highest_rank and entry.priority_score > highest_priority_score:
                 highest_priority_score = entry.priority_score
         file_groups.append(
             {
@@ -1913,13 +1897,17 @@ def format_agent_output_entry(entry: AgentOutputEntry) -> TimelineEvent:
 
 
 def sanitize_agent_output_line(value: object, *, limit: int = 120) -> str:
-    text = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", str(value))
+    text = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", str(value))  # CSI sequences
+    text = re.sub(
+        r"\x1b\][^\x07\n\r]*(?:\x07|\x1b\\)", "", text
+    )  # OSC sequences (e.g. terminal hyperlinks)
     text = text.replace("\r", "\n")
     text = " ".join(_plain_text(text).split())
     secret_patterns = (
         r"\b[A-Z0-9_]*(?:TOKEN|SECRET|KEY|PASSWORD)=\S+",
         r"\b(?:authorization|x-api-key)\s*:\s*\S+(?:\s+\S+)?",
         r"[\"']?\b(?:api[_-]?key|token|secret|password)\b[\"']?\s*[:=]\s*[\"']?\S+[\"']?",
+        r"\bBearer\s+[A-Za-z0-9+/=_\-.]+",
     )
     for pattern in secret_patterns:
         text = re.sub(pattern, "<redacted>", text, flags=re.IGNORECASE)
