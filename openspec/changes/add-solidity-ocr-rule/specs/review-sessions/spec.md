@@ -6,7 +6,7 @@ The default review logic SHALL derive its bundled prompts, path-based rules, and
 
 Generated review prompts SHALL identify the target file by repository root, repository-relative file path, content digest, file size in bytes, and line count. Generated prompts SHALL NOT embed the target file body directly. External review tools that need source content SHALL read the target file from the repository path identified in the prompt.
 
-The bundled rule corpus SHALL include a local Solidity rule document selected for `.sol` files. Solidity guidance SHALL cover smart-contract-specific review risks including reentrancy, access control, unchecked external calls, integer/precision handling, `tx.origin` misuse, delegatecall and low-level call risk, upgradeable storage layout, event/state observability, and gas-sensitive denial-of-service patterns.
+The bundled rule corpus SHALL include a local Solidity rule document selected for `.sol` files. Solidity guidance SHALL cover smart-contract-specific review risks across these required categories: specification and assumptions; Solidity version and compiler settings; access control; reentrancy and external calls; ETH and token transfers; input validation and boundary values; numeric calculation, rounding, and casting; state management and invariants; randomness, time, block data, and on-chain secrecy assumptions; oracle, pricing, and external data; gas and denial-of-service resistance; upgradeable/proxy contracts; signatures, permits, and replay protection; ERC/interface compliance; emergency design; events and auditability; testing and verification; deployment and operations; code quality and readability; and high-risk signal review. The guidance SHALL also include the practical review order of checking specification/invariants, permissions/funds, external calls/reentrancy, accounting/math, high-risk mechanisms, boundary/DoS/gas/error cases, and tests/static analysis/deployment settings.
 
 #### Scenario: OCR rule corpus is bundled and traceable
 
@@ -16,6 +16,7 @@ The bundled rule corpus SHALL include a local Solidity rule document selected fo
 **And**: records upstream commit `c323c6b40c72aa95d7cb801bedcb957b52ff9807`
 **And**: exposes the default OCR rule map and all OCR rule documents as local package data
 **And**: exposes the bundled Solidity rule document as local package data
+**And**: the Solidity rule document covers the required 20-category smart-contract review checklist and practical review order
 
 #### Scenario: OCR path rule mapping is preserved
 
