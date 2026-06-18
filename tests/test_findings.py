@@ -4,7 +4,14 @@ from pathlib import Path
 
 import pytest
 
-from review_gauntlet.findings import FindingState, normalize_ocr_comment
+from review_gauntlet.findings import (
+    ALLOWED_TRANSITIONS,
+    TERMINAL_FINDING_STATES,
+    FindingResolution,
+    FindingState,
+    NormalizedFinding,
+    normalize_ocr_comment,
+)
 from review_gauntlet.ocr_rules import OCRComment
 from review_gauntlet.review_cells import ReviewCell
 from review_gauntlet.session_store import SessionStore
@@ -20,6 +27,44 @@ def test_normalize_ocr_comment_rejects_unsafe_paths(path: str) -> None:
             rule_id="security",
             ruleset_digest="rules",
         )
+
+
+def test_finding_state_model_is_simplified() -> None:
+    assert tuple(FindingState) == (
+        FindingState.OPEN,
+        FindingState.CONFIRMED,
+        FindingState.DISMISSED,
+    )
+    assert TERMINAL_FINDING_STATES == {FindingState.CONFIRMED, FindingState.DISMISSED}
+    assert ALLOWED_TRANSITIONS == {
+        FindingState.OPEN: {FindingState.CONFIRMED, FindingState.DISMISSED},
+        FindingState.CONFIRMED: set(),
+        FindingState.DISMISSED: set(),
+    }
+
+
+def test_normalized_finding_accepts_dismiss_reason() -> None:
+    finding = NormalizedFinding.model_validate(
+        {
+            "fingerprint": "fp",
+            "path": "app.py",
+            "rule_id": "security",
+            "content": "false alarm",
+            "dismiss_reason": "generated code",
+        }
+    )
+
+    assert finding.dismiss_reason == "generated code"
+
+
+def test_finding_resolution_validates_resolution() -> None:
+    resolution = FindingResolution.model_validate(
+        {"finding_id": " RGF-0001 ", "state": "dismissed", "dismiss_reason": "not applicable"}
+    )
+
+    assert resolution.finding_id == "RGF-0001"
+    assert resolution.state == "dismissed"
+    assert resolution.dismiss_reason == "not applicable"
 
 
 def test_normalize_ocr_comment_normalizes_safe_paths() -> None:
@@ -102,7 +147,7 @@ def test_new_finding_id_uses_max_existing_numeric_id_not_row_count(tmp_path: Pat
                 "RGS-test",
                 "RGF-0042",
                 "migrated-fingerprint",
-                FindingState.UNTRIAGED,
+                FindingState.OPEN,
                 "legacy.py",
                 "security",
                 "Migrated issue",
@@ -163,7 +208,7 @@ def test_finding_occurrence_preserves_imprecise_zero_line_comments(tmp_path: Pat
     assert json.loads(metadata)["thinking"] == "No exact line applies"
 
 
-def test_reopened_finding_keeps_stable_id_when_detected_again(tmp_path: Path) -> None:
+def test_terminal_finding_keeps_stable_id_when_detected_again(tmp_path: Path) -> None:
     store = SessionStore(tmp_path)
     cell = ReviewCell(id="RGC-1", file_path="app.py", rule_id="security", slice_id="src")
     store.create_session(
@@ -180,7 +225,7 @@ def test_reopened_finding_keeps_stable_id_when_detected_again(tmp_path: Path) ->
     first_id = store.upsert_finding(
         "RGS-test", store.create_run("RGS-test", "d1"), cell.id, finding
     )
-    store.mark_finding(first_id, FindingState.FIXED_PENDING_VERIFICATION, "fixed", {})
+    store.mark_finding(first_id, FindingState.CONFIRMED, "fixed", {})
 
     second_id = store.upsert_finding(
         "RGS-test", store.create_run("RGS-test", "d2"), cell.id, finding
@@ -191,12 +236,4 @@ def test_reopened_finding_keeps_stable_id_when_detected_again(tmp_path: Path) ->
         state = conn.execute(
             "select state from findings where finding_id = ?", (first_id,)
         ).fetchone()[0]
-        event = conn.execute(
-            "select from_state, to_state, reason from finding_events order by event_id desc limit 1"
-        ).fetchone()
-    assert state == FindingState.REOPENED
-    assert event == (
-        FindingState.FIXED_PENDING_VERIFICATION,
-        FindingState.REOPENED,
-        "review_detected_again",
-    )
+    assert state == FindingState.CONFIRMED

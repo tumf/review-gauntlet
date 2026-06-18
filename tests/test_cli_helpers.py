@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-from datetime import date
 from pathlib import Path
 
 import pytest
@@ -14,7 +13,6 @@ from review_gauntlet.cli import (
     _finalize_blockers_are_commit_resolvable,  # pyright: ignore[reportPrivateUsage]
     _finding_int_field,  # pyright: ignore[reportPrivateUsage]
     _finding_sort_key,  # pyright: ignore[reportPrivateUsage]
-    _is_expired,  # pyright: ignore[reportPrivateUsage]
     _matches_finding_path_filter,  # pyright: ignore[reportPrivateUsage]
     _non_negative_int,  # pyright: ignore[reportPrivateUsage]
     _normalize_finding_path,  # pyright: ignore[reportPrivateUsage]
@@ -184,43 +182,6 @@ def test_expand_session_template_mixed_literal_and_variable() -> None:
 def test_expand_session_template_rejects_unknown_variable() -> None:
     with pytest.raises(ValueError, match="not available for run"):
         _expand_session_template("{unknown_var}", {"repo_root": "", "state_dir": "", "prompt": ""})
-
-
-# --- _is_expired ---
-
-
-def test_is_expired_returns_true_when_past_until_date() -> None:
-    metadata = '{"until": "2024-01-01"}'
-    assert _is_expired(metadata, date(2024, 6, 1)) is True
-
-
-def test_is_expired_returns_false_when_before_until_date() -> None:
-    metadata = '{"until": "2025-12-31"}'
-    assert _is_expired(metadata, date(2024, 6, 1)) is False
-
-
-def test_is_expired_returns_false_when_no_until_key() -> None:
-    assert _is_expired('{"reason": "test"}', date(2024, 6, 1)) is False
-
-
-def test_is_expired_returns_false_for_non_dict_json() -> None:
-    assert _is_expired("[1, 2, 3]", date(2024, 6, 1)) is False
-
-
-def test_is_expired_returns_false_and_warns_for_malformed_json(
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    result = _is_expired("not json at all", date(2024, 6, 1))
-    assert result is False
-    assert "unparseable metadata JSON" in capsys.readouterr().err
-
-
-def test_is_expired_returns_false_and_warns_for_bad_date_format(
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    result = _is_expired('{"until": "not-a-date"}', date(2024, 6, 1))
-    assert result is False
-    assert "unparseable metadata JSON" in capsys.readouterr().err
 
 
 # --- _config_init_output_path (RGF-0395) ---

@@ -176,8 +176,6 @@ class SessionStore:
         session_id: str,
         file_path: str,
         content_digest: str,
-        *,
-        stale_to_pending: bool = False,
     ) -> None:
         with self.connect() as conn:
             session_row = conn.execute(
@@ -186,33 +184,20 @@ class SessionStore:
             ).fetchone()
             if session_row is None:
                 raise LookupError(f"unknown session: {session_id}")
-            if stale_to_pending:
-                cur = conn.execute(
-                    """
-                    update review_cells
-                    set content_digest = ?,
-                        state = case when state = ? then ? else state end
-                    where session_id = ? and file_path = ?
-                    """,
-                    (content_digest, CellState.STALE, CellState.PENDING, session_id, file_path),
-                )
-            else:
-                cur = conn.execute(
-                    """
-                    update review_cells
-                    set content_digest = ?
-                    where session_id = ? and file_path = ?
-                    """,
-                    (content_digest, session_id, file_path),
-                )
+            cur = conn.execute(
+                """
+                update review_cells
+                set content_digest = ?
+                where session_id = ? and file_path = ?
+                """,
+                (content_digest, session_id, file_path),
+            )
         if cur.rowcount < 1:
             raise LookupError(
                 f"unknown review cell path: session_id={session_id} file_path={file_path}"
             )
 
-    _TERMINAL_FINDING_STATES_CLAUSE = (
-        "('fixed_verified', 'false_positive', 'waived', 'accepted_risk')"
-    )
+    _TERMINAL_FINDING_STATES_CLAUSE = "('confirmed', 'dismissed')"
 
     def count_terminally_complete_cells(self, session_id: str) -> int:
         with self.connect() as conn:
@@ -233,19 +218,6 @@ class SessionStore:
                 (session_id, session_id),
             ).fetchone()
             return int(row["count"]) if row else 0
-
-    def list_fixed_pending_findings(self, session_id: str) -> list[sqlite3.Row]:
-        with self.connect() as conn:
-            return list(
-                conn.execute(
-                    """
-                    select * from findings
-                    where session_id = ? and state = ?
-                    order by finding_id
-                    """,
-                    (session_id, FindingState.FIXED_PENDING_VERIFICATION),
-                )
-            )
 
     def last_run_target_digest(self, session_id: str) -> str | None:
         with self.connect() as conn:
@@ -282,7 +254,7 @@ class SessionStore:
                         session_id,
                         finding_id,
                         finding.fingerprint,
-                        FindingState.UNTRIAGED,
+                        FindingState.OPEN,
                         finding.path,
                         finding.rule_id,
                         finding.content,
@@ -291,10 +263,6 @@ class SessionStore:
                 )
             else:
                 finding_id = str(row["finding_id"])
-                if row["state"] == FindingState.FIXED_PENDING_VERIFICATION:
-                    self._transition(
-                        conn, finding_id, FindingState.REOPENED, "review_detected_again", {}
-                    )
             conn.execute(
                 """
                 insert into finding_occurrences(
@@ -319,36 +287,18 @@ class SessionStore:
         with self.connect() as conn:
             self._transition(conn, finding_id, state, reason, metadata)
 
-    def verify_fixed_findings(
-        self,
-        session_id: str,
-        seen_fingerprints: set[str],
-        evaluated_paths: set[str],
-        finding_ids: set[str] | None = None,
-    ) -> None:
-        if not evaluated_paths:
-            return
+    def list_open_findings(self, session_id: str) -> list[sqlite3.Row]:
         with self.connect() as conn:
-            rows = conn.execute(
-                """
-                select finding_id, fingerprint, path
-                from findings
-                where session_id = ? and state = ?
-                """,
-                (session_id, FindingState.FIXED_PENDING_VERIFICATION),
-            ).fetchall()
-            for row in rows:
-                finding_id = str(row["finding_id"])
-                if finding_ids is not None and finding_id not in finding_ids:
-                    continue
-                if str(row["path"]) not in evaluated_paths:
-                    continue
-                state = (
-                    FindingState.REOPENED
-                    if row["fingerprint"] in seen_fingerprints
-                    else FindingState.FIXED_VERIFIED
+            return list(
+                conn.execute(
+                    """
+                    select * from findings
+                    where session_id = ? and state = ?
+                    order by path, finding_id
+                    """,
+                    (session_id, FindingState.OPEN),
                 )
-                self._transition(conn, finding_id, state, "review_verification", {})
+            )
 
     def _transition(
         self,

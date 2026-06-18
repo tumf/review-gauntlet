@@ -11,8 +11,6 @@ from review_gauntlet.models import ReviewPlan
 class CellState(StrEnum):
     PENDING = "pending"
     REVIEWED = "reviewed"
-    STALE = "stale"
-    SUPERSEDED = "superseded"
 
 
 class ReviewCell(BaseModel):
@@ -26,7 +24,7 @@ class ReviewCell(BaseModel):
     content_digest: str = ""
 
 
-TERMINAL_CELL_STATES = {CellState.REVIEWED, CellState.SUPERSEDED}
+TERMINAL_CELL_STATES = {CellState.REVIEWED}
 
 
 def cell_id_for(file_path: str, rule_id: str, slice_id: str) -> str:

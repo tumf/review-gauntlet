@@ -11,13 +11,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 
-from review_gauntlet.findings import FindingState
 from review_gauntlet.session_store import SessionStore
 from review_gauntlet.targets import HeadMode, TargetKind, TargetSpec, target_digest
 
 CHECKPOINT_SCHEMA_VERSION = 1
 STANDARD_CHECKPOINT_ARTIFACTS = ("status.json", "findings.json", "events.json", "summary.md")
-TERMINAL_DECISION_STATES = {FindingState.WAIVED.value, FindingState.ACCEPTED_RISK.value}
 
 
 @dataclass(frozen=True)

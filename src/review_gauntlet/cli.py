@@ -13,7 +13,6 @@ import time
 import uuid
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any, NoReturn, cast
 
@@ -40,6 +39,7 @@ from review_gauntlet.config import (
     validate_config_text,
 )
 from review_gauntlet.continuation import (
+    ContinuationVerdict,
     ContinuationVerdictError,
     compact_previous_turn_context,
     continuation_metadata,
@@ -47,7 +47,7 @@ from review_gauntlet.continuation import (
     validate_continuation_verdict,
 )
 from review_gauntlet.coverage_projection import build_session_coverage_projection
-from review_gauntlet.findings import FindingState, normalize_ocr_comment
+from review_gauntlet.findings import FindingResolution, FindingState, normalize_ocr_comment
 from review_gauntlet.hooks import create_hook_event_sink
 from review_gauntlet.inventory import (
     UnsafeRepositoryPathError,
@@ -67,6 +67,7 @@ from review_gauntlet.review_adapter import (
     ReviewAdapter,
     ReviewAdapterError,
     ReviewAdapterResult,
+    build_resolve_prompt,
     cancel_adapter,
     validate_verdict_json,
 )
@@ -107,17 +108,9 @@ from review_gauntlet.targets import (
 USAGE_ERROR = 64
 
 _FINDING_MARK_TO_STATE = {
-    "untriaged": FindingState.UNTRIAGED,
+    "open": FindingState.OPEN,
     "confirmed": FindingState.CONFIRMED,
-    "fixed-pending-verification": FindingState.FIXED_PENDING_VERIFICATION,
-    "fixed_pending_verification": FindingState.FIXED_PENDING_VERIFICATION,
-    "fixed-verified": FindingState.FIXED_VERIFIED,
-    "false-positive": FindingState.FALSE_POSITIVE,
-    "false_positive": FindingState.FALSE_POSITIVE,
-    "waived": FindingState.WAIVED,
-    "accepted-risk": FindingState.ACCEPTED_RISK,
-    "accepted_risk": FindingState.ACCEPTED_RISK,
-    "reopened": FindingState.REOPENED,
+    "dismissed": FindingState.DISMISSED,
 }
 
 
@@ -209,25 +202,22 @@ def build_parser() -> argparse.ArgumentParser:
     review = subparsers.add_parser("review")
     _root_arg(review)
     _budget_arg(review)
-    _concurrency_arg(review)
+    _parallel_arg(review)
     review.add_argument("--fixture", type=Path)
     review.add_argument("--config", type=Path)
     _output_format_arg(review)
     _audience_arg(review)
 
-    verify_fixes = subparsers.add_parser("verify-fixes")
-    _root_arg(verify_fixes)
-    _budget_arg(verify_fixes)
-    _concurrency_arg(verify_fixes)
-    verify_fixes.add_argument("--fixture", type=Path)
-    verify_fixes.add_argument("--config", type=Path)
-    _output_format_arg(verify_fixes)
-    _audience_arg(verify_fixes)
-    verify_fixes.add_argument(
-        "--finding", action="append", default=[], help="Filter by finding ID (default: none)"
-    )
-    verify_fixes.add_argument(
-        "--path", action="append", default=[], help="Filter by finding path (default: none)"
+    resolve = subparsers.add_parser("resolve")
+    _root_arg(resolve)
+    _parallel_arg(resolve)
+    resolve.add_argument("--config", type=Path)
+    _output_format_arg(resolve)
+    resolve.add_argument(
+        "--max-turns",
+        type=_positive_int,
+        default=100,
+        help="Maximum resolve turns before stopping (default: 100)",
     )
 
     status = subparsers.add_parser("status")
@@ -286,9 +276,7 @@ def build_parser() -> argparse.ArgumentParser:
     mark = subparsers.add_parser("mark")
     _root_arg(mark)
     mark.add_argument("finding_id")
-    mark.add_argument(
-        "state", choices=("confirmed", "false-positive", "waived", "accepted-risk", "fixed")
-    )
+    mark.add_argument("state", choices=("confirmed", "dismissed"))
     mark.add_argument("--reason", default="", help="Decision reason (default: none)")
     mark.add_argument("--owner", default="", help="Decision owner (default: none)")
     mark.add_argument(
@@ -372,6 +360,12 @@ def _budget_arg(parser: argparse.ArgumentParser) -> None:
 def _concurrency_arg(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--concurrency", type=_positive_int, default=3, help="Review concurrency (default: 3)"
+    )
+
+
+def _parallel_arg(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--parallel", type=_positive_int, default=3, help="Parallel workers (default: 3)"
     )
 
 
@@ -761,8 +755,8 @@ def _run_session_command(args: argparse.Namespace, root: Path) -> None:
         _cmd_init(args, root, store)
     elif args.command == "review":
         _cmd_review(args, root, store)
-    elif args.command == "verify-fixes":
-        _cmd_verify_fixes(args, root, store)
+    elif args.command == "resolve":
+        _cmd_resolve(args, root, store)
     elif args.command == "status":
         allow = bool(getattr(args, "allow_non_review_dirty", False))
         _emit(_status(store, root, allow_non_review_dirty=allow), args.format)
@@ -883,10 +877,7 @@ def _cmd_review(args: argparse.Namespace, root: Path, store: SessionStore) -> No
     adapter_config = load_config(root, args.config) if args.fixture is None else None
     current_cells = tuple(_current_target_cells(store, session_id, root).values())
     selected_cells = _select_review_cells(
-        store=store,
-        session_id=session_id,
-        current_cells=current_cells,
-        budget=args.budget,
+        store=store, session_id=session_id, current_cells=current_cells
     )
     if not selected_cells:
         status = _status(store, root)
@@ -916,27 +907,25 @@ def _cmd_review(args: argparse.Namespace, root: Path, store: SessionStore) -> No
         run_id=run_id,
         selected_count=len(selected_cells),
         budget=args.budget,
-        concurrency=args.concurrency,
+        concurrency=args.parallel,
         adapter_identity=_adapter_identity(adapter),
         timeout_seconds=_adapter_timeout_seconds(adapter),
         artifact_dir=store.state_dir / "runs" / str(run_id),
     )
     results = review_cells_concurrently(
-        adapter, selected_cells, concurrency=args.concurrency, reporter=reporter
+        adapter, selected_cells, concurrency=args.parallel, reporter=reporter
     )
 
     reviewed = 0
     finding_ids: list[str] = []
-    seen_fingerprints: set[str] = set()
-    evaluated_paths: set[str] = set()
     first_failure: tuple[ReviewCell, ReviewAdapterError] | None = None
+
     for selected in selected_cells:
         outcome = _review_cell_outcome(results, selected)
         if isinstance(outcome, ReviewAdapterError):
             if first_failure is None:
                 first_failure = (selected, outcome)
             continue
-        evaluated_paths.add(selected.file_path)
         for comment in outcome.comments:
             finding = normalize_ocr_comment(
                 comment,
@@ -945,14 +934,10 @@ def _cmd_review(args: argparse.Namespace, root: Path, store: SessionStore) -> No
                 rule_id=selected.rule_id,
                 ruleset_digest=ruleset.digest,
             )
-            seen_fingerprints.add(finding.fingerprint)
             finding_ids.append(store.upsert_finding(session_id, run_id, selected.id, finding))
-        store.refresh_file_digest(
-            session_id, selected.file_path, selected.content_digest, stale_to_pending=True
-        )
+        store.refresh_file_digest(session_id, selected.file_path, selected.content_digest)
         store.mark_cell_reviewed(session_id, selected)
         reviewed += 1
-    store.verify_fixed_findings(session_id, seen_fingerprints, evaluated_paths)
     status = _status(store, root)
     if first_failure is not None:
         failed_cell, error = first_failure
@@ -975,243 +960,195 @@ def _cmd_review(args: argparse.Namespace, root: Path, store: SessionStore) -> No
     )
 
 
-def _cmd_verify_fixes(args: argparse.Namespace, root: Path, store: SessionStore) -> None:
+def _cmd_resolve(args: argparse.Namespace, root: Path, store: SessionStore) -> None:
     session_id = store.active_session_id()
     metadata = store.session_metadata(session_id)
     target = TargetSpec.model_validate(metadata["target"])
     _reconcile_cells(store, root, target)
-    target_rows = _fixed_pending_targets(
-        store,
-        session_id,
-        finding_filters=tuple(args.finding),
-        path_filters=tuple(args.path),
-    )
-    result_base = _verify_fixes_result_base(
-        store=store,
-        root=root,
-        session_id=session_id,
-        run_id=None,
-        reviewed=0,
-        finding_ids=[],
-        targeted_rows=target_rows,
-        fixed_verified_ids=[],
-        reopened_ids=[],
-        unverifiable_ids=[str(row["finding_id"]) for row in target_rows],
-    )
-    if args.budget == 0 or not target_rows:
-        _emit(result_base, args.format)
+    if not _open_findings_by_file(store, session_id):
+        _emit(
+            {
+                "session_id": session_id,
+                "turns": 0,
+                "resolved_finding_ids": [],
+                **_status(store, root),
+            },
+            args.format,
+        )
         return
-
-    selected_cells = _select_verify_fix_cells(
-        current_cells=cells_from_plan(_build_target_plan(root, target), file_digests(root)),
-        target_pairs={(str(row["path"]), str(row["rule_id"])) for row in target_rows},
-        budget=args.budget,
-    )
-    if not selected_cells:
-        _emit(result_base, args.format)
-        raise SystemExit(1)
-
-    ruleset = load_ruleset()
-    digest = target_digest(root)
-    adapter_config = load_config(root, args.config) if args.fixture is None else None
-    run_id = store.create_run(session_id, digest)
-    if args.fixture is not None:
-        adapter: ReviewAdapter = FakeReviewAdapter(args.fixture)
-    elif adapter_config is not None:
-        _config_path, config = adapter_config
-        adapter = CommandReviewAdapter(
-            config=config.adapter,
+    loaded_config = load_config(root, args.config)
+    if loaded_config is None:
+        raise ValueError(_missing_config_guidance("resolve"))
+    _config_path, effective_config = loaded_config
+    resolved_ids: list[str] = []
+    turns = 0
+    aborted: dict[str, object] | None = None
+    while turns < int(args.max_turns):
+        open_by_file = _open_findings_by_file(store, session_id)
+        if not open_by_file:
+            result = {
+                "session_id": session_id,
+                "turns": turns,
+                "resolved_finding_ids": resolved_ids,
+                **_status(store, root),
+            }
+            _emit(result, args.format)
+            return
+        turns += 1
+        prompts = {
+            file_path: _resolve_prompt_for_file(
+                root=root,
+                state_dir=store.state_dir,
+                session_id=session_id,
+                file_path=file_path,
+                findings=findings,
+            )
+            for file_path, findings in open_by_file.items()
+        }
+        results = _resolve_files_concurrently(
+            config=effective_config.adapter,
             root=root,
             state_dir=store.state_dir,
-            run_id=run_id,
-            ruleset=ruleset,
+            prompts=prompts,
+            parallel=int(args.parallel),
         )
-    else:
-        raise ValueError(_missing_config_guidance("verify-fixes"))
-    reporter = ReviewProgressReporter(enabled=args.audience == "human")
-    reporter.run_start(
-        session_id=session_id,
-        run_id=run_id,
-        selected_count=len(selected_cells),
-        budget=args.budget,
-        concurrency=args.concurrency,
-        adapter_identity=_adapter_identity(adapter),
-        timeout_seconds=_adapter_timeout_seconds(adapter),
-        artifact_dir=store.state_dir / "runs" / str(run_id),
-    )
-    results = review_cells_concurrently(
-        adapter, selected_cells, concurrency=args.concurrency, reporter=reporter
-    )
-    reviewed = 0
-    finding_ids: list[str] = []
-    seen_fingerprints: set[str] = set()
-    evaluated_paths: set[str] = set()
-    first_failure: tuple[ReviewCell, ReviewAdapterError] | None = None
-    for selected in selected_cells:
-        outcome = _review_cell_outcome(results, selected)
-        if isinstance(outcome, ReviewAdapterError):
-            if first_failure is None:
-                first_failure = (selected, outcome)
-            continue
-        evaluated_paths.add(selected.file_path)
-        for comment in outcome.comments:
-            finding = normalize_ocr_comment(
-                comment,
-                repository_id=str(root.resolve()),
-                base_target=json.dumps(metadata["target"], sort_keys=True),
-                rule_id=selected.rule_id,
-                ruleset_digest=ruleset.digest,
-            )
-            seen_fingerprints.add(finding.fingerprint)
-            finding_ids.append(store.upsert_finding(session_id, run_id, selected.id, finding))
-        store.refresh_file_digest(
-            session_id, selected.file_path, selected.content_digest, stale_to_pending=False
-        )
-        store.mark_cell_reviewed(session_id, selected)
-        reviewed += 1
-
-    target_ids = {str(row["finding_id"]) for row in target_rows}
-    store.verify_fixed_findings(session_id, seen_fingerprints, evaluated_paths, target_ids)
-    states = _finding_states(store, session_id, target_ids)
-    fixed_verified_ids = sorted(
-        finding_id for finding_id, state in states.items() if state == FindingState.FIXED_VERIFIED
-    )
-    reopened_ids = sorted(
-        finding_id for finding_id, state in states.items() if state == FindingState.REOPENED
-    )
-    unverifiable_ids = sorted(
-        finding_id
-        for finding_id, state in states.items()
-        if state == FindingState.FIXED_PENDING_VERIFICATION
-    )
-    result = _verify_fixes_result_base(
-        store=store,
-        root=root,
-        session_id=session_id,
-        run_id=run_id,
-        reviewed=reviewed,
-        finding_ids=finding_ids,
-        targeted_rows=target_rows,
-        fixed_verified_ids=fixed_verified_ids,
-        reopened_ids=reopened_ids,
-        unverifiable_ids=unverifiable_ids,
-    )
-    if first_failure is not None:
-        failed_cell, error = first_failure
-        result.update(
-            {"failed_cell_id": failed_cell.id, "error": str(error), "failure": error.failure}
-        )
+        for file_path, command_result in sorted(results.items()):
+            if command_result.failure is not None:
+                aborted = {
+                    "file_path": file_path,
+                    "failure": command_result.failure,
+                    "stdout": command_result.stdout,
+                    "stderr": command_result.stderr,
+                }
+                break
+            verdict = _verdict_from_command_result(command_result)
+            if verdict.verdict == "abort":
+                aborted = {
+                    "file_path": file_path,
+                    "error": verdict.error or "resolve agent aborted",
+                    "verdict": verdict.model_dump(mode="json"),
+                }
+                break
+            resolved_ids.extend(_apply_resolutions(store, verdict.resolutions))
+        if aborted is not None:
+            break
+    result = {
+        "session_id": session_id,
+        "turns": turns,
+        "resolved_finding_ids": sorted(set(resolved_ids)),
+        "unresolved_finding_ids": [
+            str(row["finding_id"])
+            for rows in _open_findings_by_file(store, session_id).values()
+            for row in rows
+        ],
+        **_status(store, root),
+    }
+    if aborted is not None:
+        result["aborted"] = aborted
     _emit(result, args.format)
-    if first_failure is not None or unverifiable_ids:
+    if result["unresolved_finding_ids"] or aborted is not None:
         raise SystemExit(1)
 
 
-def _fixed_pending_targets(
-    store: SessionStore,
-    session_id: str,
+def _open_findings_by_file(
+    store: SessionStore, session_id: str
+) -> dict[str, tuple[Any, ...]]:
+    grouped: dict[str, list[Any]] = {}
+    for row in store.list_open_findings(session_id):
+        grouped.setdefault(str(row["path"]), []).append(row)
+    return {file_path: tuple(rows) for file_path, rows in sorted(grouped.items())}
+
+
+def _resolve_prompt_for_file(
     *,
-    finding_filters: tuple[str, ...],
-    path_filters: tuple[str, ...],
-) -> list[Any]:
-    normalized_path_filters = tuple(_normalize_finding_path(path) for path in path_filters)
-    requested_ids = set(finding_filters)
-    rows = store.list_fixed_pending_findings(session_id)
-    return [
-        row
-        for row in rows
-        if (not requested_ids or str(row["finding_id"]) in requested_ids)
-        and _matches_finding_path_filters(str(row["path"]), normalized_path_filters)
-    ]
-
-
-def _select_verify_fix_cells(
-    *, current_cells: tuple[ReviewCell, ...], target_pairs: set[tuple[str, str]], budget: int
-) -> list[ReviewCell]:
-    selected: list[ReviewCell] = []
-    seen_pairs: set[tuple[str, str]] = set()
-    for cell in current_cells:
-        if len(selected) >= budget:
-            break
-        pair = (cell.file_path, cell.rule_id)
-        if pair in target_pairs and pair not in seen_pairs:
-            selected.append(cell)
-            seen_pairs.add(pair)
-    return selected
-
-
-def _finding_states(
-    store: SessionStore, session_id: str, finding_ids: set[str]
-) -> dict[str, FindingState]:
-    if not finding_ids:
-        return {}
-    placeholders = ",".join("?" for _ in finding_ids)
-    query = (
-        "select finding_id, state from findings "
-        f"where session_id = ? and finding_id in ({placeholders})"
-    )
-    with store.connect() as conn:
-        rows = conn.execute(query, (session_id, *sorted(finding_ids))).fetchall()
-    return {str(row["finding_id"]): FindingState(str(row["state"])) for row in rows}
-
-
-def _verify_fixes_result_base(
-    *,
-    store: SessionStore,
     root: Path,
+    state_dir: Path,
     session_id: str,
-    run_id: int | None,
-    reviewed: int,
-    finding_ids: list[str],
-    targeted_rows: list[Any],
-    fixed_verified_ids: list[str],
-    reopened_ids: list[str],
-    unverifiable_ids: list[str],
-) -> dict[str, object]:
+    file_path: str,
+    findings: tuple[Any, ...],
+) -> str:
+    continuation_path = continuation_path_for_task(state_dir, session_id, "open", file_path)
+    return build_resolve_prompt(
+        repository_root=str(root.resolve()),
+        file_path=file_path,
+        findings=tuple(_finding_resolution_prompt_item(row) for row in findings),
+        continuation_path=str(continuation_path),
+    )
+
+
+def _finding_resolution_prompt_item(row: Any) -> dict[str, object]:
     return {
-        "run_id": run_id,
-        "reviewed_cells": reviewed,
-        "targeted_finding_ids": [str(row["finding_id"]) for row in targeted_rows],
-        "fixed_verified_ids": fixed_verified_ids,
-        "reopened_ids": reopened_ids,
-        "unverifiable_ids": unverifiable_ids,
-        "finding_ids": finding_ids,
-        **_status(store, root),
+        "finding_id": str(row["finding_id"]),
+        "state": str(row["state"]),
+        "rule_id": str(row["rule_id"]),
+        "content": str(row["content"]),
     }
 
 
-def _select_review_cells(
+def _resolve_files_concurrently(
     *,
-    store: SessionStore,
-    session_id: str,
-    current_cells: tuple[ReviewCell, ...],
-    budget: int,
+    config: CommandAdapterConfig,
+    root: Path,
+    state_dir: Path,
+    prompts: dict[str, str],
+    parallel: int,
+) -> dict[str, SessionCommandResult]:
+    max_workers = min(parallel, len(prompts), 64)
+    results: dict[str, SessionCommandResult] = {}
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {
+            executor.submit(
+                _run_session_command_step_from_config, config, root, state_dir, prompt
+            ): file_path
+            for file_path, prompt in prompts.items()
+        }
+        for future in as_completed(futures):
+            file_path = futures[future]
+            results[file_path] = future.result()
+    return results
+
+
+def _verdict_from_command_result(result: SessionCommandResult) -> ContinuationVerdict:
+    if result.verdict_metadata is None:
+        raise ValueError("resolve command completed without continuation verdict metadata")
+    payload = {
+        key: result.verdict_metadata[key]
+        for key in ContinuationVerdict.model_fields
+        if key in result.verdict_metadata
+    }
+    return ContinuationVerdict.model_validate(payload)
+
+
+def _apply_resolutions(
+    store: SessionStore, resolutions: tuple[FindingResolution, ...]
+) -> list[str]:
+    resolved: list[str] = []
+    for resolution in resolutions:
+        metadata = {}
+        if resolution.dismiss_reason:
+            metadata["dismiss_reason"] = resolution.dismiss_reason
+        store.mark_finding(
+            resolution.finding_id,
+            FindingState(resolution.state),
+            resolution.dismiss_reason or "resolve_agent",
+            metadata,
+        )
+        resolved.append(resolution.finding_id)
+    return resolved
+
+
+def _select_review_cells(
+    *, store: SessionStore, session_id: str, current_cells: tuple[ReviewCell, ...]
 ) -> list[ReviewCell]:
-    cells_by_path: dict[str, list[ReviewCell]] = {}
-    for cell in current_cells:
-        cells_by_path.setdefault(cell.file_path, []).append(cell)
-    verification_paths = {str(row["path"]) for row in store.list_fixed_pending_findings(session_id)}
-    selected: list[ReviewCell] = []
-    selected_ids: set[str] = set()
-    selected_paths: set[str] = set()
-    for row in store.list_cells(session_id):
-        if len(selected) >= budget:
-            break
-        file_path = str(row["file_path"])
-        if file_path in selected_paths:
-            continue
-        if (
-            row["state"] not in {CellState.PENDING, CellState.STALE}
-            and file_path not in verification_paths
-        ):
-            continue
-        for cell in cells_by_path.get(file_path, []):
-            if len(selected) >= budget:
-                break
-            if cell.id not in selected_ids:
-                selected.append(cell)
-                selected_ids.add(cell.id)
-        selected_paths.add(file_path)
-    return selected
+    persisted_states = {str(row["cell_id"]): str(row["state"]) for row in store.list_cells(session_id)}
+    return sorted(
+        (
+            cell
+            for cell in current_cells
+            if persisted_states.get(cell.id, CellState.PENDING.value) == CellState.PENDING.value
+        ),
+        key=lambda cell: (cell.file_path, cell.rule_id, cell.id),
+    )
 
 
 def review_cells_concurrently(
@@ -1304,12 +1241,6 @@ def _reconcile_cells(store: SessionStore, root: Path, target: TargetSpec) -> Non
     existing = {str(row["cell_id"]): row for row in store.list_cells(session_id)}
     new_cells = tuple(cell for cell_id, cell in current.items() if cell_id not in existing)
     store.add_cells(session_id, new_cells)
-    for cell_id, row in existing.items():
-        current_cell = current.get(cell_id)
-        if current_cell is None:
-            store.update_cell_state(session_id, cell_id, CellState.SUPERSEDED)
-        elif row["content_digest"] != current_cell.content_digest:
-            store.update_cell_state(session_id, cell_id, CellState.STALE)
 
 
 READY_PROMPT_PREFIX = "Use the review-gauntlet task execution skill."
@@ -1319,32 +1250,14 @@ _FINALIZE_READY_PROMPT = (
     "review-gauntlet session; stop when the session is finalized or a blocker remains."
 )
 
-_ACTIONABLE_FINDING_STATES = (
-    FindingState.REOPENED,
-    FindingState.UNTRIAGED,
-    FindingState.CONFIRMED,
-    FindingState.FIXED_PENDING_VERIFICATION,
-)
+_ACTIONABLE_FINDING_STATES = (FindingState.OPEN,)
 
 _READY_REASON_LABELS = {
     "pending_review_cell": "pending review cells need coverage",
-    "stale_review_cell": "stale review cells need refreshed coverage",
-    FindingState.REOPENED.value: "reopened findings need re-triage",
-    FindingState.UNTRIAGED.value: "untriaged findings need triage",
-    FindingState.CONFIRMED.value: "confirmed findings need fixing or re-triage",
-    FindingState.FIXED_PENDING_VERIFICATION.value: "fixed-pending findings need verification",
+    FindingState.OPEN.value: "open findings need resolution",
 }
 
-_TRIAGE_ONLY_REASONS = frozenset({FindingState.UNTRIAGED.value, FindingState.REOPENED.value})
-
-_REVIEW_REASONS = frozenset({"pending_review_cell", "stale_review_cell"})
-
-_FINDING_ACTION_REASONS = frozenset(
-    {
-        FindingState.CONFIRMED.value,
-        FindingState.FIXED_PENDING_VERIFICATION.value,
-    }
-)
+_REVIEW_REASONS = frozenset({"pending_review_cell"})
 
 
 @dataclass(frozen=True)
@@ -1486,10 +1399,7 @@ def _review_cell_ready_prompt(
 def _ready_review_cells_by_state(
     review_cells: tuple[_ReadyReviewCell, ...],
 ) -> dict[str, tuple[_ReadyReviewCell, ...]]:
-    buckets: dict[str, list[_ReadyReviewCell]] = {
-        CellState.PENDING.value: [],
-        CellState.STALE.value: [],
-    }
+    buckets: dict[str, list[_ReadyReviewCell]] = {CellState.PENDING.value: []}
     for cell in review_cells:
         bucket = buckets.get(cell.state)
         if bucket is not None:
@@ -1587,55 +1497,17 @@ def _ready_prompt_segments(reason: str) -> tuple[list[str], str, str]:
             [
                 "1. review: inspect the review cells listed below for this file.",
                 "   Read this file and discover any issues matching the listed rules.",
-                "   Record confirmed issues as findings using review-gauntlet mark commands.",
-                "2. mark: record your review results with review-gauntlet mark commands.",
+                "   Record issues as open findings through review-gauntlet review output.",
             ],
-            "Stop when this target file has no pending/stale cells listed below.",
+            "Stop when this target file has no pending cells listed below.",
             "## Review cells for this file",
-        )
-    if reason in _TRIAGE_ONLY_REASONS:
-        context_note = " (context only, do NOT review for new findings)"
-        return (
-            [
-                "1. triage: inspect ONLY the EXISTING findings in 'Findings for this file' below.",
-                "   Read the target file to understand context, but do NOT search for new issues.",
-                "   Categorize each finding as confirmed, false-positive, waived, or",
-                "   accepted-risk. Do NOT discover new findings.",
-                "2. mark: record triage decisions with review-gauntlet mark commands.",
-            ],
-            "Stop when all findings listed below have been triaged.",
-            f"## Review cells for this file{context_note}",
-        )
-    if reason == FindingState.CONFIRMED.value:
-        return (
-            [
-                "1. inspect: examine the confirmed findings listed below.",
-                "   Read the target file to understand context.",
-                "   Fix the issues identified by each confirmed finding.",
-                "   Do NOT discover new findings.",
-                "2. fix: make the changes needed to address each confirmed finding.",
-                "3. mark: record your fix decisions with review-gauntlet mark commands.",
-            ],
-            "Stop when all findings listed below have been fixed or re-triaged.",
-            "## Review cells for this file (context only, do NOT review for new findings)",
-        )
-    if reason == FindingState.FIXED_PENDING_VERIFICATION.value:
-        return (
-            [
-                "1. verify: verify that the fixes for findings listed below are correct.",
-                "   Run review-gauntlet verify-fixes or re-inspect the relevant code.",
-                "   Do NOT discover new findings.",
-                "2. mark: mark verified findings with review-gauntlet mark commands.",
-            ],
-            "Stop when all findings listed below have been verified.",
-            "## Review cells for this file (context only, do NOT review for new findings)",
         )
     return (
         [
-            "1. inspect: examine the findings listed in 'Findings for this file' below.",
-            "   Take the appropriate action based on the finding state.",
+            "1. resolve: examine the open findings listed in 'Findings for this file' below.",
+            "   Confirm and fix real issues or dismiss non-issues with a reason.",
             "   Do NOT discover new findings.",
-            "2. mark: record your decisions with review-gauntlet mark commands.",
+            "2. mark: record each finding as confirmed or dismissed.",
         ],
         "Stop when all findings listed below have been resolved.",
         "## Review cells for this file (context only, do NOT review for new findings)",
@@ -1672,16 +1544,17 @@ def _continuation_prompt_sections(continuation_path: Path) -> list[str]:
             "",
             "Required schema:",
             "{",
-            '  "schema_version": 1,',
-            '  "verdict": "continue | finish | error",',
+            '  "schema_version": 2,',
+            '  "verdict": "continue | finish | abort",',
             '  "summary": "What was accomplished this turn.",',
             '  "completed_finding_ids": ["RGF-0001"],',
             '  "remaining_finding_ids": ["RGF-0002"],',
+            '  "resolutions": [{"finding_id": "RGF-0001", "state": "confirmed", "dismiss_reason": null}],',
             '  "next_turn_instructions": "Start by checking ...",',
             '  "error": null',
             "}",
-            "Valid verdict values: continue, finish, error.",
-            "For verdict=error, set error to a non-empty actionable message.",
+            "Valid verdict values: continue, finish, abort.",
+            "For verdict=abort, set error to a non-empty actionable message.",
         ]
     )
     return sections
@@ -1731,8 +1604,6 @@ def _ready_review_cells(
         state = CellState.PENDING.value
         if row is not None:
             state = str(row["state"])
-            if row["content_digest"] != current_cell.content_digest:
-                state = CellState.STALE.value
         ready_cells.append(
             _ReadyReviewCell(
                 cell_id=cell_id,
@@ -1835,18 +1706,10 @@ def _effective_current_target_coverage_for_cells(
 ) -> dict[str, int]:
     persisted_cells = {str(row["cell_id"]): row for row in store.list_cells(session_id)}
     counts: dict[str, int] = {}
-    for cell_id, current_cell in current_cells.items():
+    for cell_id in current_cells:
         persisted = persisted_cells.get(cell_id)
-        if persisted is None:
-            state = CellState.PENDING.value
-        elif persisted["content_digest"] != current_cell.content_digest:
-            state = CellState.STALE.value
-        else:
-            state = str(persisted["state"])
+        state = CellState.PENDING.value if persisted is None else str(persisted["state"])
         counts[state] = counts.get(state, 0) + 1
-    for cell_id in persisted_cells:
-        if cell_id not in current_cells:
-            counts[CellState.SUPERSEDED.value] = counts.get(CellState.SUPERSEDED.value, 0) + 1
     return counts
 
 
@@ -2217,11 +2080,11 @@ def _run_session_command_step(
     if (
         failure is None
         and verdict_metadata is not None
-        and verdict_metadata.get("verdict") == "error"
+        and verdict_metadata.get("verdict") == "abort"
     ):
         failure = {
-            "reason": "step_verdict_error",
-            "error": str(verdict_metadata.get("error") or "continuation verdict reported error"),
+            "reason": "step_verdict_abort",
+            "error": str(verdict_metadata.get("error") or "continuation verdict reported abort"),
             "verdict_path": str(verdict_metadata.get("path") or continuation_path),
         }
     result = SessionCommandResult(
@@ -2400,26 +2263,11 @@ def _emit_ready(prompt: str | None, output_format: str) -> None:
 
 def _cmd_mark(args: argparse.Namespace, store: SessionStore) -> None:
     store.active_session_id()
-    metadata_states = {"accepted-risk", "waived"}
-    if args.until and args.state not in metadata_states:
-        raise ValueError("mark --until is only valid for waived or accepted-risk findings")
-    if args.until:
-        try:
-            date.fromisoformat(str(args.until))
-        except ValueError as exc:
-            raise ValueError("mark --until must be an ISO date (YYYY-MM-DD)") from exc
     mapping = {
         "confirmed": FindingState.CONFIRMED,
-        "false-positive": FindingState.FALSE_POSITIVE,
-        "waived": FindingState.WAIVED,
-        "accepted-risk": FindingState.ACCEPTED_RISK,
-        "fixed": FindingState.FIXED_PENDING_VERIFICATION,
+        "dismissed": FindingState.DISMISSED,
     }
-    metadata = (
-        {k: v for k, v in {"owner": args.owner, "until": args.until}.items() if v}
-        if args.state in metadata_states
-        else {}
-    )
+    metadata = {"dismiss_reason": args.reason} if args.state == "dismissed" and args.reason else {}
     store.mark_finding(args.finding_id, mapping[args.state], args.reason, metadata)
     _emit({"finding_id": args.finding_id, "state": mapping[args.state].value}, args.format)
 
@@ -2580,12 +2428,7 @@ def _finding_int_field(finding: dict[str, object], key: str) -> int:
 
 
 def _terminal_finding_states() -> set[FindingState]:
-    return {
-        FindingState.FIXED_VERIFIED,
-        FindingState.FALSE_POSITIVE,
-        FindingState.WAIVED,
-        FindingState.ACCEPTED_RISK,
-    }
+    return {FindingState.CONFIRMED, FindingState.DISMISSED}
 
 
 def _matches_finding_path_filters(path: str, filters: tuple[str, ...]) -> bool:
@@ -2681,13 +2524,8 @@ def _finalize_reasons(
     reasons: list[str] = []
     if cell_counts.get("pending", 0):
         reasons.append("review cells are still pending")
-    for state in ("untriaged", "confirmed", "reopened"):
-        if finding_counts.get(state, 0):
-            reasons.append(f"findings remain {state}")
-    if finding_counts.get("fixed_pending_verification", 0):
-        reasons.append("fixed findings require verification")
-    if _expired_terminal_decision_count(store, session_id):
-        reasons.append("waived or accepted-risk findings have expired")
+    if finding_counts.get("open", 0):
+        reasons.append("findings remain open")
     try:
         from review_gauntlet.checkpoint import assert_review_universe_clean
 
@@ -2715,55 +2553,6 @@ def _finalize_reasons(
     return reasons
 
 
-def _expired_terminal_decision_count(store: SessionStore, session_id: str) -> int:
-    today = datetime.now(UTC).date()
-    with store.connect() as conn:
-        rows = conn.execute(
-            """
-            select finding_id, state
-            from findings
-            where session_id = ? and state in ('waived', 'accepted_risk')
-            """,
-            (session_id,),
-        ).fetchall()
-        expired = 0
-        for row in rows:
-            event = conn.execute(
-                """
-                select metadata from finding_events
-                where finding_id = ? and to_state = ?
-                order by event_id desc
-                limit 1
-                """,
-                (row["finding_id"], row["state"]),
-            ).fetchone()
-            if (
-                event is not None
-                and event["metadata"] is not None
-                and _is_expired(str(event["metadata"]), today)
-            ):
-                expired += 1
-    return expired
-
-
-def _is_expired(metadata_json: str, today: date) -> bool:
-    try:
-        raw_metadata = json.loads(metadata_json)
-        if not isinstance(raw_metadata, dict):
-            return False
-        metadata = cast(dict[str, Any], raw_metadata)
-        until = metadata.get("until")
-        if not until:
-            return False
-        return date.fromisoformat(str(until)) < today
-    except (json.JSONDecodeError, ValueError, TypeError):
-        print(
-            "warning: unparseable metadata JSON in finding event, treating as not expired",
-            file=sys.stderr,
-        )
-        return False
-
-
 def _next_action(
     cell_counts: dict[str, int],
     finding_counts: dict[str, int],
@@ -2771,12 +2560,8 @@ def _next_action(
 ) -> str:
     if cell_counts.get("pending", 0):
         return "run_review"
-    if finding_counts.get("untriaged", 0) or finding_counts.get("reopened", 0):
-        return "triage_findings"
-    if finding_counts.get("confirmed", 0):
-        return "fix_confirmed_findings"
-    if finding_counts.get("fixed_pending_verification", 0):
-        return "run_verify_fixes"
+    if finding_counts.get("open", 0):
+        return "resolve_findings"
     if reasons:
         if _finalize_blockers_are_commit_resolvable(reasons):
             return "finalize"
