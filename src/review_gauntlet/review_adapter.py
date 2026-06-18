@@ -64,7 +64,8 @@ class FakeReviewAdapter:
         self._fixtures = _load_fixtures(fixtures_path) if fixtures_path else {}
 
     def review(self, cell: ReviewCell) -> ReviewAdapterResult:
-        raw_comments = self._fixtures.get(cell.id) or self._fixtures.get(cell.file_path) or []
+        _by_id = self._fixtures.get(cell.id)
+        raw_comments = _by_id if _by_id is not None else (self._fixtures.get(cell.file_path) or [])
         comments = tuple(OCRComment.model_validate(comment) for comment in raw_comments)
         return ReviewAdapterResult(cell_id=cell.id, comments=comments)
 
