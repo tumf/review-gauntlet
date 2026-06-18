@@ -123,6 +123,7 @@ class RunSnapshot:
     cell_terminal_count: int = 0
     agent_lifecycle: AgentLifecycle = AgentLifecycle()
     coverage_projection: CoverageProjection = empty_coverage_projection()
+    checkpoint_commit: dict[str, object] | None = None
 
 
 @dataclass(frozen=True)
@@ -211,6 +212,9 @@ class RunController:
         self._agent_timeout_seconds: float | None = None
         self._agent_output_progress: AgentOutputProgress | None = None
         self._started_at = datetime.now(UTC)
+        self._last_active_snapshot: RunSnapshot | None = None
+        self._final_snapshot: RunSnapshot | None = None
+        self._final_checkpoint_commit: dict[str, object] | None = None
 
     def set_agent_step_started_at_for_testing(self, started_at: datetime) -> None:
         self._agent_step_started_at = started_at
@@ -266,7 +270,23 @@ class RunController:
                         status = _with_finalize_blocker(status, _readiness_unavailable_blocker(exc))
                     else:
                         ready = ready_task.prompt if ready_task is not None else None
-        return RunSnapshot(
+        if session_id is None and self._agent_status == "finalized":
+            finalized_snapshot = self._final_snapshot or self._last_active_snapshot
+            if finalized_snapshot is not None:
+                return dataclasses.replace(
+                    finalized_snapshot,
+                    step=self._step,
+                    agent_status="finalized",
+                    elapsed_seconds=(datetime.now(UTC) - self._started_at).total_seconds(),
+                    session_state="finalized",
+                    can_finalize=True,
+                    finalize_blockers=(),
+                    next_ready_prompt=None,
+                    next_required_action=None,
+                    agent_lifecycle=self._current_agent_lifecycle(),
+                    checkpoint_commit=self._final_checkpoint_commit,
+                )
+        snapshot = RunSnapshot(
             session_id=session_id,
             coverage=_object_dict(status.get("coverage", {})),
             findings=_object_dict(status.get("findings", status.get("finding_state_counts", {}))),
@@ -284,7 +304,11 @@ class RunController:
             cell_terminal_count=_int_or_zero(status.get("cell_terminal_count", 0)),
             agent_lifecycle=self._current_agent_lifecycle(),
             coverage_projection=_coverage_projection_or_empty(status.get("coverage_projection")),
+            checkpoint_commit=self._final_checkpoint_commit,
         )
+        if session_id is not None:
+            self._last_active_snapshot = snapshot
+        return snapshot
 
     def _current_agent_lifecycle(self) -> AgentLifecycle:
         if self._agent_status != "running":
@@ -499,6 +523,8 @@ class RunController:
                     reason=checkpoint_commit.reason,
                     commit=checkpoint_commit.commit,
                 )
+                self._final_checkpoint_commit = checkpoint_commit.model_dump()
+                self._final_snapshot = self._last_active_snapshot
                 self._mark_finalized()
                 self._emit("finalized", session_id=session_id)
                 return _run_result(
