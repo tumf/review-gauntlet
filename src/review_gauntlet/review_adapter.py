@@ -163,7 +163,8 @@ def build_resolve_prompt(
             "## Repository Context",
             f"repository_root: {repository_root}",
             f"file_path: {file_path}",
-            "Scope: modify only this file unless a finding cannot be resolved without a directly related change.",
+            "Scope: modify only this file unless a finding cannot be resolved "
+            "without a directly related change.",
             "",
             "## Open findings",
             *(finding_lines or ["- none"]),

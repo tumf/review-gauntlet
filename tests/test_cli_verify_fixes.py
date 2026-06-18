@@ -1,5 +1,4 @@
 import json
-import sqlite3
 from pathlib import Path
 
 import pytest
@@ -25,10 +24,14 @@ def test_resolve_parser_accepts_parallel_and_config() -> None:
     assert args.config == Path("rg.toml")
 
 
-def test_resolve_noops_when_no_open_findings(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_resolve_noops_when_no_open_findings(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     (tmp_path / "README.md").write_text("# docs\n", encoding="utf-8")
     config = tmp_path / "review-gauntlet.toml"
-    config.write_text('[adapter]\ncommand = "python"\nargs = ["-c", "print(1)"]\n', encoding="utf-8")
+    config.write_text(
+        '[adapter]\ncommand = "python"\nargs = ["-c", "print(1)"]\n', encoding="utf-8"
+    )
     main(["init", str(tmp_path), "--format", "json"])
     capsys.readouterr()
     store = SessionStore(tmp_path)
@@ -50,13 +53,17 @@ def test_store_lists_open_findings_grouped_source(tmp_path: Path) -> None:
     with store.connect() as conn:
         conn.execute(
             """
-            insert into findings(session_id, finding_id, fingerprint, state, path, rule_id, content, metadata)
+            insert into findings(
+                session_id, finding_id, fingerprint, state, path, rule_id, content, metadata
+            )
             values ('RGS-test', 'RGF-0001', 'fp', 'open', 'a.py', 'security', 'issue', '{}')
             """
         )
         conn.execute(
             """
-            insert into findings(session_id, finding_id, fingerprint, state, path, rule_id, content, metadata)
+            insert into findings(
+                session_id, finding_id, fingerprint, state, path, rule_id, content, metadata
+            )
             values ('RGS-test', 'RGF-0002', 'fp2', 'confirmed', 'a.py', 'security', 'done', '{}')
             """
         )

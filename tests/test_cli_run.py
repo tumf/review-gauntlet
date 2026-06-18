@@ -23,7 +23,9 @@ def test_run_detects_v2_continue_verdict(tmp_path: Path) -> None:
     )
 
     result = run_session_command_step_for_testing(
-        config=CommandAdapterConfig(type="command", command="python", args=("-c", script, str(verdict))),
+        config=CommandAdapterConfig(
+            type="command", command="python", args=("-c", script, str(verdict))
+        ),
         root=tmp_path,
         state_dir=state_dir,
         prompt=prompt,
@@ -53,10 +55,17 @@ def test_run_treats_abort_verdict_as_failure(tmp_path: Path) -> None:
         "next_turn_instructions": None,
         "error": "blocked",
     }
-    script = "import json, pathlib, sys; p=pathlib.Path(sys.argv[1]); p.parent.mkdir(parents=True, exist_ok=True); p.write_text(sys.argv[2])"
+    script = (
+        "import pathlib, sys; "
+        "p=pathlib.Path(sys.argv[1]); "
+        "p.parent.mkdir(parents=True, exist_ok=True); "
+        "p.write_text(sys.argv[2])"
+    )
 
     result = run_session_command_step_for_testing(
-        config=CommandAdapterConfig(type="command", command="python", args=("-c", script, str(verdict), json.dumps(payload))),
+        config=CommandAdapterConfig(
+            type="command", command="python", args=("-c", script, str(verdict), json.dumps(payload))
+        ),
         root=tmp_path,
         state_dir=state_dir,
         prompt=prompt,

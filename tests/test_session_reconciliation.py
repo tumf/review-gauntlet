@@ -66,7 +66,9 @@ def test_refresh_file_digest_updates_all_cells_for_path(tmp_path: Path) -> None:
         )
         for index, state in enumerate(cells, start=1)
     )
-    store.create_session({"session_id": "RGS-test", "target_digest": "d", "target": {}}, review_cells)
+    store.create_session(
+        {"session_id": "RGS-test", "target_digest": "d", "target": {}}, review_cells
+    )
 
     store.refresh_file_digest("RGS-test", "README.md", "new")
 

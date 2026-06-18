@@ -25,13 +25,13 @@ The system records it based on file, rule, slice, prompt, model, and code digest
 
 ### 4. Unknown must stay visible
 
-Unreviewed, failed, stale, and needs-retry states must not be hidden.
+Unreviewed, failed, open, and needs-retry states must not be hidden.
 Incompleteness is part of the output.
 
-### 5. One review command advances once
+### 5. One review command advances one phase
 
-`review-gauntlet review` advances the session by exactly one step.
-It must not auto-loop until completion.
+`review-gauntlet review` advances the session by exactly one review phase.
+It must not run the resolve phase or finalize the session.
 
 ### 6. Orchestration is external
 
@@ -48,10 +48,10 @@ A re-detected issue must not be treated as a separate new finding.
 Decisions such as fixed, waived, false positive, and accepted risk must be recorded in a ledger.
 The reason, actor, and timestamp of the decision must never be lost.
 
-### 9. Fixed is not final until verified
+### 9. Resolution records judgment and action together
 
-Fixed is not immediately terminal.
-It must be marked `fixed_pending_verification` until validated in a subsequent review.
+Finding resolution must record whether each open finding was confirmed or dismissed.
+Confirmed findings are fixed in the same resolve phase; dismissed findings require a durable reason.
 
 ### 10. Completion requires two closures
 
@@ -59,10 +59,10 @@ Session completion requires both of the following:
 - The current review coverage is in a terminal state.
 - All live findings are in a terminal state.
 
-### 11. Changes invalidate truth
+### 11. Review truth is deterministic per session
 
-Changes to code, rule, prompt, or target diff may stale past coverage as needed.
-Old review results must not be treated as the current truth.
+Review truth is scoped to the deterministic target, rule, prompt, and code digest recorded for the session.
+Old review results must not be treated as current truth outside that recorded session context.
 
 ### 12. Determinism before cleverness
 

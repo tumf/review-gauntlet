@@ -1,5 +1,10 @@
 from review_gauntlet.models import ReviewCheck, ReviewPlan, ReviewSlice
-from review_gauntlet.review_cells import TERMINAL_CELL_STATES, CellState, cell_id_for, cells_from_plan
+from review_gauntlet.review_cells import (
+    TERMINAL_CELL_STATES,
+    CellState,
+    cell_id_for,
+    cells_from_plan,
+)
 
 
 def test_review_cells_are_deterministic_from_plan() -> None:
@@ -24,4 +29,4 @@ def test_review_cells_are_deterministic_from_plan() -> None:
 
 def test_cell_state_is_two_phase_model() -> None:
     assert tuple(CellState) == (CellState.PENDING, CellState.REVIEWED)
-    assert TERMINAL_CELL_STATES == {CellState.REVIEWED}
+    assert {CellState.REVIEWED} == TERMINAL_CELL_STATES

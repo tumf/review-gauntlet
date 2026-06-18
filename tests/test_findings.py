@@ -35,12 +35,12 @@ def test_finding_state_model_is_simplified() -> None:
         FindingState.CONFIRMED,
         FindingState.DISMISSED,
     )
-    assert TERMINAL_FINDING_STATES == {FindingState.CONFIRMED, FindingState.DISMISSED}
-    assert ALLOWED_TRANSITIONS == {
+    assert {FindingState.CONFIRMED, FindingState.DISMISSED} == TERMINAL_FINDING_STATES
+    assert {
         FindingState.OPEN: {FindingState.CONFIRMED, FindingState.DISMISSED},
         FindingState.CONFIRMED: set(),
         FindingState.DISMISSED: set(),
-    }
+    } == ALLOWED_TRANSITIONS
 
 
 def test_normalized_finding_accepts_dismiss_reason() -> None:

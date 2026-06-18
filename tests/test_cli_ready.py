@@ -1,5 +1,4 @@
 import json
-import sqlite3
 from pathlib import Path
 
 import pytest
@@ -21,7 +20,9 @@ def _set_all_cells(root: Path, state: CellState) -> None:
     store = SessionStore(root)
     session_id = store.active_session_id()
     with store.connect() as conn:
-        conn.execute("update review_cells set state = ? where session_id = ?", (state.value, session_id))
+        conn.execute(
+            "update review_cells set state = ? where session_id = ?", (state.value, session_id)
+        )
 
 
 def _insert_finding(root: Path, state: FindingState = FindingState.OPEN) -> None:
@@ -30,7 +31,9 @@ def _insert_finding(root: Path, state: FindingState = FindingState.OPEN) -> None
     with store.connect() as conn:
         conn.execute(
             """
-            insert into findings(session_id, finding_id, fingerprint, state, path, rule_id, content, metadata)
+            insert into findings(
+                session_id, finding_id, fingerprint, state, path, rule_id, content, metadata
+            )
             values (?, 'RGF-0001', 'fp', ?, 'README.md', 'docs-accuracy', 'finding', '{}')
             """,
             (session_id, state.value),
@@ -54,7 +57,9 @@ def test_ready_prioritizes_pending_cells_then_open_findings_then_finalize(
 
     with SessionStore(tmp_path).connect() as conn:
         conn.execute("update findings set state = 'dismissed'")
-    SessionStore(tmp_path).create_run(SessionStore(tmp_path).active_session_id(), target_digest(tmp_path))
+    SessionStore(tmp_path).create_run(
+        SessionStore(tmp_path).active_session_id(), target_digest(tmp_path)
+    )
     main(["ready", str(tmp_path), "--format", "json"])
     prompt = json.loads(capsys.readouterr().out)["prompt"]
     assert "finalize the review-gauntlet session" in prompt

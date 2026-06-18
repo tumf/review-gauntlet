@@ -60,7 +60,11 @@ def test_transition_records_dismiss_metadata(tmp_path: Path) -> None:
             "select state from findings where finding_id = ?", ("RGF-0001",)
         ).fetchone()[0]
     assert state == FindingState.DISMISSED
-    assert row[:3] == (FindingState.OPEN, FindingState.DISMISSED, "not applicable to generated docs")
+    assert row[:3] == (
+        FindingState.OPEN,
+        FindingState.DISMISSED,
+        "not applicable to generated docs",
+    )
     assert json.loads(row[3]) == {"dismiss_reason": "not applicable to generated docs"}
 
 

@@ -357,12 +357,6 @@ def _budget_arg(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def _concurrency_arg(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument(
-        "--concurrency", type=_positive_int, default=3, help="Review concurrency (default: 3)"
-    )
-
-
 def _parallel_arg(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--parallel", type=_positive_int, default=3, help="Parallel workers (default: 3)"
@@ -1050,9 +1044,7 @@ def _cmd_resolve(args: argparse.Namespace, root: Path, store: SessionStore) -> N
         raise SystemExit(1)
 
 
-def _open_findings_by_file(
-    store: SessionStore, session_id: str
-) -> dict[str, tuple[Any, ...]]:
+def _open_findings_by_file(store: SessionStore, session_id: str) -> dict[str, tuple[Any, ...]]:
     grouped: dict[str, list[Any]] = {}
     for row in store.list_open_findings(session_id):
         grouped.setdefault(str(row["path"]), []).append(row)
@@ -1124,7 +1116,7 @@ def _apply_resolutions(
 ) -> list[str]:
     resolved: list[str] = []
     for resolution in resolutions:
-        metadata = {}
+        metadata: dict[str, str] = {}
         if resolution.dismiss_reason:
             metadata["dismiss_reason"] = resolution.dismiss_reason
         store.mark_finding(
@@ -1140,7 +1132,9 @@ def _apply_resolutions(
 def _select_review_cells(
     *, store: SessionStore, session_id: str, current_cells: tuple[ReviewCell, ...]
 ) -> list[ReviewCell]:
-    persisted_states = {str(row["cell_id"]): str(row["state"]) for row in store.list_cells(session_id)}
+    persisted_states = {
+        str(row["cell_id"]): str(row["state"]) for row in store.list_cells(session_id)
+    }
     return sorted(
         (
             cell
@@ -1549,7 +1543,9 @@ def _continuation_prompt_sections(continuation_path: Path) -> list[str]:
             '  "summary": "What was accomplished this turn.",',
             '  "completed_finding_ids": ["RGF-0001"],',
             '  "remaining_finding_ids": ["RGF-0002"],',
-            '  "resolutions": [{"finding_id": "RGF-0001", "state": "confirmed", "dismiss_reason": null}],',
+            '  "resolutions": [',
+            '    {"finding_id": "RGF-0001", "state": "confirmed", "dismiss_reason": null}',
+            "  ],",
             '  "next_turn_instructions": "Start by checking ...",',
             '  "error": null',
             "}",

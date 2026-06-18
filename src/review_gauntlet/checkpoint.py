@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 
+from review_gauntlet.findings import FindingState
 from review_gauntlet.session_store import SessionStore
 from review_gauntlet.targets import HeadMode, TargetKind, TargetSpec, target_digest
 

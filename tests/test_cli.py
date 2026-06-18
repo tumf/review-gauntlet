@@ -68,7 +68,18 @@ def test_mark_accepts_confirmed_and_dismissed_only(
     data = json.loads(capsys.readouterr().out)
     finding_id = data["finding_ids"][0]
 
-    main(["mark", str(tmp_path), finding_id, "dismissed", "--reason", "not applicable", "--format", "json"])
+    main(
+        [
+            "mark",
+            str(tmp_path),
+            finding_id,
+            "dismissed",
+            "--reason",
+            "not applicable",
+            "--format",
+            "json",
+        ]
+    )
 
     marked = json.loads(capsys.readouterr().out)
     assert marked == {"finding_id": finding_id, "state": "dismissed"}

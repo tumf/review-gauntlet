@@ -22,12 +22,16 @@ def _init_reviewed(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> Sessio
     return store
 
 
-def test_finalize_blocks_on_open_findings(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_finalize_blocks_on_open_findings(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     store = _init_reviewed(tmp_path, capsys)
     with store.connect() as conn:
         conn.execute(
             """
-            insert into findings(session_id, finding_id, fingerprint, state, path, rule_id, content, metadata)
+            insert into findings(
+                session_id, finding_id, fingerprint, state, path, rule_id, content, metadata
+            )
             values (?, 'RGF-0001', 'fp', 'open', 'README.md', 'docs', 'issue', '{}')
             """,
             (store.active_session_id(),),
@@ -53,12 +57,16 @@ def test_finalize_succeeds_when_reviewed_and_findings_terminal(
     assert data["can_finalize"] is True
 
 
-def test_finalize_includes_terminal_findings(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_finalize_includes_terminal_findings(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     store = _init_reviewed(tmp_path, capsys)
     with store.connect() as conn:
         conn.execute(
             """
-            insert into findings(session_id, finding_id, fingerprint, state, path, rule_id, content, metadata)
+            insert into findings(
+                session_id, finding_id, fingerprint, state, path, rule_id, content, metadata
+            )
             values (?, 'RGF-0001', 'fp', 'dismissed', 'README.md', 'docs', 'issue', '{}')
             """,
             (store.active_session_id(),),
