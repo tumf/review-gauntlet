@@ -34,7 +34,7 @@
 
 - [x] 16. Update all test expectations affected by the change. Stale-related assertions that referenced `fixed_pending_paths` behavior; `test_cli_ready.py`, `test_cli_session_review.py`, `test_run_tui.py`, `test_targets.py`. verification: `make test` — all tests pass.
 
-- [x] 17. Run full CI: `make check`. verification: manual — format, lint, typecheck, test all pass.
+- [x] 17. Run full CI: `make check`. (verification: manual — `make check` passes, covering format-check, lint, typecheck, and test.)
 
 ## Future Work
 
