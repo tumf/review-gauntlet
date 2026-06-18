@@ -609,35 +609,48 @@ def format_event_time(timestamp: str) -> str:
         return "--:--:--"
 
 
-def format_task_title(prompt: str | None) -> TaskDisplay:
-    if prompt is None or not prompt.strip():
-        return TaskDisplay("WAITING FOR READY TASK", "No actionable ready prompt is available.")
-    normalized = " ".join(prompt.lower().split())
-    mappings = (
-        (("untriaged",), "TRIAGE FINDINGS", "Classify open findings that still need triage."),
-        (
-            ("confirmed", "fix"),
-            "FIX CONFIRMED FINDING",
-            "Address confirmed findings with code changes.",
-        ),
-        (("fixed_pending",), "VERIFY FIXES", "Verify findings waiting for fix confirmation."),
-        (("fixed-pending",), "VERIFY FIXES", "Verify findings waiting for fix confirmation."),
-        (
-            ("finalize",),
-            "FINALIZE SESSION",
-            "Finalize the review session when all required work is complete.",
-        ),
-        (
-            ("pending", "review"),
-            "REVIEW PENDING CELLS",
-            "Review cells that have not received coverage yet.",
-        ),
-        (("stale", "review"), "REVIEW STALE CELLS", "Refresh reviews whose coverage is stale."),
-    )
-    for needles, title, description in mappings:
-        if all(needle in normalized for needle in needles):
-            return TaskDisplay(title, description)
-    return TaskDisplay("READY TASK", _summarize_text(prompt, limit=96))
+_ACTION_TASK_DESCRIPTIONS: dict[str, str] = {
+    "REVIEW PENDING CELLS": "Review cells that have not received coverage yet.",
+    "REVIEW STALE CELLS": "Refresh reviews whose coverage is stale.",
+    "REVIEW CELLS": "Review cells need coverage.",
+    "TRIAGE FINDINGS": "Classify open findings that still need triage.",
+    "FIX CONFIRMED FINDING": "Address confirmed findings with code changes.",
+    "VERIFY FIXES": "Verify findings waiting for fix confirmation.",
+    "RESOLVE FINALIZE BLOCKERS": "Resolve blockers before finalizing the session.",
+    "FINALIZE SESSION": "Finalize the review session when all required work is complete.",
+    "READY TASK": "An actionable ready task is available.",
+}
+_ACTION_TASK_TITLES: dict[str, str] = {
+    "triage_findings": "TRIAGE FINDINGS",
+    "fix_confirmed_findings": "FIX CONFIRMED FINDING",
+    "run_verify_fixes": "VERIFY FIXES",
+    "resolve_finalize_blockers": "RESOLVE FINALIZE BLOCKERS",
+    "finalize": "FINALIZE SESSION",
+}
+
+
+def _task_display(title: str) -> TaskDisplay:
+    return TaskDisplay(title, _ACTION_TASK_DESCRIPTIONS[title])
+
+
+def format_task_title_from_action(
+    next_required_action: str | None,
+    coverage: dict[str, object],
+    findings: dict[str, object],
+) -> TaskDisplay:
+    del findings
+    if next_required_action is None:
+        return _task_display("READY TASK")
+    if next_required_action == "run_review":
+        if _count_value(coverage.get("pending", 0)) > 0:
+            return _task_display("REVIEW PENDING CELLS")
+        if _count_value(coverage.get("stale", 0)) > 0:
+            return _task_display("REVIEW STALE CELLS")
+        return _task_display("REVIEW PENDING CELLS")
+    title = _ACTION_TASK_TITLES.get(next_required_action)
+    if title is not None:
+        return _task_display(title)
+    return _task_display("READY TASK")
 
 
 def format_command_label(snapshot: RunSnapshot) -> str | None:
@@ -670,7 +683,11 @@ def dashboard_state(
         snapshot.coverage, cell_terminal_count=snapshot.cell_terminal_count
     )
     findings_summary = actionable_finding_summary(snapshot.findings)
-    task = format_task_title(snapshot.next_ready_prompt)
+    task = format_task_title_from_action(
+        snapshot.next_required_action,
+        snapshot.coverage,
+        snapshot.findings,
+    )
     artifact_path = snapshot.agent_lifecycle.artifact_path
     return RunViewState(
         status=snapshot.agent_status,
@@ -2031,7 +2048,12 @@ def _event_detail(event: RunEvent) -> str:
             parts.append(_summarize_text(reason, limit=48))
         return "; ".join(parts)
     if event.type == "step_started":
-        return format_task_title(str(event.payload.get("prompt") or "")).title
+        action = event.payload.get("next_required_action")
+        return format_task_title_from_action(
+            str(action) if action is not None else None,
+            {},
+            {},
+        ).title
     if event.type == "agent_started":
         label = event.payload.get("command_label")
         return _summarize_text(label, limit=64) if label is not None else "command resolving..."

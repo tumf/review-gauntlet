@@ -19,6 +19,7 @@ from review_gauntlet.review_cells import CellState, ReviewCell
 from review_gauntlet.run_controller import (
     AgentLifecycle,
     AgentOutputEntry,
+    ReadyTask,
     RunController,
     RunEvent,
     RunSnapshot,
@@ -37,7 +38,7 @@ from review_gauntlet.run_tui import (
     footer_text,
     format_elapsed_time,
     format_event_time,
-    format_task_title,
+    format_task_title_from_action,
     progress_text,
     short_session_id,
     should_use_tui,
@@ -510,18 +511,52 @@ def test_compact_dashboard_text_uses_shared_panel_titles() -> None:
 
 
 @pytest.mark.parametrize(
-    ("prompt", "title"),
+    ("next_required_action", "coverage", "findings", "title"),
     [
-        ("review pending cells in this session", "REVIEW PENDING CELLS"),
-        ("review stale cells in this session", "REVIEW STALE CELLS"),
-        ("triage untriaged findings", "TRIAGE FINDINGS"),
-        ("fix confirmed finding", "FIX CONFIRMED FINDING"),
-        ("verify fixed_pending_verification findings", "VERIFY FIXES"),
-        ("finalize session", "FINALIZE SESSION"),
+        ("run_review", {"pending": 1}, {}, "REVIEW PENDING CELLS"),
+        ("run_review", {"stale": 1}, {}, "REVIEW STALE CELLS"),
+        ("triage_findings", {}, {"untriaged": 1}, "TRIAGE FINDINGS"),
+        ("fix_confirmed_findings", {}, {"confirmed": 1}, "FIX CONFIRMED FINDING"),
+        ("run_verify_fixes", {}, {"fixed_pending_verification": 1}, "VERIFY FIXES"),
+        ("resolve_finalize_blockers", {}, {}, "RESOLVE FINALIZE BLOCKERS"),
+        ("finalize", {}, {}, "FINALIZE SESSION"),
+        (None, {}, {}, "READY TASK"),
+        ("custom_action", {}, {}, "READY TASK"),
     ],
 )
-def test_task_title_mapping_for_ready_prompt_intents(prompt: str, title: str) -> None:
-    assert format_task_title(prompt).title == title
+def test_task_title_mapping_for_ready_prompt_intents(
+    next_required_action: str | None,
+    coverage: dict[str, object],
+    findings: dict[str, object],
+    title: str,
+) -> None:
+    assert format_task_title_from_action(next_required_action, coverage, findings).title == title
+
+
+def test_task_title_ignores_prompt_keywords() -> None:
+    prompt = "Record confirmed issues as findings; do not triage, fix, or mark other files."
+    snapshot = RunSnapshot(
+        session_id="RGS-keyword-regression",
+        coverage={"pending": 3, "stale": 0},
+        findings={},
+        next_ready_prompt=prompt,
+        step=0,
+        agent_status="idle",
+        command_argv=(),
+        elapsed_seconds=0,
+        next_required_action="run_review",
+    )
+
+    view = dashboard_state(snapshot, ())
+    task = format_task_title_from_action(
+        snapshot.next_required_action,
+        snapshot.coverage,
+        snapshot.findings,
+    )
+
+    assert task.title == "REVIEW PENDING CELLS"
+    assert view.task.title == "REVIEW PENDING CELLS"
+    assert view.task.title != "FIX CONFIRMED FINDING"
 
 
 def test_task_text_sanitizes_unknown_prompt_and_omits_command_na() -> None:
@@ -589,6 +624,7 @@ def test_view_state_fields_and_terminal_state_classes() -> None:
         agent_status="finalized",
         command_argv=("agent", "run"),
         elapsed_seconds=9,
+        next_required_action="finalize",
     )
 
     view = dashboard_state(snapshot, ())
@@ -650,7 +686,11 @@ def test_activity_timeline_formats_events_without_raw_payloads() -> None:
         RunEvent(
             "step_started",
             "2026-06-15T12:35:01+00:00",
-            {"step": 1, "prompt": "review pending cells [bold]\x1b"},
+            {
+                "step": 1,
+                "prompt": "review pending cells [bold]\x1b",
+                "next_required_action": "run_review",
+            },
         ),
         RunEvent(
             "agent_started",
@@ -1357,9 +1397,9 @@ def test_run_controller_repeated_snapshots_do_not_accumulate_sqlite_fds(tmp_path
         session_id = session_store.active_session_id()
         return {"coverage": {"pending": len(session_store.list_cells(session_id))}, "findings": {}}
 
-    def ready_prompt(session_store: SessionStore, _root: Path) -> str | None:
+    def ready_prompt(session_store: SessionStore, _root: Path) -> ReadyTask | None:
         session_store.session_metadata(session_store.active_session_id())
-        return "ready prompt"
+        return ReadyTask(prompt="ready prompt", next_required_action="run_review")
 
     controller = RunController(
         root=tmp_path,
@@ -1563,7 +1603,9 @@ def test_create_run_app_constructs_when_textual_available(tmp_path: Path) -> Non
         store=store,
         config_path=None,
         max_steps=1,
-        ready_prompt=lambda _store, _root: "ready prompt",
+        ready_prompt=lambda _store, _root: ReadyTask(
+            prompt="ready prompt", next_required_action="run_review"
+        ),
         status_snapshot=lambda _store, _root: {"coverage": {}, "findings": {}},
         command_runner=lambda _config, _root, _state_dir, _prompt: SessionCommandResult(
             argv=[], cwd=None, returncode=0, stdout="", stderr=""
@@ -1607,7 +1649,9 @@ async def test_run_app_executes_controller_in_headless_mode(tmp_path: Path) -> N
         store=store,
         config_path=None,
         max_steps=1,
-        ready_prompt=lambda _store, _root: "ready prompt",
+        ready_prompt=lambda _store, _root: ReadyTask(
+            prompt="ready prompt", next_required_action="run_review"
+        ),
         status_snapshot=lambda _store, _root: {"coverage": {}, "findings": {}},
         command_runner=command_runner,
     )

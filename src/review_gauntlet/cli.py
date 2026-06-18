@@ -76,6 +76,7 @@ from review_gauntlet.run_controller import (
     RUN_INTERRUPTED_REASON,
     AgentOutputEntry,
     AgentOutputProgress,
+    ReadyTask,
     RunController,
     SessionCommandResult,
     compose_event_sinks,
@@ -1424,7 +1425,7 @@ class RunSnapshotReadinessProvider:
                 status["coverage_projection"] = projection
         return status
 
-    def ready_prompt(self, store: SessionStore, root: Path) -> str | None:
+    def ready_prompt(self, store: SessionStore, root: Path) -> ReadyTask | None:
         try:
             session_id = store.active_session_id()
         except LookupError:
@@ -1434,7 +1435,15 @@ class RunSnapshotReadinessProvider:
         self._status_context = None
         if context is None or context.root != root or context.session_id != session_id:
             context = _build_status_context(store, root, allow_non_review_dirty=True)
-        return _ready_prompt_from_context(store, context)
+        prompt = _ready_prompt_from_context(store, context)
+        if prompt is None:
+            return None
+        next_required_action = _next_action(
+            context.effective_cell_counts,
+            context.finding_counts,
+            context.finalize_reasons,
+        )
+        return ReadyTask(prompt=prompt, next_required_action=next_required_action)
 
 
 def _ready_prompt(store: SessionStore, root: Path) -> str | None:

@@ -163,11 +163,12 @@ def test_run_snapshot_readiness_reuses_target_digest_work(
     provider = cli.RunSnapshotReadinessProvider()
 
     status = provider.status_snapshot(store, tmp_path)
-    prompt = provider.ready_prompt(store, tmp_path)
+    ready_task = provider.ready_prompt(store, tmp_path)
 
     assert status["coverage"] == {CellState.STALE.value: 1}
-    assert prompt is not None
-    assert "stale review cells need refreshed coverage" in prompt
+    assert ready_task is not None
+    assert ready_task.next_required_action == "run_review"
+    assert "stale review cells need refreshed coverage" in ready_task.prompt
     assert counts == {"file_digests": 1, "target_digest": 1}
 
 
