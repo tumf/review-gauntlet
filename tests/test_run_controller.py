@@ -351,6 +351,59 @@ def test_run_controller_completes_when_command_finalizes_session(tmp_path: Path)
     ]
 
 
+def test_run_controller_finalized_snapshot_preserves_last_active_status(
+    tmp_path: Path,
+) -> None:
+    store = _store(tmp_path)
+    final_status: dict[str, object] = {
+        "coverage": {"reviewed": 3, "pending": 1},
+        "finding_state_counts": {"dismissed": 2},
+        "can_finalize": True,
+        "finalize_blockers": [],
+        "next_required_action": "finalize",
+        "run_count": 7,
+        "cell_terminal_count": 3,
+    }
+
+    def command(
+        _config: CommandAdapterConfig, _root: Path, _state_dir: Path, _prompt: str
+    ) -> SessionCommandResult:
+        store.active_path.unlink()
+        return SessionCommandResult(
+            argv=["fake-agent"], cwd=None, returncode=0, stdout="ok", stderr=""
+        )
+
+    controller = RunController(
+        root=tmp_path,
+        store=store,
+        config_path=None,
+        max_steps=1,
+        ready_prompt=lambda _store, _root: ReadyTask(
+            prompt="finalize session", next_required_action="finalize"
+        ),
+        status_snapshot=lambda _store, _root: final_status,
+        command_runner=command,
+    )
+
+    result = controller.run()
+    snapshot = controller.snapshot()
+
+    assert result["completed"] is True
+    assert result["reason"] == "completed"
+    assert result["steps"]
+    assert result["step_count"] == 1
+    assert result["session_id"] == "RGS-test"
+    assert "checkpoint_commit" in result
+    assert snapshot.agent_status == "finalized"
+    assert snapshot.session_state == "finalized"
+    assert snapshot.coverage == {"reviewed": 3, "pending": 1}
+    assert snapshot.findings == {"dismissed": 2}
+    assert snapshot.cell_terminal_count == 3
+    assert snapshot.run_count == 7
+    assert snapshot.next_ready_prompt is None
+    assert snapshot.next_required_action is None
+
+
 def test_step_started_carries_next_required_action(tmp_path: Path) -> None:
     store = _store(tmp_path)
 

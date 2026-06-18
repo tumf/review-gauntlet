@@ -300,8 +300,16 @@ def create_run_app(controller: RunController) -> object:
                 session_header.set_class(state_active, state_class)
                 queue_panel_container.set_class(panel_or_state_active, state_class)
                 activity_panel_container.set_class(panel_or_state_active, state_class)
+            finalized = view.finalized_summary is not None
+            queue_panel_container.border_title = (
+                "Finalized summary" if finalized else PANEL_TITLES["queue"]
+            )
             queue_panel_container.display = bool(sections["queue"])
             queue_panel.update(render_tui_lines(sections["queue"], flashes, mode="rich"))
+            rules_panel_container.display = not finalized
+            files_panel_container.display = not finalized
+            findings_panel_container.display = not finalized
+            activity_panel_container.display = not finalized and view.active_view != "agent"
             rules_panel_container.border_title = _rules_panel_title(view.active_view)
             rules_panel.update(_render_rules_panel(view, flashes))
             files_panel_container.border_title = _files_panel_title(view.active_view)
@@ -316,7 +324,6 @@ def create_run_app(controller: RunController) -> object:
                 )
             activity_timeline.update(render_tui_lines(sections["activity"], flashes, mode="rich"))
             legend.update(render_tui_lines(_color_legend_tui_lines(), flashes, mode="rich"))
-            activity_panel_container.display = view.active_view != "agent"
 
     return RunApp(controller)
 
@@ -441,6 +448,20 @@ class SessionSummary:
 
 
 @dataclass(frozen=True)
+class FinalizedSummary:
+    coverage_percent: int
+    terminal_cells: int
+    total_cells: int
+    resolved_finding_count: int
+    resolved_files: tuple[str, ...]
+    rule_ids: tuple[str, ...]
+    finding_ids: tuple[str, ...]
+    elapsed: str
+    step_count: int
+    checkpoint: str
+
+
+@dataclass(frozen=True)
 class ActionableFindingSummary:
     open: int
     triage: int
@@ -510,6 +531,7 @@ class RunViewState:
     liveness_detail: str
     artifact_path: str | None
     elapsed: str
+    finalized_summary: FinalizedSummary | None
 
 
 def calculate_progress_metrics(
@@ -653,6 +675,7 @@ def dashboard_state(
         snapshot.findings,
     )
     artifact_path = snapshot.agent_lifecycle.artifact_path
+    elapsed = format_elapsed_time(snapshot.elapsed_seconds)
     return RunViewState(
         status=snapshot.agent_status,
         status_summary=status_summary,
@@ -677,8 +700,59 @@ def dashboard_state(
         ),
         liveness_detail=liveness_detail,
         artifact_path=artifact_path,
-        elapsed=format_elapsed_time(snapshot.elapsed_seconds),
+        elapsed=elapsed,
+        finalized_summary=derive_finalized_summary(snapshot, coverage, elapsed),
     )
+
+
+def derive_finalized_summary(
+    snapshot: RunSnapshot, coverage: ProgressMetrics, elapsed: str
+) -> FinalizedSummary | None:
+    if snapshot.agent_status != "finalized" and snapshot.session_state != "finalized":
+        return None
+    projection = snapshot.coverage_projection
+    resolved_files = tuple(
+        file.file_path
+        for file in projection.files
+        if file.total > 0 and file.reviewed >= file.total
+    )
+    rule_ids = tuple(rule.rule_id for rule in projection.rules if rule.total > 0)
+    resolved_findings = tuple(
+        finding
+        for finding in projection.findings
+        if finding.state in {"confirmed", "dismissed", "fixed", "waived", "false_positive"}
+        or not finding.actionable
+    )
+    resolved_finding_count = sum(
+        _count_value(snapshot.findings.get(state, 0))
+        for state in ("confirmed", "dismissed", "fixed", "waived", "false_positive")
+    )
+    if resolved_finding_count == 0:
+        resolved_finding_count = len(resolved_findings)
+    return FinalizedSummary(
+        coverage_percent=coverage.percent,
+        terminal_cells=coverage.terminal,
+        total_cells=coverage.total,
+        resolved_finding_count=resolved_finding_count,
+        resolved_files=resolved_files,
+        rule_ids=rule_ids,
+        finding_ids=tuple(finding.finding_id for finding in resolved_findings),
+        elapsed=elapsed,
+        step_count=snapshot.run_count or snapshot.step,
+        checkpoint=_checkpoint_summary(snapshot.checkpoint_commit),
+    )
+
+
+def _checkpoint_summary(checkpoint: dict[str, object] | None) -> str:
+    if checkpoint is None:
+        return "unavailable (no checkpoint metadata)"
+    commit = checkpoint.get("checkpoint_commit")
+    if isinstance(commit, str) and commit:
+        return commit[:12]
+    reason = checkpoint.get("checkpoint_commit_reason")
+    if isinstance(reason, str) and reason:
+        return f"unavailable ({reason})"
+    return "unavailable (no commit recorded)"
 
 
 def select_active_gate(snapshot: RunSnapshot, gates: tuple[FinalizeGate, ...]) -> FinalizeGate:
@@ -966,6 +1040,16 @@ def update_tui_render_state(
 
 
 def tui_render_sections(view: RunViewState) -> dict[str, tuple[TuiLine, ...]]:
+    if view.finalized_summary is not None:
+        return {
+            "header_status": header_status_tui_lines(view),
+            "header_agent": header_agent_tui_lines(view),
+            "queue": finalized_summary_tui_lines(view),
+            "activity": (),
+            "rules": (),
+            "files": (),
+            "findings": (),
+        }
     return {
         "header_status": header_status_tui_lines(view),
         "header_agent": header_agent_tui_lines(view),
@@ -1094,6 +1178,61 @@ def finalize_path_tui_lines(view: RunViewState) -> tuple[TuiLine, ...]:
             )
         )
     return tuple(lines)
+
+
+def finalized_summary_tui_lines(view: RunViewState) -> tuple[TuiLine, ...]:
+    summary = view.finalized_summary
+    if summary is None:
+        return ()
+    resolved_files = _none_or_join(summary.resolved_files)
+    rule_ids = _none_or_join(summary.rule_ids)
+    finding_ids = _none_or_join(summary.finding_ids)
+    return (
+        TuiLine(
+            (
+                _literal("Final coverage  ", key="finalized.coverage.label"),
+                _field(
+                    "finalized.coverage.percent",
+                    f"{summary.coverage_percent}%",
+                    compare=summary.coverage_percent,
+                ),
+                _literal("   terminal/total cells ", key="finalized.coverage.cells_label"),
+                _field(
+                    "finalized.coverage.cells",
+                    f"{summary.terminal_cells}/{summary.total_cells}",
+                    compare=(summary.terminal_cells, summary.total_cells),
+                ),
+            )
+        ),
+        TuiLine(
+            (
+                _literal("Run summary     ", key="finalized.run.label"),
+                _field(
+                    "finalized.run.elapsed", f"elapsed {summary.elapsed}", compare=summary.elapsed
+                ),
+                _literal(" · ", key="finalized.run.sep"),
+                _field(
+                    "finalized.run.steps",
+                    f"steps {summary.step_count}",
+                    compare=summary.step_count,
+                ),
+            )
+        ),
+        _label_value_line("finalized.checkpoint", "Checkpoint      ", summary.checkpoint),
+        _label_value_line(
+            "finalized.finding_count",
+            "Resolved findings ",
+            str(summary.resolved_finding_count),
+            compare=summary.resolved_finding_count,
+        ),
+        _label_value_line("finalized.files", "Resolved files  ", resolved_files),
+        _label_value_line("finalized.rules", "Rules           ", rule_ids),
+        _label_value_line("finalized.findings", "Finding IDs     ", finding_ids),
+    )
+
+
+def _none_or_join(values: tuple[str, ...]) -> str:
+    return ", ".join(values) if values else "none"
 
 
 def queue_tui_lines(view: RunViewState, *, limit: int = 4) -> tuple[TuiLine, ...]:
@@ -1375,6 +1514,16 @@ def titled_section(title: str, body: str) -> str:
 
 def compact_dashboard_text(snapshot: RunSnapshot, events: tuple[RunEvent, ...] = ()) -> str:
     view = dashboard_state(snapshot, events)
+    if view.finalized_summary is not None:
+        return "\n".join(
+            part
+            for part in (
+                header_text(view),
+                titled_section("Finalized summary", finalized_summary_text(view)),
+                footer_text(),
+            )
+            if part
+        )
     parts = [
         header_text(view),
         titled_section(PANEL_TITLES["queue"], queue_text(view)),
@@ -1544,6 +1693,10 @@ def actionable_queue_entries(
 
 def queue_text(view: RunViewState, *, limit: int = 4) -> str:
     return render_tui_lines(queue_tui_lines(view, limit=limit))
+
+
+def finalized_summary_text(view: RunViewState) -> str:
+    return render_tui_lines(finalized_summary_tui_lines(view))
 
 
 def rule_coverage_text(view: RunViewState, *, limit: int = 5) -> str:
