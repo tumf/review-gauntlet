@@ -1,9 +1,12 @@
 import json
 import sys
+from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 
+import review_gauntlet.cli as cli
 from review_gauntlet.cli import ReviewProgressReporter, main, review_cells_concurrently
 from review_gauntlet.review_adapter import ReviewAdapterResult
 from review_gauntlet.review_cells import ReviewCell
@@ -55,6 +58,90 @@ def test_review_keyboard_interrupt_cancels_adapter_and_pending_cells(
     captured = capsys.readouterr()
     assert adapter.cancelled is True
     assert "review cell cancelled: cell_id=RGC-pending" in captured.err
+
+
+class ControlledFuture:
+    def __init__(self, result: ReviewAdapterResult | None, *, done: bool) -> None:
+        self._result = result
+        self._done = done
+        self.cancelled = False
+
+    def done(self) -> bool:
+        return self._done
+
+    def cancel(self) -> bool:
+        self.cancelled = True
+        return True
+
+    def result(self) -> ReviewAdapterResult:
+        if self._result is None:
+            raise AssertionError("pending future result must not be awaited during interrupt drain")
+        return self._result
+
+
+class ControlledExecutor:
+    def __init__(self, futures: list[ControlledFuture]) -> None:
+        self._futures = futures
+        self.submitted = 0
+        self.shutdown_wait: bool | None = None
+        self.shutdown_cancel_futures: bool | None = None
+
+    def submit(self, fn: object, cell: ReviewCell) -> ControlledFuture:
+        del fn, cell
+        future = self._futures[self.submitted]
+        self.submitted += 1
+        return future
+
+    def shutdown(self, *, wait: bool = True, cancel_futures: bool = False) -> None:
+        self.shutdown_wait = wait
+        self.shutdown_cancel_futures = cancel_futures
+
+
+class CancellableAdapter:
+    def __init__(self) -> None:
+        self.cancelled = False
+
+    def review(self, cell: ReviewCell) -> ReviewAdapterResult:
+        return ReviewAdapterResult(cell_id=cell.id)
+
+    def cancel(self) -> None:
+        self.cancelled = True
+
+
+def test_review_interrupt_drains_completed_futures_without_waiting(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    completed = ControlledFuture(ReviewAdapterResult(cell_id="RGC-complete"), done=True)
+    pending = ControlledFuture(None, done=False)
+    executor = ControlledExecutor([completed, pending])
+    adapter = CancellableAdapter()
+    observed: list[str] = []
+
+    def fake_executor(*args: object, **kwargs: object) -> ControlledExecutor:
+        del args, kwargs
+        return executor
+
+    def interrupted_as_completed(futures: object) -> Iterator[Any]:
+        del futures
+        raise KeyboardInterrupt
+        yield
+
+    monkeypatch.setattr(cli, "ThreadPoolExecutor", fake_executor)
+    monkeypatch.setattr(cli, "as_completed", interrupted_as_completed)
+
+    with pytest.raises(KeyboardInterrupt):
+        review_cells_concurrently(
+            adapter,
+            [_test_cell("RGC-complete"), _test_cell("RGC-pending")],
+            concurrency=2,
+            on_result=lambda cell, outcome: observed.append(cell.id),
+        )
+
+    assert observed == ["RGC-complete"]
+    assert adapter.cancelled is True
+    assert pending.cancelled is True
+    assert executor.shutdown_wait is False
+    assert executor.shutdown_cancel_futures is True
 
 
 def test_review_human_progress_goes_to_stderr(
