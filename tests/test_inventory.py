@@ -234,6 +234,19 @@ def test_review_path_filter_keeps_package_adjacent_executable_logic(
     assert should_include_review_relative_path(relative_path)
 
 
+def test_git_inventory_excludes_missing_symlink_targets(tmp_path: Path) -> None:
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True, text=True)
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "app.py").write_text("print('ok')\n", encoding="utf-8")
+    (tmp_path / ".agents").mkdir()
+    (tmp_path / ".agents" / "missing-skill").symlink_to(tmp_path / "missing-target")
+
+    inventory_paths = {file.path for file in build_inventory(tmp_path).files}
+
+    assert "src/app.py" in inventory_paths
+    assert ".agents/missing-skill" not in inventory_paths
+
+
 def test_git_inventory_excludes_review_gauntlet_state(tmp_path: Path) -> None:
     subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True, text=True)
     (tmp_path / ".gitignore").write_text("ignored.log\n", encoding="utf-8")

@@ -108,8 +108,14 @@ from review_gauntlet.targets import (
 USAGE_ERROR = 64
 
 _FINDING_MARK_TO_STATE = {
+    "untriaged": FindingState.UNTRIAGED,
     "open": FindingState.OPEN,
     "confirmed": FindingState.CONFIRMED,
+    "fixed_pending_verification": FindingState.FIXED_PENDING_VERIFICATION,
+    "fixed_verified": FindingState.FIXED_VERIFIED,
+    "false_positive": FindingState.FALSE_POSITIVE,
+    "accepted_risk": FindingState.ACCEPTED_RISK,
+    "waived": FindingState.WAIVED,
     "dismissed": FindingState.DISMISSED,
 }
 
@@ -276,7 +282,18 @@ def build_parser() -> argparse.ArgumentParser:
     mark = subparsers.add_parser("mark")
     _root_arg(mark)
     mark.add_argument("finding_id")
-    mark.add_argument("state", choices=("confirmed", "dismissed"))
+    mark.add_argument(
+        "state",
+        choices=(
+            "confirmed",
+            "fixed_pending_verification",
+            "fixed_verified",
+            "false_positive",
+            "accepted_risk",
+            "waived",
+            "dismissed",
+        ),
+    )
     mark.add_argument("--reason", default="", help="Decision reason (default: none)")
     mark.add_argument("--owner", default="", help="Decision owner (default: none)")
     mark.add_argument(
@@ -1504,7 +1521,8 @@ def _ready_prompt_segments(reason: str) -> tuple[list[str], str, str]:
             "1. resolve: examine the open findings listed in 'Findings for this file' below.",
             "   Confirm and fix real issues or dismiss non-issues with a reason.",
             "   Do NOT discover new findings.",
-            "2. mark: record each finding as confirmed or dismissed.",
+            "2. mark: record each finding as confirmed, fixed,"
+            " false_positive, accepted_risk, waived, or dismissed.",
         ],
         "Stop when all findings listed below have been resolved.",
         "## Review cells for this file (context only, do NOT review for new findings)",
@@ -2262,13 +2280,10 @@ def _emit_ready(prompt: str | None, output_format: str) -> None:
 
 def _cmd_mark(args: argparse.Namespace, store: SessionStore) -> None:
     store.active_session_id()
-    mapping = {
-        "confirmed": FindingState.CONFIRMED,
-        "dismissed": FindingState.DISMISSED,
-    }
+    state = FindingState(args.state)
     metadata = {"dismiss_reason": args.reason} if args.state == "dismissed" and args.reason else {}
-    store.mark_finding(args.finding_id, mapping[args.state], args.reason, metadata)
-    _emit({"finding_id": args.finding_id, "state": mapping[args.state].value}, args.format)
+    store.mark_finding(args.finding_id, state, args.reason, metadata)
+    _emit({"finding_id": args.finding_id, "state": state.value}, args.format)
 
 
 def _cancel(store: SessionStore) -> dict[str, object]:
@@ -2427,7 +2442,9 @@ def _finding_int_field(finding: dict[str, object], key: str) -> int:
 
 
 def _terminal_finding_states() -> set[FindingState]:
-    return {FindingState.CONFIRMED, FindingState.DISMISSED}
+    from review_gauntlet.findings import TERMINAL_FINDING_STATES
+
+    return set(TERMINAL_FINDING_STATES)
 
 
 def _matches_finding_path_filters(path: str, filters: tuple[str, ...]) -> bool:

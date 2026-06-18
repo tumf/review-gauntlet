@@ -29,18 +29,37 @@ def test_normalize_ocr_comment_rejects_unsafe_paths(path: str) -> None:
         )
 
 
-def test_finding_state_model_is_simplified() -> None:
+def test_finding_state_model_matches_checkpoint_states() -> None:
     assert tuple(FindingState) == (
+        FindingState.UNTRIAGED,
         FindingState.OPEN,
         FindingState.CONFIRMED,
+        FindingState.FIXED_PENDING_VERIFICATION,
+        FindingState.FIXED_VERIFIED,
+        FindingState.FALSE_POSITIVE,
+        FindingState.ACCEPTED_RISK,
+        FindingState.WAIVED,
         FindingState.DISMISSED,
     )
-    assert {FindingState.CONFIRMED, FindingState.DISMISSED} == TERMINAL_FINDING_STATES
     assert {
-        FindingState.OPEN: {FindingState.CONFIRMED, FindingState.DISMISSED},
-        FindingState.CONFIRMED: set(),
-        FindingState.DISMISSED: set(),
-    } == ALLOWED_TRANSITIONS
+        FindingState.CONFIRMED,
+        FindingState.FIXED_VERIFIED,
+        FindingState.FALSE_POSITIVE,
+        FindingState.ACCEPTED_RISK,
+        FindingState.WAIVED,
+        FindingState.DISMISSED,
+    } == TERMINAL_FINDING_STATES
+    assert ALLOWED_TRANSITIONS[FindingState.OPEN] == {
+        FindingState.CONFIRMED,
+        FindingState.DISMISSED,
+    }
+    assert ALLOWED_TRANSITIONS[FindingState.CONFIRMED] == set()
+    assert ALLOWED_TRANSITIONS[FindingState.FIXED_PENDING_VERIFICATION] == {
+        FindingState.FIXED_VERIFIED,
+        FindingState.DISMISSED,
+    }
+    for state in TERMINAL_FINDING_STATES:
+        assert ALLOWED_TRANSITIONS[state] == set()
 
 
 def test_normalized_finding_accepts_dismiss_reason() -> None:

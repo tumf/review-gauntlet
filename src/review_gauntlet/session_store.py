@@ -197,7 +197,9 @@ class SessionStore:
                 f"unknown review cell path: session_id={session_id} file_path={file_path}"
             )
 
-    _TERMINAL_FINDING_STATES_CLAUSE = "('confirmed', 'dismissed')"
+    _TERMINAL_FINDING_STATES_CLAUSE = (
+        "('confirmed', 'fixed_verified', 'false_positive', 'accepted_risk', 'waived', 'dismissed')"
+    )
 
     def count_terminally_complete_cells(self, session_id: str) -> int:
         with self.connect() as conn:

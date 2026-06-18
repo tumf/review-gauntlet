@@ -200,10 +200,9 @@ def list_project_files(root: Path) -> list[Path]:
     tracked = git_file_list(root)
     if tracked is not None:
         return sorted(
-            resolve_under_root(root, path)
-            for path in tracked
-            if is_safe_repository_relative_path(path)
-            and should_include_artifact_relative_path(path)
+            path
+            for path in _safe_existing_files(root, tuple(tracked))
+            if should_include_artifact_relative_path(path.relative_to(root))
         )
     return sorted(path for path in root.rglob("*") if should_include_path(path, root))
 
@@ -313,7 +312,10 @@ def file_category(path: Path, relative: str) -> FileCategory:
 
 
 def is_executable(path: Path) -> bool:
-    return bool(path.stat().st_mode & (os.X_OK))
+    try:
+        return bool(path.stat().st_mode & (os.X_OK))
+    except FileNotFoundError:
+        return False
 
 
 def risk_tags(path: Path, relative: str, category: FileCategory) -> tuple[str, ...]:

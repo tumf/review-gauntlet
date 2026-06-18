@@ -11,19 +11,41 @@ from review_gauntlet.ocr_rules import OCRComment
 
 
 class FindingState(StrEnum):
+    UNTRIAGED = "untriaged"
     OPEN = "open"
     CONFIRMED = "confirmed"
+    FIXED_PENDING_VERIFICATION = "fixed_pending_verification"
+    FIXED_VERIFIED = "fixed_verified"
+    FALSE_POSITIVE = "false_positive"
+    ACCEPTED_RISK = "accepted_risk"
+    WAIVED = "waived"
     DISMISSED = "dismissed"
 
 
 TERMINAL_FINDING_STATES = {
     FindingState.CONFIRMED,
+    FindingState.FIXED_VERIFIED,
+    FindingState.FALSE_POSITIVE,
+    FindingState.ACCEPTED_RISK,
+    FindingState.WAIVED,
     FindingState.DISMISSED,
 }
 
 ALLOWED_TRANSITIONS: dict[FindingState, set[FindingState]] = {
+    FindingState.UNTRIAGED: {
+        FindingState.CONFIRMED,
+        FindingState.FALSE_POSITIVE,
+        FindingState.ACCEPTED_RISK,
+        FindingState.WAIVED,
+        FindingState.DISMISSED,
+    },
     FindingState.OPEN: {FindingState.CONFIRMED, FindingState.DISMISSED},
     FindingState.CONFIRMED: set(),
+    FindingState.FIXED_PENDING_VERIFICATION: {FindingState.FIXED_VERIFIED, FindingState.DISMISSED},
+    FindingState.FIXED_VERIFIED: set(),
+    FindingState.FALSE_POSITIVE: set(),
+    FindingState.ACCEPTED_RISK: set(),
+    FindingState.WAIVED: set(),
     FindingState.DISMISSED: set(),
 }
 
@@ -48,7 +70,15 @@ class FindingResolution(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     finding_id: str
-    state: Literal["confirmed", "dismissed"]
+    state: Literal[
+        "confirmed",
+        "fixed_pending_verification",
+        "fixed_verified",
+        "false_positive",
+        "accepted_risk",
+        "waived",
+        "dismissed",
+    ]
     dismiss_reason: str | None = None
 
     @field_validator("finding_id")

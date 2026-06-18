@@ -14,7 +14,16 @@ def test_open_allows_confirmed_and_dismissed_transitions() -> None:
     assert_transition_allowed(FindingState.OPEN, FindingState.DISMISSED)
 
 
-@pytest.mark.parametrize("terminal_state", [FindingState.CONFIRMED, FindingState.DISMISSED])
+@pytest.mark.parametrize(
+    "terminal_state",
+    [
+        FindingState.FIXED_VERIFIED,
+        FindingState.FALSE_POSITIVE,
+        FindingState.ACCEPTED_RISK,
+        FindingState.WAIVED,
+        FindingState.DISMISSED,
+    ],
+)
 def test_terminal_states_reject_follow_up_transitions(terminal_state: FindingState) -> None:
     with pytest.raises(ValueError, match=f"{terminal_state} -> confirmed"):
         assert_transition_allowed(terminal_state, FindingState.CONFIRMED)

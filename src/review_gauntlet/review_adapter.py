@@ -176,7 +176,8 @@ def build_resolve_prompt(
             "Use verdict=finish only when every listed finding has a resolution.",
             "Use verdict=continue when more work is needed for this same file.",
             "Use verdict=abort only for an actionable blocker.",
-            "Each resolution.state must be either confirmed or dismissed.",
+            "Each resolution.state must be one of: confirmed, fixed_pending_verification, "
+            "fixed_verified, false_positive, accepted_risk, waived, dismissed.",
             "Dismissed findings should include dismiss_reason.",
             "",
             "## Verdict JSON Contract",

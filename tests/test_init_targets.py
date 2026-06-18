@@ -343,6 +343,72 @@ def test_default_init_rejects_checkpoint_payload_entries_without_matching_id(
     assert "internally inconsistent" in capsys.readouterr().err
 
 
+def test_default_init_accepts_checkpoint_findings_with_extended_states(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_repo(tmp_path)
+    base = _git(tmp_path, "rev-parse", "HEAD")
+    (tmp_path / "after.py").write_text("print('after')\n", encoding="utf-8")
+    _git(tmp_path, "add", "after.py")
+    _git(tmp_path, "commit", "-m", "after")
+    _write_checkpoint(tmp_path, base)
+    checkpoint_dir = tmp_path / ".review-gauntlet" / "checkpoints" / "RGC-test"
+    (checkpoint_dir / "findings.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "checkpoint_id": "RGC-test",
+                "findings": [
+                    {
+                        "checkpoint_id": "RGC-test",
+                        "finding_id": "RGF-0001",
+                        "session_id": "RGS-test",
+                        "fingerprint": "fp",
+                        "state": state,
+                        "path": "after.py",
+                        "rule_id": "python",
+                        "content": "issue",
+                    }
+                    for state in (
+                        "untriaged",
+                        "fixed_pending_verification",
+                        "fixed_verified",
+                        "false_positive",
+                        "accepted_risk",
+                        "waived",
+                    )
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (checkpoint_dir / "events.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "checkpoint_id": "RGC-test",
+                "events": [
+                    {
+                        "checkpoint_id": "RGC-test",
+                        "event_id": 1,
+                        "finding_id": "RGF-0001",
+                        "from_state": "confirmed",
+                        "to_state": "fixed_verified",
+                        "reason": "test",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    main(["init", str(tmp_path), "--format", "json"])
+
+    capsys.readouterr()
+    metadata = SessionStore(tmp_path).session_metadata()
+    assert metadata["target"]["base_ref"] == base
+
+
 def test_default_init_rejects_invalid_transition_states_in_events(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
