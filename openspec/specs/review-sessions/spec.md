@@ -18,31 +18,23 @@
 
 ### Requirement: Review command SHALL advance exactly one run
 
-`review-gauntlet review` SHALL create durable run evidence only for review attempts that can evaluate selected cells. A review invocation with no selected current cells SHALL NOT create a run record that can satisfy finalization freshness or reviewed-target evidence. `review-gauntlet review` SHALL return structured failed-cell output when adapter work raises an unexpected exception or when adapter command startup fails from an operating-system startup error, not only when the adapter explicitly raises `ReviewAdapterError`. Successful cells from the same run SHALL still persist coverage, findings, occurrences, and applicable fixed-finding verification before the command exits non-zero.
+`review-gauntlet review` SHALL execute Phase 1: reviewing all pending review cells in a single invocation. A review invocation with no pending cells SHALL NOT create a run record. `review-gauntlet review` SHALL return structured failed-cell output when any adapter invocation fails. Successful cells from the same run SHALL still persist coverage and findings before the command exits.
 
-#### Scenario: Zero-cell review does not refresh finalization evidence
+#### Scenario: Zero-cell review does not create run record
 
 **Given**: an active session whose current cells are already reviewed
-**When**: the developer runs `review-gauntlet review --budget 1`
+**When**: the developer runs `review-gauntlet review`
 **Then**: no new reviewed-cell coverage is recorded
-**And**: no zero-cell run is used as the last reviewed target digest for finalization
+**And**: no run record is created
 
-#### Scenario: Unexpected adapter exception is structured failure
+#### Scenario: Partial adapter failure preserves successful cells
 
-**Given**: an active session where a selected review cell's adapter work raises an unexpected `RuntimeError`
-**When**: `review-gauntlet review --format json` processes the run
-**Then**: stdout contains a parseable failed-run JSON result with `failed_cell_id` and `failure` details
-**And**: the command exits non-zero without printing a raw traceback as the final user-facing result
-**And**: the failed cell remains pending or stale for retry
-
-#### Scenario: Unexpected adapter exception preserves other successful cells
-
-**Given**: a review run selects multiple cells
-**And**: one selected cell raises an unexpected adapter exception
-**And**: at least one other selected cell succeeds
-**When**: the run finalizes
-**Then**: successful selected cells are recorded as reviewed
-**And**: the failed cell remains non-reviewed and visible for later retry
+**Given**: a review run with 3 pending cells
+**And**: one adapter invocation fails
+**When**: the run completes
+**Then**: successful cells are recorded as reviewed
+**And**: findings from successful cells are persisted
+**And**: the failed cell remains pending for retry
 
 ### Requirement: Review rules and prompts SHALL port the pinned OCR corpus
 
@@ -99,7 +91,7 @@ The bundled rule corpus SHALL include a local Solidity rule document selected fo
 
 ### Requirement: Review cells SHALL model coverage independently from finding state
 
-Review cell state mutations SHALL be durable and explicit. Attempts to update a review cell state for an unknown session/cell pair SHALL fail rather than silently succeeding with zero changed rows. File freshness refreshes for a successfully evaluated targeted path SHALL update the stored content digest for all cells on that path without changing unselected sibling cell states. Review cell staleness SHALL NOT prevent finalization or trigger re-review; stale cells are treated as terminal for the purpose of action selection and finalize gating.
+Review cell state mutations SHALL be durable and explicit. Attempts to update a review cell state for an unknown session/cell pair SHALL fail rather than silently succeeding with zero changed rows. Review cells SHALL transition only from `PENDING` to `REVIEWED`. The `STALE` and `SUPERSEDED` states are removed. File content changes between session initialization and review SHALL NOT trigger automatic state transitions on existing cells.
 
 #### Scenario: Unknown review cell update fails
 
@@ -108,23 +100,12 @@ Review cell state mutations SHALL be durable and explicit. Attempts to update a 
 **Then**: the store raises an actionable lookup error
 **And**: no caller can treat the missing cell as updated coverage
 
-#### Scenario: Targeted file sibling freshness refresh preserves coverage states
+#### Scenario: Review cell transitions are PENDING to REVIEWED only
 
-**Given**: an active session with multiple review cells for `file1`
-**And**: one `file1` cell is selected and successfully evaluated after `file1` changes
-**When**: coverage is reconciled after that successful evaluation
-**Then**: all `file1` cells store the current `file1` content digest
-**And**: unselected `file1` sibling cells are not marked `stale` solely because `file1` changed
-**And**: unselected sibling cells keep their prior coverage states
-
-#### Scenario: Incidental changed files become stale (non-blocking)
-
-**Given**: an active session with reviewed cells for `file1` and `file2`
-**And**: the current successful review or verification step targets `file1`
-**When**: both `file1` and `file2` have changed since their recorded coverage
-**Then**: `file1` cells are not stale solely because `file1` was intentionally changed and evaluated
-**And**: `file2` cells are stale because `file2` changed incidentally outside the targeted evaluation
-**And**: stale `file2` coverage does NOT block finalization
+**Given**: an active session with a pending review cell
+**When**: the cell is successfully reviewed
+**Then**: the cell state is `REVIEWED`
+**And**: no other state transitions are possible for the cell
 
 ### Requirement: Findings SHALL use stable session-level identity
 
@@ -139,203 +120,56 @@ Finding ID allocation SHALL be deterministic and monotonic within a session. New
 
 ### Requirement: Finding triage SHALL be explicit and event-backed
 
-Triage event metadata SHALL be validated before persistence. If a developer provides `--until`, the value SHALL be an ISO calendar date. Invalid date metadata SHALL be rejected by `mark` before a finding event is written.
+Finding triage SHALL transition findings from `open` to either `confirmed` (fix applied) or `dismissed` (not a valid issue). Triage event metadata SHALL be validated before persistence. Dismissed findings SHALL include a `dismiss_reason`. Both `confirmed` and `dismissed` are terminal states.
 
-#### Scenario: Mark rejects invalid until date
+#### Scenario: Finding transitions from open to confirmed
 
 **Given**: an active session with an open finding
-**When**: the developer runs `review-gauntlet mark RGF-0001 waived --until tomorrow`
-**Then**: the command fails with a usage error
-**And**: no finding event is written for that invalid decision
+**When**: the resolution agent determines the finding is valid and applies a fix
+**Then**: the finding transitions to `confirmed`
+**And**: the transition is recorded as a finding event
 
-### Requirement: Fixed findings SHALL require later verification
+#### Scenario: Finding transitions from open to dismissed
 
-When the same finding is detected while it is `fixed_pending_verification`, the finding SHALL reopen deterministically and SHALL NOT be immediately verified in the same run that re-detected it. Fixed-pending findings SHALL only become `fixed_verified` after a later review or verification command successfully evaluates the relevant path without detecting the same finding fingerprint.
-
-#### Scenario: Redetected fixed finding remains reopened
-
-**Given**: a finding is `fixed_pending_verification`
-**When**: a later review run detects the same finding fingerprint again
-**Then**: the finding status becomes `reopened`
-**And**: later verification logic in the same run does not transition it to `fixed_verified`
-
-#### Scenario: Fixed finding verifies after dedicated verification command
-
-**Given**: a finding is `fixed_pending_verification`
-**And**: its path is successfully evaluated by `review-gauntlet verify-fixes`
-**When**: the verification run does not detect the same finding fingerprint
-**Then**: the finding status becomes `fixed_verified`
+**Given**: an active session with an open finding
+**When**: the resolution agent determines the finding is a false positive
+**Then**: the finding transitions to `dismissed`
+**And**: the `dismiss_reason` is recorded in the finding metadata
 **And**: the transition is recorded as a finding event
 
 ### Requirement: Status and findings commands SHALL expose actionable session state
 
-Review Gauntlet SHALL NOT create, remove, merge, or otherwise operate Git linked worktrees. `review-gauntlet finalize` closes a complete active review session into deterministic latest-only checkpoint files; the removed `--merge` flag no longer exists. The checkpoint-only git commit in the run workflow continues to guard against unrelated dirty worktree changes (files outside `.review-gauntlet` that are dirty relative to `HEAD`), but the term "dirty worktree" here refers to uncommitted files in the base repository working directory, not a Git linked worktree.
+Status and findings commands SHALL reflect the simplified two-phase model. Finding state counts SHALL use `open`, `confirmed`, `dismissed`. Cell state counts SHALL use `pending`, `reviewed`. Stale-related state displays are removed.
 
-#### Scenario: Finalize does not expose a merge flag
+#### Scenario: Status shows two-phase state
 
-**Given**: an installed `review-gauntlet` CLI
-**When**: the developer runs `review-gauntlet finalize --merge`
-**Then**: the command exits with a usage error (exit code 64)
-**And**: the error message does not suggest `--merge` as a valid option
-**And**: no checkpoint files, branch merges, or worktree cleanup are attempted
-
-#### Scenario: Stale git_worktree metadata does not affect run
-
-**Given**: an active session whose metadata contains `git_worktree.enabled: true` and a `worktree_path` from a pre-removal session
-**When**: the developer runs `review-gauntlet run --format json`
-**Then**: the agent is invoked with `{repo_root}` expanding to the base repository root
-**And**: the default agent cwd is the base repository root
-**And**: no `worktree_error` is raised
-**And**: the run proceeds or blocks normally based on the current session state
+**Given**: an active session with 3 pending cells, 5 reviewed cells, 2 open findings, 1 confirmed finding
+**When**: the developer runs `review-gauntlet status --format json`
+**Then**: coverage shows `pending: 3`, `reviewed: 5`
+**And**: findings show `open: 2`, `confirmed: 1`, `dismissed: 0`
 
 ### Requirement: Finalize SHALL validate completion without running review work
 
-`status` and `finalize` SHALL tolerate malformed persisted finding-event metadata without crashing. Malformed terminal-decision metadata SHALL be surfaced conservatively as a blocker so completion cannot hide invalid waiver or accepted-risk state.
+Finalize SHALL require all cells to be `REVIEWED` and all findings to be `confirmed` or `dismissed`. Finalize SHALL NOT require separate verification of fixed findings since the resolution agent handles verification as part of the `confirmed` determination.
 
-`status`, `run` readiness, and `finalize` SHALL tolerate subprocess startup `OSError` from git-based cleanliness checks and `sqlite3.Error` from ledger database access without printing a raw traceback as the final user-facing result. If review-universe cleanliness, non-review dirty state, or target digest freshness cannot be verified because a git subprocess cannot start or the ledger database is unavailable, the command SHALL surface a conservative blocker and SHALL NOT claim finalization readiness.
+#### Scenario: Successful finalize with two-phase completion
 
-`review-gauntlet finalize` SHALL close a complete active review session into deterministic latest-only checkpoint files that are suitable for Git diff review and safe as the next review base. Finalization SHALL only write checkpoint files when completion blockers are absent, when review-universe files are clean relative to `HEAD`, and when current `HEAD` can be resolved to a commit. The checkpoint SHALL be derived from the existing durable session ledger, SHALL include review coverage, findings, triage events, and review-base metadata, and SHALL NOT replace the ledger as the source of truth before successful finalization.
-
-Dirty review-universe blockers SHALL identify that review-universe files are dirty relative to `HEAD` without including individual dirty file paths in `finalize_blockers`.
-
-#### Scenario: Malformed decision metadata blocks finalize without crashing
-
-**Given**: a terminal finding event with malformed JSON metadata or an invalid `until` date
-**When**: the developer runs `review-gauntlet finalize --format json`
-**Then**: the command returns a structured failure result
-**And**: the result includes a blocker for invalid or expired terminal-decision metadata
-**And**: no traceback is printed
-**And**: no latest checkpoint file is created or overwritten
-**And**: no runtime session cleanup or archive is performed
-
-#### Scenario: Successful finalize writes latest checkpoint files
-
-**Given**: an active review session with complete reviewed coverage and all live findings closed
+**Given**: an active review session with all cells `REVIEWED`
+**And**: all findings are `confirmed` or `dismissed`
 **And**: review-universe files are clean relative to `HEAD`
-**And**: the current repository `HEAD` can be resolved to a commit
 **When**: the developer runs `review-gauntlet finalize --format json`
 **Then**: `.review-gauntlet/checkpoints/latest/status.json` is written
-**And**: `.review-gauntlet/checkpoints/latest/findings.json` is written
-**And**: `.review-gauntlet/checkpoints/latest/events.json` is written
-**And**: `.review-gauntlet/checkpoints/latest/summary.md` is written
-**And**: stdout contains parseable JSON listing the generated files and checkpoint directory
+**And**: stdout contains parseable JSON listing the generated files
 **And**: the result includes `checkpoint_state: complete`
-**And**: the result includes `usable_as_review_base: true`
-**And**: the result includes a `review_base_commit` equal to the resolved current `HEAD`
-**And**: the result includes `next_required_action: init_next_session`
 
-#### Scenario: Dirty review-universe files block finalize
+#### Scenario: Open findings block finalize
 
-**Given**: an active review session that otherwise satisfies completion requirements
-**And**: an eligible review-universe file has staged, unstaged, deleted, renamed, or untracked changes relative to `HEAD`
-**When**: the developer runs `review-gauntlet finalize --format json`
-**Then**: the command fails with a structured dirty-worktree blocker
-**And**: the dirty-worktree blocker does not include the dirty file path
-**And**: no latest checkpoint file is created or overwritten
-**And**: the active session marker remains usable for continuing review work
-**And**: no runtime session cleanup or archive is performed
-
-#### Scenario: Dirty review-universe status omits dirty file paths
-
-**Given**: an active review session that otherwise satisfies completion requirements
-**And**: an eligible review-universe file has staged, unstaged, deleted, renamed, or untracked changes relative to `HEAD`
-**When**: the developer runs `review-gauntlet status --format json`
-**Then**: the result includes a structured dirty-worktree blocker in `finalize_blockers`
-**And**: the dirty-worktree blocker does not include the dirty file path
-
-#### Scenario: Git resource exhaustion blocks status finalization readiness
-
-**Given**: an active review session that otherwise may be close to finalizable
-**And**: a git subprocess used to compute review-universe cleanliness raises `OSError` with `errno.EMFILE`
-**When**: the developer runs `review-gauntlet status --format json`
-**Then**: stdout contains parseable JSON
-**And**: `finalize_blockers` includes a blocker indicating git cleanliness or status checks are unavailable due to resource exhaustion
-**And**: `can_finalize` is `false`
-**And**: no raw traceback is printed as the final user-facing result
-
-#### Scenario: Ledger database unavailability blocks status finalization readiness
-
-**Given**: an active review session that otherwise may be close to finalizable
-**And**: `sqlite3.connect` against the session ledger raises `sqlite3.OperationalError` (e.g., due to file descriptor exhaustion or database lock)
-**When**: the developer runs `review-gauntlet status --format json`
-**Then**: stdout contains parseable JSON
-**And**: `finalize_blockers` includes a blocker indicating the ledger database access is unavailable
-**And**: `can_finalize` is `false`
-**And**: no raw traceback is printed as the final user-facing result
-
-#### Scenario: Ledger database unavailability blocks run readiness without TUI crash
-
-**Given**: a running TUI session with an active review session
-**And**: TUI refresh triggers `_ready_prompt` computation that raises `sqlite3.OperationalError`
-**When**: the TUI timer calls `RunController.snapshot()`
-**Then**: the snapshot is produced with `next_ready_prompt` set to `None`
-**And**: the TUI remains responsive without a fatal worker-thread crash
-**And**: the finalize checklist shows the blocked status
-
-#### Scenario: Git resource exhaustion blocks finalize without checkpoint writes
-
-**Given**: an active review session that otherwise may be close to finalizable
-**And**: a git subprocess used to compute review-universe cleanliness raises `OSError` with `errno.EMFILE`
+**Given**: an active review session with all cells reviewed
+**And**: at least one finding is `open`
 **When**: the developer runs `review-gauntlet finalize --format json`
 **Then**: the command fails with structured blockers
-**And**: no latest checkpoint file is created or overwritten
-**And**: `can_finalize` is not reported as true
-**And**: no raw traceback is printed as the final user-facing result
-
-#### Scenario: Failed finalize does not update checkpoint or clean up session
-
-**Given**: an active review session with pending review cells, open findings, fixed findings requiring verification, expired terminal decisions, no completed review run, stale target digest evidence, dirty review-universe files, an unresolved current `HEAD`, or unavailable git cleanliness checks
-**And**: an existing latest checkpoint may already exist
-**When**: the developer runs `review-gauntlet finalize --format json`
-**Then**: the command fails with structured blockers
-**And**: no latest checkpoint file is created or overwritten
-**And**: existing latest checkpoint file contents remain unchanged
-**And**: the active session marker remains usable for continuing review work
-**And**: no runtime session cleanup or archive is performed
-
-#### Scenario: Finalize exposes full review state for diff review
-
-**Given**: an active review session with reviewed cells, terminal findings, finding occurrences, and finding events
-**When**: the developer runs `review-gauntlet finalize`
-**Then**: `status.json` includes checkpoint ID, session metadata, target information, current target digest, last reviewed target digest, ruleset digest, coverage counts, finding state counts, run count, checkpoint state, review base commit, finalization blockers, and next required action
-**And**: `findings.json` includes all session findings including terminal findings
-**And**: each finding includes latest occurrence line evidence when occurrence evidence exists
-**And**: `events.json` includes triage and verification events for the session findings in deterministic order
-**And**: `summary.md` presents the same state in a Markdown format suitable for PR review
-
-#### Scenario: Finalize preserves malformed non-terminal event metadata as evidence
-
-**Given**: an active review session with a non-terminal-decision finding event whose metadata is malformed JSON or not a JSON object
-**When**: the developer runs `review-gauntlet finalize --format json`
-**Then**: finalization handles the metadata without a traceback
-**And**: `events.json` includes the event with raw metadata evidence when the checkpoint is written
-**And**: finalization does not reinterpret the event as a different triage decision
-
-#### Scenario: Finalize publishes checkpoint atomically
-
-**Given**: an active review session eligible for finalization
-**And**: an existing `.review-gauntlet/checkpoints/latest/` snapshot may already exist
-**When**: the developer runs `review-gauntlet finalize`
-**Then**: checkpoint files are generated with matching checkpoint metadata before they become the new `latest/` snapshot
-**And**: `status.json`, `findings.json`, `events.json`, and `summary.md` all identify the same checkpoint generation
-**And**: a partial generation failure cannot leave a mixed-generation latest checkpoint consumable by the next `init`
-
-#### Scenario: Finalize is latest-only by default
-
-**Given**: an active review session eligible for finalization
-**And**: an existing `.review-gauntlet/checkpoints/latest/` snapshot
-**When**: the developer runs `review-gauntlet finalize`
-**Then**: the command overwrites the same latest snapshot files atomically
-**And**: no timestamped or session-history checkpoint directory is created by default
-
-#### Scenario: Successful finalize prevents continuing the old active session
-
-**Given**: an active review session eligible for finalization
-**When**: the developer runs `review-gauntlet finalize`
-**Then**: the active session marker is removed or invalidated after checkpoint files are written
-**And**: subsequent `review-gauntlet review` without a new `init` fails with an actionable message
-**And**: subsequent `review-gauntlet status` without a new `init` fails with an actionable message
-**And**: neither command silently advances or reports the finalized old session as active
+**And**: blockers indicate open findings remain
+**And**: no checkpoint files are written
 
 ### Requirement: Existing planning commands SHALL remain compatible
 
@@ -511,19 +345,6 @@ The README Design section SHALL reflect the current implemented capabilities: in
 **Then**: it does not claim that the project only creates inventory, plans, and matrices
 **And**: it acknowledges the implemented session lifecycle and external command adapter support
 
-### Requirement: Verify-fixes command SHALL re-review fixed findings explicitly
-
-#### Scenario: Verify fixes refreshes targeted path sibling freshness
-
-**Given**: an active session with multiple review cells for a path that has a finding in `fixed_pending_verification`
-**And**: that path changed while fixing the finding
-**When**: `review-gauntlet verify-fixes --format json` successfully evaluates the current review cell for that finding path
-**Then**: the finding may transition according to the verification verdict
-**And**: all review cells on that targeted path store the current content digest
-**And**: unselected sibling cells on that same path are not marked `stale` solely because the targeted path changed
-**And**: unselected sibling cells on that same path are not promoted to `pending` solely because the targeted path was evaluated
-**And**: unrelated pending or stale cells on other paths are not selected merely to refresh freshness
-
 ### Requirement: CLI SHALL expose package version without repository state
 
 `review-gauntlet` SHALL provide a top-level `--version` flag that reports the package version from the existing package version source and exits successfully without requiring repository-root validation, active review-session state, adapter configuration, or review work.
@@ -587,44 +408,26 @@ The README Design section SHALL reflect the current implemented capabilities: in
 
 ### Requirement: Ready command SHALL emit the next skill-directed prompt
 
-`review-gauntlet ready` SHALL emit the next skill-directed prompt from concrete renderable work items. It SHALL preserve deterministic priority across pending review cells, reopened findings, untriaged findings, confirmed findings, fixed-pending verification findings, and finalize readiness. Stale review cells SHALL NOT trigger review prompts and SHALL NOT block finalization. When aggregate session counts and materialized prompt candidates disagree, `ready` SHALL skip empty candidate buckets and continue to the next valid action instead of crashing while building an impossible file-scoped prompt.
+`review-gauntlet ready` SHALL emit the next skill-directed prompt from concrete renderable work items. It SHALL preserve deterministic priority: pending review cells, then open findings, then finalize readiness. Stale review cells are removed; no stale-related prompts are generated.
 
-<!-- Expected canonical result after archive: the canonical review-sessions spec will include explicit review-cell bucket drift scenarios in addition to existing finding bucket drift coverage, requiring pending/stale prompt selection to be based on materialized review cells. -->
+#### Scenario: Ready priority uses new two-phase order
 
-#### Scenario: Ready skips empty actionable finding bucket
-
-**Given**: an active review session whose aggregate finding counts report confirmed findings
-**And**: the concrete ready finding rows available for prompt rendering contain no confirmed finding
+**Given**: an active session with pending review cells and open findings
 **When**: the developer runs `review-gauntlet ready --format json`
-**Then**: the command does not raise a traceback while selecting the target file
-**And**: the command skips the empty confirmed-finding bucket
-**And**: the command returns the next valid ready prompt or `null` when no promptable work remains
+**Then**: the prompt targets pending review cells (Phase 1)
+**And**: open findings are not selected while pending cells exist
 
-#### Scenario: Ready skips empty pending review-cell bucket
+#### Scenario: Ready selects open findings after all cells reviewed
 
-**Given**: an active review session whose aggregate coverage counts report pending review cells
-**And**: the concrete ready review-cell rows available for prompt rendering contain no pending review cell
-**And**: a later-priority concrete actionable finding exists
+**Given**: an active session with all cells reviewed and open findings
 **When**: the developer runs `review-gauntlet ready --format json`
-**Then**: the command does not raise a traceback while selecting the target file
-**And**: the command skips the empty pending review-cell bucket
-**And**: the command returns the later-priority concrete finding prompt
+**Then**: the prompt targets open findings (Phase 2)
 
-#### Scenario: Ready skips stale review cells
+#### Scenario: Ready selects finalize when both phases complete
 
-**Given**: an active review session whose aggregate coverage counts report stale review cells
-**And**: no concrete actionable review cell (pending) or finding exists
+**Given**: an active session with all cells reviewed and all findings terminal
 **When**: the developer runs `review-gauntlet ready --format json`
-**Then**: the command does not raise a traceback
-**And**: stale review cells are intentionally ignored in action selection
-**And**: the command returns the finalize prompt when no other blockers remain
-
-#### Scenario: Ready priority still uses concrete work
-
-**Given**: an active review session with concrete pending review cells and concrete actionable findings
-**When**: the developer runs `review-gauntlet ready --format json`
-**Then**: the selected prompt corresponds to the first concrete available category in this order: pending review cells, reopened findings, untriaged findings, confirmed findings, fixed-pending verification findings, finalize
-**And**: no category is selected unless it has at least one concrete renderable review cell or finding when that category requires file-scoped work
+**Then**: the prompt is the finalize prompt
 
 ### Requirement: Review configuration SHALL support XDG global fallback
 
@@ -1429,3 +1232,99 @@ Continuation verdict files SHALL be handoff artifacts only. The session ledger S
 **When**: the Activity timeline renders the event detail
 **Then**: the detail label is derived from `next_required_action`
 **And**: the detail is not derived by parsing the `prompt` field of the event payload
+
+### Requirement: Review SHALL support parallel cell execution in Phase 1
+
+`review-gauntlet review` SHALL execute all pending review cells in parallel during Phase 1. Each cell's review adapter invocation SHALL be read-only with respect to the repository. Successful cells SHALL transition to `REVIEWED` state. Failed cells SHALL remain `PENDING` for retry. The `--parallel N` option SHALL control the maximum number of concurrent adapter invocations, defaulting to the number of available CPU cores.
+
+#### Scenario: All pending cells reviewed in parallel
+
+**Given**: an active session with 5 pending review cells
+**When**: the developer runs `review-gauntlet review`
+**Then**: all 5 cells are reviewed concurrently
+**And**: successful cells are marked `REVIEWED`
+**And**: findings from all cells are persisted with state `open`
+**And**: the command exits 0 when all cells succeed
+
+#### Scenario: Partial failure preserves coverage
+
+**Given**: an active session with 3 pending review cells
+**And**: one adapter invocation fails with an unexpected error
+**When**: `review-gauntlet review --format json` completes
+**Then**: the 2 successful cells are marked `REVIEWED`
+**And**: the failed cell remains `PENDING`
+**And**: findings from successful cells are persisted
+**And**: the command exits non-zero with structured failure details
+
+#### Scenario: Zero pending cells is a no-op
+
+**Given**: an active session where all cells are already `REVIEWED`
+**When**: the developer runs `review-gauntlet review`
+**Then**: no new run record is created
+**And**: no adapter commands are invoked
+**And**: the command exits 0
+
+### Requirement: Resolve SHALL handle finding judgment and fix in a single step
+
+`review-gauntlet resolve` SHALL execute Phase 2: grouping all `open` findings by file path and invoking a resolution agent per file group. The resolution agent SHALL determine each finding as `confirmed` or `dismissed` and, for confirmed findings, apply the corresponding code fix. The agent SHALL output a verdict.json with `resolutions` declaring the final state of each finding.
+
+#### Scenario: Resolution agent confirms and fixes findings
+
+**Given**: an active session with 2 open findings for `src/app.py`
+**When**: `review-gauntlet resolve` invokes the resolution agent for `src/app.py`
+**And**: the agent outputs verdict.json with `verdict: finish` and `resolutions: [{finding_id: "RGF-0001", state: "confirmed"}, {finding_id: "RGF-0002", state: "dismissed", dismiss_reason: "not applicable"}]`
+**Then**: `RGF-0001` transitions to `confirmed`
+**And**: `RGF-0002` transitions to `dismissed` with `dismiss_reason: "not applicable"`
+
+#### Scenario: Resolution agent requires continuation
+
+**Given**: an open finding for `src/complex.py`
+**When**: the resolution agent outputs verdict.json with `verdict: continue` and `next_turn_instructions: "need to also update imports"`
+**Then**: the agent is re-invoked with the previous context and new instructions
+**And**: the finding remains `open` until a finish verdict is received
+
+#### Scenario: Resolution agent aborts
+
+**Given**: an open finding for `src/broken.py`
+**When**: the resolution agent outputs verdict.json with `verdict: abort` and `error: "cannot determine fix approach"`
+**Then**: the finding remains `open`
+**And**: the command reports the abort with the error message
+**And**: other file groups continue processing independently
+
+### Requirement: Resolve SHALL support parallel file-grouped execution in Phase 2
+
+`review-gauntlet resolve` SHALL execute resolution agents for different file paths concurrently. Findings on the same file path SHALL be handled by a single agent invocation to prevent file write conflicts. The `--parallel N` option SHALL control the maximum number of concurrent file-group agents.
+
+#### Scenario: Non-conflicting files resolved in parallel
+
+**Given**: open findings for `src/a.py` and `src/b.py`
+**When**: `review-gauntlet resolve --parallel 2` runs
+**Then**: resolution agents for `src/a.py` and `src/b.py` execute concurrently
+**And**: both files can be modified independently without conflict
+
+#### Scenario: Single-file findings handled sequentially
+
+**Given**: 3 open findings all on `src/app.py`
+**When**: `review-gauntlet resolve` runs
+**Then**: all 3 findings are handled by a single agent invocation
+**And**: the agent receives all 3 finding contexts in one prompt
+
+### Requirement: Session SHALL progress through two sequential phases
+
+A review session SHALL progress through two sequential phases: Phase 1 (review) where all pending cells are reviewed to produce findings, and Phase 2 (resolve) where all open findings are resolved. The session SHALL NOT interleave review and resolution. Finalization SHALL only be possible after both phases complete.
+
+#### Scenario: Phase 1 must complete before Phase 2 begins
+
+**Given**: an active session with pending cells and open findings
+**When**: the developer runs `review-gauntlet resolve`
+**Then**: the command reports that Phase 1 is incomplete
+**And**: no resolution agents are invoked
+
+#### Scenario: Session is finalizable after both phases
+
+**Given**: an active session with all cells `REVIEWED`
+**And**: all findings are `confirmed` or `dismissed`
+**And**: review-universe files are clean relative to HEAD
+**When**: the developer runs `review-gauntlet finalize --format json`
+**Then**: finalization succeeds
+**And**: checkpoint files are written
