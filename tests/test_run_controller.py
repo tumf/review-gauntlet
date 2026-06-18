@@ -1600,9 +1600,8 @@ def test_run_controller_includes_verdict_metadata_in_step_payload(tmp_path: Path
     assert step["verdict_metadata"] == metadata
 
 
-def test_run_controller_stops_no_progress_continue_verdict(tmp_path: Path) -> None:
-    store = _store(tmp_path)
-    prompt = """Use the review-gauntlet task execution skill.
+def _no_progress_prompt() -> str:
+    return """Use the review-gauntlet task execution skill.
 
 ## Findings for this file
 - finding_id: RGF-0001; state: untriaged; rule_id: docs
@@ -1611,6 +1610,9 @@ def test_run_controller_stops_no_progress_continue_verdict(tmp_path: Path) -> No
 Before ending this turn, write valid JSON to the following path:
 .review-gauntlet/turns/RGS-test/untriaged__aaaaaaaaaaaa.json
 """
+
+
+def _insert_no_progress_finding(store: SessionStore) -> None:
     with store.connect() as conn:
         conn.execute(
             """
@@ -1622,30 +1624,113 @@ Before ending this turn, write valid JSON to the following path:
             """
         )
 
+
+def _no_progress_verdict_result() -> SessionCommandResult:
+    return SessionCommandResult(
+        argv=["fake-agent"],
+        cwd=None,
+        returncode=0,
+        stdout="ok",
+        stderr="",
+        stdout_artifact=".review-gauntlet/runs/1/agent-stdout.log",
+        stderr_artifact=".review-gauntlet/runs/1/agent-stderr.log",
+        activity_artifact=".review-gauntlet/runs/1/activity.jsonl",
+        verdict_metadata={
+            "path": ".review-gauntlet/turns/RGS-test/untriaged__aaaaaaaaaaaa.json",
+            "task_key": "untriaged__aaaaaaaaaaaa.json",
+            "verdict": "continue",
+        },
+    )
+
+
+def test_run_controller_retries_no_progress_with_diagnostic(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    prompt = _no_progress_prompt()
+    _insert_no_progress_finding(store)
+    prompts: list[str] = []
+
     def command(
-        _config: CommandAdapterConfig, _root: Path, _state_dir: Path, _prompt: str
+        _config: CommandAdapterConfig, _root: Path, _state_dir: Path, prompt_arg: str
     ) -> SessionCommandResult:
-        return SessionCommandResult(
-            argv=["fake-agent"],
-            cwd=None,
-            returncode=0,
-            stdout="ok",
-            stderr="",
-            stdout_artifact=".review-gauntlet/runs/1/agent-stdout.log",
-            stderr_artifact=".review-gauntlet/runs/1/agent-stderr.log",
-            activity_artifact=".review-gauntlet/runs/1/activity.jsonl",
-            verdict_metadata={
-                "path": ".review-gauntlet/turns/RGS-test/untriaged__aaaaaaaaaaaa.json",
-                "task_key": "untriaged__aaaaaaaaaaaa.json",
-                "verdict": "continue",
-            },
-        )
+        prompts.append(prompt_arg)
+        if len(prompts) == 1:
+            return _no_progress_verdict_result()
+        with store.connect() as conn:
+            conn.execute(
+                """
+                update findings
+                set state = 'fixed'
+                where session_id = 'RGS-test' and finding_id = 'RGF-0001'
+                """
+            )
+        store.active_path.unlink()
+        return _no_progress_verdict_result()
 
     controller = RunController(
         root=tmp_path,
         store=store,
         config_path=None,
-        max_steps=1,
+        max_steps=2,
+        ready_prompt=lambda _store, _root: ReadyTask(
+            prompt=prompt, next_required_action="triage_findings"
+        ),
+        status_snapshot=_status,
+        command_runner=command,
+    )
+
+    result = controller.run()
+
+    assert result["completed"] is True
+    assert result["reason"] == "completed"
+    assert len(prompts) == 2
+    assert prompts[1].startswith(prompt)
+    assert "## Previous no-progress turn" in prompts[1]
+    assert (
+        "verdict_path: .review-gauntlet/turns/RGS-test/untriaged__aaaaaaaaaaaa.json" in prompts[1]
+    )
+    assert "task_key: untriaged__aaaaaaaaaaaa.json" in prompts[1]
+    assert "target_ids: RGF-0001" in prompts[1]
+    assert "previous_verdict: continue" in prompts[1]
+    assert "stdout_artifact=.review-gauntlet/runs/1/agent-stdout.log" in prompts[1]
+    assert "stderr_artifact=.review-gauntlet/runs/1/agent-stderr.log" in prompts[1]
+    assert "activity_artifact=.review-gauntlet/runs/1/activity.jsonl" in prompts[1]
+    retry_event = next(
+        event
+        for event in controller.events
+        if event.type == "retry_scheduled" and event.payload["reason"] == "no_progress"
+    )
+    assert retry_event.payload["target_ids"] == ["RGF-0001"]
+    first_step = cast(dict[str, object], cast(list[object], result["steps"])[0])
+    failure = cast(dict[str, object], first_step["failure"])
+    assert failure["reason"] == "no_progress"
+    assert failure["task_key"] == "untriaged__aaaaaaaaaaaa.json"
+    assert failure["target_ids"] == ["RGF-0001"]
+    assert failure["verdict_path"] == ".review-gauntlet/turns/RGS-test/untriaged__aaaaaaaaaaaa.json"
+    assert failure["verdict"] == "continue"
+    assert failure["artifact_context"] == {
+        "stdout_artifact": ".review-gauntlet/runs/1/agent-stdout.log",
+        "stderr_artifact": ".review-gauntlet/runs/1/agent-stderr.log",
+        "activity_artifact": ".review-gauntlet/runs/1/activity.jsonl",
+    }
+
+
+def test_run_controller_bounds_repeated_no_progress_retries(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    prompt = _no_progress_prompt()
+    _insert_no_progress_finding(store)
+    prompts: list[str] = []
+
+    def command(
+        _config: CommandAdapterConfig, _root: Path, _state_dir: Path, prompt_arg: str
+    ) -> SessionCommandResult:
+        prompts.append(prompt_arg)
+        return _no_progress_verdict_result()
+
+    controller = RunController(
+        root=tmp_path,
+        store=store,
+        config_path=None,
+        max_steps=2,
         ready_prompt=lambda _store, _root: ReadyTask(
             prompt=prompt, next_required_action="triage_findings"
         ),
@@ -1657,15 +1742,12 @@ Before ending this turn, write valid JSON to the following path:
 
     assert result["completed"] is False
     assert result["reason"] == "no_progress"
-    step = cast(dict[str, object], cast(list[object], result["steps"])[0])
-    failure = cast(dict[str, object], step["failure"])
-    assert failure["reason"] == "no_progress"
-    assert failure["task_key"] == "untriaged__aaaaaaaaaaaa.json"
-    assert failure["target_ids"] == ["RGF-0001"]
-    assert failure["verdict_path"] == ".review-gauntlet/turns/RGS-test/untriaged__aaaaaaaaaaaa.json"
-    assert failure["verdict"] == "continue"
-    assert failure["artifact_context"] == {
-        "stdout_artifact": ".review-gauntlet/runs/1/agent-stdout.log",
-        "stderr_artifact": ".review-gauntlet/runs/1/agent-stderr.log",
-        "activity_artifact": ".review-gauntlet/runs/1/activity.jsonl",
-    }
+    assert result["error"] == "step verdict reported progress but no targeted state changed"
+    assert len(prompts) == 2
+    assert "## Previous no-progress turn" in prompts[1]
+    steps = cast(list[object], result["steps"])
+    assert len(steps) == 2
+    final_step = cast(dict[str, object], steps[-1])
+    final_failure = cast(dict[str, object], final_step["failure"])
+    assert final_failure["reason"] == "no_progress"
+    assert final_failure["target_ids"] == ["RGF-0001"]
