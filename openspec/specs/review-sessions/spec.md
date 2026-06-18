@@ -371,7 +371,7 @@ The README Design section SHALL reflect the current implemented capabilities: in
 
 ### Requirement: Init SHALL default to latest checkpoint or all-files review
 
-`review-gauntlet init` without explicit target flags SHALL choose a deterministic default target. If a usable latest checkpoint exists, the default target SHALL be the diff from that checkpoint's `review_base_commit` to `HEAD`. If no latest checkpoint exists, the default target SHALL be the current working tree (all uncommitted changes: staged, unstaged, and untracked eligible files). The `--worktree` flag is accepted as an explicit request for working tree review; callers that need to review committed changes SHALL use `--commit` or `--from/--to`.
+`review-gauntlet init` without explicit target flags SHALL choose a deterministic default target. If a usable latest checkpoint exists, the default target SHALL include eligible files changed from that checkpoint's `review_base_commit` to `HEAD` and SHALL also include current eligible uncommitted worktree changes: staged, unstaged, and untracked non-ignored files. If no latest checkpoint exists, the default target SHALL be an all-files review over the current eligible review inventory. If a latest checkpoint exists but is invalid or unusable, initialization SHALL fail with the checkpoint validation error instead of falling back to all-files review. The `--worktree` flag remains an explicit request for worktree-only review; callers that need committed changes without uncommitted worktree changes SHALL use `--commit` or `--from/--to`.
 
 #### Scenario: Init creates an active session without starting a run
 
@@ -385,7 +385,7 @@ The README Design section SHALL reflect the current implemented capabilities: in
 
 #### Scenario: Init with no review cells does not suggest review
 
-**Given**: a repository target whose changed files are all excluded from review cells
+**Given**: a repository target whose selected files are all excluded from review cells
 **When**: the developer runs `review-gauntlet init --format json`
 **Then**: `.review-gauntlet/active-session.json` records the new active session ID
 **And**: stdout reports `cell_count: 0`, `run_count: 0`, and `run_state: none`
@@ -399,12 +399,32 @@ The README Design section SHALL reflect the current implemented capabilities: in
 **Then**: the session target is a WORKTREE kind reviewing uncommitted changes
 **And**: the command exits successfully
 
-#### Scenario: Init with no flags and no checkpoint defaults to worktree
+#### Scenario: Init with no flags and no checkpoint defaults to all-files review
 
 **Given**: a repository with no latest checkpoint
+**And**: the repository has eligible unchanged tracked files and eligible uncommitted files
 **When**: the developer runs `review-gauntlet init` without target flags
-**Then**: the session target is WORKTREE kind
-**And**: review cells cover uncommitted working tree changes
+**Then**: the session target is ALL kind
+**And**: review cells cover the eligible current review inventory, including unchanged tracked files and eligible uncommitted files
+
+#### Scenario: Init with latest checkpoint includes uncommitted worktree changes
+
+**Given**: a repository with a usable latest checkpoint whose `review_base_commit` is an ancestor of `HEAD`
+**And**: there are eligible files changed between the checkpoint base and `HEAD`
+**And**: there are eligible staged, unstaged, and untracked non-ignored worktree files
+**When**: the developer runs `review-gauntlet init` without target flags
+**Then**: the session target records the checkpoint base and `HEAD` as the committed review range
+**And**: the session target records that worktree changes are included
+**And**: review cells cover the union of eligible checkpoint-base-to-HEAD files and eligible staged, unstaged, and untracked worktree files
+
+#### Scenario: Explicit branch init excludes uncommitted worktree changes
+
+**Given**: a repository with a valid base reference and head reference
+**And**: there are eligible uncommitted worktree files outside that committed range
+**When**: the developer runs `review-gauntlet init --from <base> --to <head>`
+**Then**: the session target is BRANCH kind without worktree inclusion
+**And**: review cells cover eligible files changed between the base and head references
+**And**: review cells do not include the unrelated uncommitted worktree files
 
 ### Requirement: Ready command SHALL emit the next skill-directed prompt
 
