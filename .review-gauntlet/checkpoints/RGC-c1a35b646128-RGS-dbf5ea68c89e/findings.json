@@ -1,0 +1,174 @@
+{
+  "checkpoint_id": "RGC-c1a35b646128-RGS-dbf5ea68c89e",
+  "findings": [
+    {
+      "checkpoint_id": "RGC-c1a35b646128-RGS-dbf5ea68c89e",
+      "content": "cli-contract: `--limit` argument for `findings` command declares `default=None` in argparse (line 267) but help text says \"default: 10\". The effective default is applied via `args.limit or 10` in the caller (line 892), not at the argparse level. This creates an inconsistent CLI contract: `parser.get_default('limit')` returns `None`, not `10`, which misleads automated introspection and argparse-driven tooling.",
+      "finding_id": "RGF-1020",
+      "fingerprint": "ae58a3ae0097624bd257d451efcc57d6d27e902e84c2634c1f4bda0a74b6ac92",
+      "latest_occurrence": {
+        "cell_id": "RGC-98d51e4d6441e1d7",
+        "end_line": 270,
+        "finding_id": "RGF-1020",
+        "imprecise": 0,
+        "occurrence_id": 1020,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 306,
+        "start_line": 264
+      },
+      "metadata": "{\"fingerprint\":\"ae58a3ae0097624bd257d451efcc57d6d27e902e84c2634c1f4bda0a74b6ac92\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"cli-contract\",\"content\":\"cli-contract: `--limit` argument for `findings` command declares `default=None` in argparse (line 267) but help text says \\\"default: 10\\\". The effective default is applied via `args.limit or 10` in the caller (line 892), not at the argparse level. This creates an inconsistent CLI contract: `parser.get_default('limit')` returns `None`, not `10`, which misleads automated introspection and argparse-driven tooling.\",\"suggestion_code\":\"\",\"existing_code\":\"\",\"start_line\":264,\"end_line\":270,\"thinking\":null,\"imprecise\":false,\"dismiss_reason\":null}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "cli-contract",
+      "session_id": "RGS-dbf5ea68c89e",
+      "state": "dismissed"
+    },
+    {
+      "checkpoint_id": "RGC-c1a35b646128-RGS-dbf5ea68c89e",
+      "content": "cli-contract: `_cmd_validate_turn_verdict` (line 737) does not check whether `args.path` exists before calling `validate_continuation_verdict(path)`. In contrast, `_cmd_validate_verdict` (line 705-706) explicitly checks `if not path.is_file(): fail(...)` to provide a deterministic usage error. The inconsistency means a missing file produces a different error type and exit path depending on which validate command is used, breaking the uniform CLI contract.",
+      "finding_id": "RGF-1021",
+      "fingerprint": "1716338588d3478e83be6aa8c9d67a5467ea6b0b3ac0465980321a14534eac04",
+      "latest_occurrence": {
+        "cell_id": "RGC-98d51e4d6441e1d7",
+        "end_line": 746,
+        "finding_id": "RGF-1021",
+        "imprecise": 0,
+        "occurrence_id": 1021,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 306,
+        "start_line": 736
+      },
+      "metadata": "{\"fingerprint\":\"1716338588d3478e83be6aa8c9d67a5467ea6b0b3ac0465980321a14534eac04\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"cli-contract\",\"content\":\"cli-contract: `_cmd_validate_turn_verdict` (line 737) does not check whether `args.path` exists before calling `validate_continuation_verdict(path)`. In contrast, `_cmd_validate_verdict` (line 705-706) explicitly checks `if not path.is_file(): fail(...)` to provide a deterministic usage error. The inconsistency means a missing file produces a different error type and exit path depending on which validate command is used, breaking the uniform CLI contract.\",\"suggestion_code\":\"\",\"existing_code\":\"\",\"start_line\":736,\"end_line\":746,\"thinking\":null,\"imprecise\":false,\"dismiss_reason\":null}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "cli-contract",
+      "session_id": "RGS-dbf5ea68c89e",
+      "state": "dismissed"
+    },
+    {
+      "checkpoint_id": "RGC-c1a35b646128-RGS-dbf5ea68c89e",
+      "content": "cli-contract: `_build_file_scoped_ready_prompt` performs a bare dict lookup `_READY_REASON_LABELS[reason]` (line 1581) with no fallback. If `_ACTIONABLE_FINDING_STATES` is ever extended with a new `FindingState` whose `.value` is not present in `_READY_REASON_LABELS`, the runtime raises an unhandled `KeyError` rather than a structured error. This breaks the agent-friendly contract by producing an uncaught exception instead of a predictable failure.",
+      "finding_id": "RGF-1022",
+      "fingerprint": "210069653d86cb3cd97a0a4278ce1d472dab1091570b3de66f37708cc3fafec2",
+      "latest_occurrence": {
+        "cell_id": "RGC-98d51e4d6441e1d7",
+        "end_line": 1581,
+        "finding_id": "RGF-1022",
+        "imprecise": 0,
+        "occurrence_id": 1022,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 306,
+        "start_line": 1581
+      },
+      "metadata": "{\"fingerprint\":\"210069653d86cb3cd97a0a4278ce1d472dab1091570b3de66f37708cc3fafec2\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"cli-contract\",\"content\":\"cli-contract: `_build_file_scoped_ready_prompt` performs a bare dict lookup `_READY_REASON_LABELS[reason]` (line 1581) with no fallback. If `_ACTIONABLE_FINDING_STATES` is ever extended with a new `FindingState` whose `.value` is not present in `_READY_REASON_LABELS`, the runtime raises an unhandled `KeyError` rather than a structured error. This breaks the agent-friendly contract by producing an uncaught exception instead of a predictable failure.\",\"suggestion_code\":\"\",\"existing_code\":\"\",\"start_line\":1581,\"end_line\":1581,\"thinking\":null,\"imprecise\":false,\"dismiss_reason\":null}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "cli-contract",
+      "session_id": "RGS-dbf5ea68c89e",
+      "state": "dismissed"
+    },
+    {
+      "checkpoint_id": "RGC-c1a35b646128-RGS-dbf5ea68c89e",
+      "content": "data-validation: `_continuation_path_from_prompt` (lines 2222-2232) extracts a filesystem path from raw prompt text by string pattern match, then the caller uses it for `continuation_path.parent.mkdir(parents=True, exist_ok=True)` and `continuation_path.unlink(missing_ok=True)` (lines 2002-2003) without validating that the resolved path stays within the state directory. A malformed or injected prompt string could cause directory creation or file deletion outside the expected tree.",
+      "finding_id": "RGF-1023",
+      "fingerprint": "a3b56bf41e32112469d9de0f0b2200bfe89398d1217eb8c829bb6678bbfdd1ff",
+      "latest_occurrence": {
+        "cell_id": "RGC-6cefdd41be393570",
+        "end_line": 2232,
+        "finding_id": "RGF-1023",
+        "imprecise": 0,
+        "occurrence_id": 1023,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 306,
+        "start_line": 2222
+      },
+      "metadata": "{\"fingerprint\":\"a3b56bf41e32112469d9de0f0b2200bfe89398d1217eb8c829bb6678bbfdd1ff\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"data-validation\",\"content\":\"data-validation: `_continuation_path_from_prompt` (lines 2222-2232) extracts a filesystem path from raw prompt text by string pattern match, then the caller uses it for `continuation_path.parent.mkdir(parents=True, exist_ok=True)` and `continuation_path.unlink(missing_ok=True)` (lines 2002-2003) without validating that the resolved path stays within the state directory. A malformed or injected prompt string could cause directory creation or file deletion outside the expected tree.\",\"suggestion_code\":\"\",\"existing_code\":\"\",\"start_line\":2222,\"end_line\":2232,\"thinking\":null,\"imprecise\":false,\"dismiss_reason\":null}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-dbf5ea68c89e",
+      "state": "dismissed"
+    },
+    {
+      "checkpoint_id": "RGC-c1a35b646128-RGS-dbf5ea68c89e",
+      "content": "data-validation: In `_finalize_reasons` (line 2667), `target_digest(root)` is called without any error handling. If `target_digest` raises an `OSError` or similar I/O exception (e.g., due to a disappeared repository root), it propagates as an uncaught exception rather than being appended to the `reasons` list as a structured blocker. The surrounding git-status calls (lines 2648-2652, 2656-2658) do have `except OSError` handlers; `target_digest` is treated inconsistently.",
+      "finding_id": "RGF-1024",
+      "fingerprint": "a7368762583056d3b75a35b411aebc393550126cc3944165009ff3f85c385806",
+      "latest_occurrence": {
+        "cell_id": "RGC-6cefdd41be393570",
+        "end_line": 2668,
+        "finding_id": "RGF-1024",
+        "imprecise": 0,
+        "occurrence_id": 1024,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 306,
+        "start_line": 2664
+      },
+      "metadata": "{\"fingerprint\":\"a7368762583056d3b75a35b411aebc393550126cc3944165009ff3f85c385806\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"data-validation\",\"content\":\"data-validation: In `_finalize_reasons` (line 2667), `target_digest(root)` is called without any error handling. If `target_digest` raises an `OSError` or similar I/O exception (e.g., due to a disappeared repository root), it propagates as an uncaught exception rather than being appended to the `reasons` list as a structured blocker. The surrounding git-status calls (lines 2648-2652, 2656-2658) do have `except OSError` handlers; `target_digest` is treated inconsistently.\",\"suggestion_code\":\"\",\"existing_code\":\"\",\"start_line\":2664,\"end_line\":2668,\"thinking\":null,\"imprecise\":false,\"dismiss_reason\":null}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-dbf5ea68c89e",
+      "state": "dismissed"
+    },
+    {
+      "checkpoint_id": "RGC-c1a35b646128-RGS-dbf5ea68c89e",
+      "content": "test-evidence: `review_cells_concurrently` (lines 1297-1306) contains a `KeyboardInterrupt` branch that calls `cancel_adapter`, cancels pending futures, and re-raises. The interleaved cancel+join-with-timeout+re-raise sequence has multiple timing-sensitive behaviors (e.g., `progress.cell_cancelled` for unfinished futures only, `executor.shutdown(cancel_futures=True)`) that are likely not covered by automated tests, leaving this path untested against regressions.",
+      "finding_id": "RGF-1025",
+      "fingerprint": "c873bac0fd4bb8b78a3c8db3fab831c5ba85944b8cb3c49d3c56333164285542",
+      "latest_occurrence": {
+        "cell_id": "RGC-7d47131d23a5f0ce",
+        "end_line": 1307,
+        "finding_id": "RGF-1025",
+        "imprecise": 0,
+        "occurrence_id": 1025,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 306,
+        "start_line": 1297
+      },
+      "metadata": "{\"fingerprint\":\"c873bac0fd4bb8b78a3c8db3fab831c5ba85944b8cb3c49d3c56333164285542\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"test-evidence\",\"content\":\"test-evidence: `review_cells_concurrently` (lines 1297-1306) contains a `KeyboardInterrupt` branch that calls `cancel_adapter`, cancels pending futures, and re-raises. The interleaved cancel+join-with-timeout+re-raise sequence has multiple timing-sensitive behaviors (e.g., `progress.cell_cancelled` for unfinished futures only, `executor.shutdown(cancel_futures=True)`) that are likely not covered by automated tests, leaving this path untested against regressions.\",\"suggestion_code\":\"\",\"existing_code\":\"\",\"start_line\":1297,\"end_line\":1307,\"thinking\":null,\"imprecise\":false,\"dismiss_reason\":null}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-dbf5ea68c89e",
+      "state": "dismissed"
+    },
+    {
+      "checkpoint_id": "RGC-c1a35b646128-RGS-dbf5ea68c89e",
+      "content": "test-evidence: `_expand_session_template` (lines 2321-2335) uses a null-byte sentinel (`\\x00REVIEW_GAUNTLET_LITERAL_BRACE\\x00`) to protect literal `{{`/`}}` before template expansion. Edge cases \u2014 strings where template variables themselves contain null bytes, inputs with adjacent `{{{{` sequences, or values that happen to contain the sentinel substring \u2014 could produce incorrect output silently. Test evidence for these boundary inputs is needed.",
+      "finding_id": "RGF-1026",
+      "fingerprint": "ef08b930954e8c6c81f3a91b674fd277706e53bd887b747c4f2d1ac32bad561e",
+      "latest_occurrence": {
+        "cell_id": "RGC-7d47131d23a5f0ce",
+        "end_line": 2335,
+        "finding_id": "RGF-1026",
+        "imprecise": 0,
+        "occurrence_id": 1026,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 306,
+        "start_line": 2321
+      },
+      "metadata": "{\"fingerprint\":\"ef08b930954e8c6c81f3a91b674fd277706e53bd887b747c4f2d1ac32bad561e\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"test-evidence\",\"content\":\"test-evidence: `_expand_session_template` (lines 2321-2335) uses a null-byte sentinel (`\\\\x00REVIEW_GAUNTLET_LITERAL_BRACE\\\\x00`) to protect literal `{{`/`}}` before template expansion. Edge cases \u2014 strings where template variables themselves contain null bytes, inputs with adjacent `{{{{` sequences, or values that happen to contain the sentinel substring \u2014 could produce incorrect output silently. Test evidence for these boundary inputs is needed.\",\"suggestion_code\":\"\",\"existing_code\":\"\",\"start_line\":2321,\"end_line\":2335,\"thinking\":null,\"imprecise\":false,\"dismiss_reason\":null}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-dbf5ea68c89e",
+      "state": "dismissed"
+    },
+    {
+      "checkpoint_id": "RGC-c1a35b646128-RGS-dbf5ea68c89e",
+      "content": "test-evidence: `_continuation_path_from_prompt` (lines 2222-2232) relies on exact line-by-line string matching to extract the continuation file path from a multi-line prompt. Cases such as a prompt where the sentinel line appears more than once, or where the following line is empty/whitespace, are handled only by the `if not raw_path: return None` guard. Test evidence for these edge cases and for prompts generated with unusual whitespace should exist to prevent silent extraction failures.",
+      "finding_id": "RGF-1027",
+      "fingerprint": "ead05e4bedb21864d6b956cb66450c76dd97adb85d1573bef1e9e86d35e9c05e",
+      "latest_occurrence": {
+        "cell_id": "RGC-7d47131d23a5f0ce",
+        "end_line": 2232,
+        "finding_id": "RGF-1027",
+        "imprecise": 0,
+        "occurrence_id": 1027,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 306,
+        "start_line": 2222
+      },
+      "metadata": "{\"fingerprint\":\"ead05e4bedb21864d6b956cb66450c76dd97adb85d1573bef1e9e86d35e9c05e\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"test-evidence\",\"content\":\"test-evidence: `_continuation_path_from_prompt` (lines 2222-2232) relies on exact line-by-line string matching to extract the continuation file path from a multi-line prompt. Cases such as a prompt where the sentinel line appears more than once, or where the following line is empty/whitespace, are handled only by the `if not raw_path: return None` guard. Test evidence for these edge cases and for prompts generated with unusual whitespace should exist to prevent silent extraction failures.\",\"suggestion_code\":\"\",\"existing_code\":\"\",\"start_line\":2222,\"end_line\":2232,\"thinking\":null,\"imprecise\":false,\"dismiss_reason\":null}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-dbf5ea68c89e",
+      "state": "dismissed"
+    }
+  ],
+  "schema_version": 1
+}
