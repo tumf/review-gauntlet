@@ -1,3 +1,5 @@
+from typing import Any, cast
+
 from review_gauntlet.coverage_projection import (
     CoverageProjection,
     FileCoverageSummary,
@@ -5,20 +7,160 @@ from review_gauntlet.coverage_projection import (
     QueueEntry,
     RuleCoverageSummary,
 )
-from review_gauntlet.run_controller import RunSnapshot
+from review_gauntlet.run_controller import AgentLifecycle, RunController, RunSnapshot
 from review_gauntlet.run_tui import (
     FINDING_STATES,
     actionable_finding_summary,
     calculate_progress_metrics,
     compact_dashboard_text,
+    create_run_app,
     dashboard_state,
     derive_finalize_gates,
     finalized_summary_text,
     format_task_title_from_action,
+    header_agent_text,
     header_status_tui_lines,
     render_tui_lines,
     tui_render_sections,
 )
+
+
+class FakeRunController:
+    def __init__(self, snapshots: list[RunSnapshot] | None = None) -> None:
+        self._snapshots = snapshots or [_running_snapshot()]
+        self.snapshot_call_count = 0
+        self.events = ()
+        self.interrupt_requested = False
+        self.stop_requested = False
+        self.run_called = False
+
+    def snapshot(self) -> RunSnapshot:
+        self.snapshot_call_count += 1
+        index = min(self.snapshot_call_count - 1, len(self._snapshots) - 1)
+        return self._snapshots[index]
+
+    def run(self) -> dict[str, object]:
+        self.run_called = True
+        return {"status": "completed"}
+
+    def interrupt(self) -> None:
+        self.interrupt_requested = True
+
+    def request_stop_after_current_step(self) -> None:
+        self.stop_requested = True
+
+
+class FakeClock:
+    def __init__(self) -> None:
+        self.now = 0.0
+
+    def monotonic(self) -> float:
+        return self.now
+
+    def advance(self, seconds: float) -> None:
+        self.now += seconds
+
+
+def _running_snapshot(*, step: int = 1) -> RunSnapshot:
+    return RunSnapshot(
+        session_id="RGS-test",
+        coverage={"pending": 1},
+        findings={},
+        next_ready_prompt="review",
+        step=step,
+        agent_status="running",
+        command_argv=("fake-agent",),
+        elapsed_seconds=float(step),
+        agent_lifecycle=AgentLifecycle(status="running"),
+    )
+
+
+def _create_fake_run_app(
+    fake_controller: FakeRunController,
+    fake_clock: FakeClock,
+    *,
+    full_refresh_interval_seconds: float = 2.0,
+) -> Any:
+    return create_run_app(
+        cast(RunController, fake_controller),
+        full_refresh_interval_seconds=full_refresh_interval_seconds,
+        monotonic=fake_clock.monotonic,
+    )
+
+
+def test_automatic_background_refresh_reuses_snapshot_inside_throttle_window() -> None:
+    clock = FakeClock()
+    controller = FakeRunController([_running_snapshot(step=1), _running_snapshot(step=2)])
+    app = _create_fake_run_app(controller, clock)
+
+    app._background_refresh()
+    app._background_refresh()
+
+    assert controller.snapshot_call_count == 1
+    assert app._activity_frame == 2
+    assert app.snapshot.step == 1
+
+    clock.advance(2.0)
+    app._background_refresh()
+
+    assert controller.snapshot_call_count == 2
+    assert app.snapshot.step == 2
+
+
+def test_manual_refresh_bypasses_automatic_refresh_throttle() -> None:
+    clock = FakeClock()
+    controller = FakeRunController([_running_snapshot(step=1), _running_snapshot(step=2)])
+    app = _create_fake_run_app(controller, clock)
+
+    app._background_refresh()
+    app.action_refresh()
+
+    assert controller.snapshot_call_count == 2
+    assert app.snapshot.step == 2
+
+
+def test_controller_completion_forces_refresh_even_with_fresh_throttle() -> None:
+    clock = FakeClock()
+    controller = FakeRunController([_running_snapshot(step=1), _running_snapshot(step=2)])
+    app = _create_fake_run_app(controller, clock)
+
+    app._background_refresh()
+    app.refresh_view()
+
+    assert controller.snapshot_call_count == 2
+    assert app.snapshot.step == 2
+
+
+def test_liveness_display_moves_between_full_snapshots() -> None:
+    clock = FakeClock()
+    controller = FakeRunController([_running_snapshot(step=1), _running_snapshot(step=2)])
+    app = _create_fake_run_app(controller, clock)
+    first_text = header_agent_text(
+        dashboard_state(app.snapshot, (), activity_frame=app._activity_frame)
+    )
+
+    app._background_refresh()
+    second_text = header_agent_text(
+        dashboard_state(app.snapshot, (), activity_frame=app._activity_frame)
+    )
+
+    assert controller.snapshot_call_count == 1
+    assert app.snapshot.step == 1
+    assert first_text != second_text
+    assert "⠙ running" in second_text
+
+
+def test_automatic_refresh_frequency_is_bounded_independently_from_tick_count() -> None:
+    clock = FakeClock()
+    controller = FakeRunController([_running_snapshot(step=1), _running_snapshot(step=2)])
+    app = _create_fake_run_app(controller, clock, full_refresh_interval_seconds=10.0)
+
+    for _ in range(20):
+        clock.advance(0.25)
+        app._background_refresh()
+
+    assert controller.snapshot_call_count == 1
+    assert app._activity_frame == 20
 
 
 def test_progress_metrics_counts_pending_and_reviewed_only() -> None:
