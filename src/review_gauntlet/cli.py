@@ -874,6 +874,9 @@ def _cmd_review(args: argparse.Namespace, root: Path, store: SessionStore) -> No
         store=store, session_id=session_id, current_cells=current_cells
     )
     if not selected_cells:
+        last_digest = store.last_run_target_digest(session_id)
+        if last_digest != digest:
+            store.create_run(session_id, digest)
         status = _status(store, root)
         _emit(
             {"run_id": None, "reviewed_cells": 0, "finding_ids": [], **status},
