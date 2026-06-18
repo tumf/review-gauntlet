@@ -156,6 +156,55 @@ def test_run_controller_exposes_agent_output_progress_during_command(tmp_path: P
     assert controller.agent_output_progress is None
 
 
+def test_run_controller_exposes_active_resolve_targets_only_while_command_runs(
+    tmp_path: Path,
+) -> None:
+    store = _store(tmp_path)
+    prompt = """Use the review-gauntlet task execution skill.
+
+## Findings for this file
+- finding_id: RGF-0001; state: open; rule_id: docs
+- finding_id: RGF-0002; state: open; rule_id: docs
+"""
+    snapshots_during_command: list[tuple[str | None, tuple[str, ...]]] = []
+
+    def command(
+        _config: CommandAdapterConfig, _root: Path, _state_dir: Path, _prompt: str
+    ) -> SessionCommandResult:
+        snapshot = controller.snapshot()
+        snapshots_during_command.append(
+            (snapshot.active_step_action, snapshot.active_target_finding_ids)
+        )
+        return SessionCommandResult(
+            argv=["fake-agent"],
+            cwd=None,
+            returncode=2,
+            stdout="",
+            stderr="boom",
+            failure={"reason": "command_failed", "error": "boom"},
+        )
+
+    controller = RunController(
+        root=tmp_path,
+        store=store,
+        config_path=None,
+        max_steps=1,
+        ready_prompt=lambda _store, _root: ReadyTask(
+            prompt=prompt, next_required_action="resolve_findings"
+        ),
+        status_snapshot=_status,
+        command_runner=command,
+    )
+
+    result = controller.run()
+    post_step_snapshot = controller.snapshot()
+
+    assert result["completed"] is False
+    assert snapshots_during_command == [("resolve_findings", ("RGF-0001", "RGF-0002"))]
+    assert post_step_snapshot.active_step_action is None
+    assert post_step_snapshot.active_target_finding_ids == ()
+
+
 def test_run_controller_lifecycle_uses_live_output_progress(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -124,6 +124,8 @@ class RunSnapshot:
     agent_lifecycle: AgentLifecycle = AgentLifecycle()
     coverage_projection: CoverageProjection = empty_coverage_projection()
     checkpoint_commit: dict[str, object] | None = None
+    active_step_action: str | None = None
+    active_target_finding_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -211,6 +213,8 @@ class RunController:
         self._agent_step_started_at: datetime | None = None
         self._agent_timeout_seconds: float | None = None
         self._agent_output_progress: AgentOutputProgress | None = None
+        self._active_step_action: str | None = None
+        self._active_target_finding_ids: tuple[str, ...] = ()
         self._started_at = datetime.now(UTC)
         self._last_active_snapshot: RunSnapshot | None = None
         self._final_snapshot: RunSnapshot | None = None
@@ -285,6 +289,8 @@ class RunController:
                     next_required_action=None,
                     agent_lifecycle=self._current_agent_lifecycle(),
                     checkpoint_commit=self._final_checkpoint_commit,
+                    active_step_action=None,
+                    active_target_finding_ids=(),
                 )
         snapshot = RunSnapshot(
             session_id=session_id,
@@ -305,6 +311,8 @@ class RunController:
             agent_lifecycle=self._current_agent_lifecycle(),
             coverage_projection=_coverage_projection_or_empty(status.get("coverage_projection")),
             checkpoint_commit=self._final_checkpoint_commit,
+            active_step_action=self._active_step_action,
+            active_target_finding_ids=self._active_target_finding_ids,
         )
         if session_id is not None:
             self._last_active_snapshot = snapshot
@@ -411,6 +419,8 @@ class RunController:
             next_required_action = ready_task.next_required_action
             progress_target = _progress_target_from_prompt(prompt)
             pre_turn_state = _target_state_snapshot(self.store, session_id, progress_target)
+            self._active_step_action = next_required_action
+            self._active_target_finding_ids = progress_target.finding_ids
             self._emit(
                 "step_started",
                 step=step_number,
@@ -444,6 +454,8 @@ class RunController:
                 )
             except KeyboardInterrupt:
                 self._agent_output_progress = None
+                self._active_step_action = None
+                self._active_target_finding_ids = ()
                 self._agent_status = RUN_INTERRUPTED_REASON
                 self._agent_lifecycle = AgentLifecycle(
                     status=RUN_INTERRUPTED_REASON,
@@ -454,6 +466,8 @@ class RunController:
                 self._emit("interrupted", step=step_number, session_id=session_id)
                 return self._interrupted_result(steps)
             self._agent_output_progress = None
+            self._active_step_action = None
+            self._active_target_finding_ids = ()
             self._command_argv = tuple(command_result.argv)
             lifecycle_status = _lifecycle_status_from_result(command_result)
             self._agent_lifecycle = AgentLifecycle(
@@ -627,6 +641,8 @@ class RunController:
         self._agent_step_started_at = None
         self._agent_timeout_seconds = None
         self._agent_output_progress = None
+        self._active_step_action = None
+        self._active_target_finding_ids = ()
 
     def _emit(self, event_type: str, **payload: object) -> None:
         event = RunEvent.create(event_type, **payload)

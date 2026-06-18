@@ -1,5 +1,7 @@
 from typing import Any, cast
 
+import pytest
+
 from review_gauntlet.coverage_projection import (
     CoverageCellFilter,
     CoverageCellInput,
@@ -22,6 +24,8 @@ from review_gauntlet.run_tui import (
     dashboard_state,
     derive_finalize_gates,
     finalized_summary_text,
+    findings_panel_title,
+    findings_tui_lines,
     format_task_title_from_action,
     header_agent_text,
     header_status_tui_lines,
@@ -253,6 +257,166 @@ def test_cells_view_renders_resolved_over_total_findings() -> None:
 def test_task_title_mapping_uses_resolve_findings() -> None:
     task = format_task_title_from_action("resolve_findings", {}, {"open": 1})
     assert task.title == "RESOLVE FINDINGS"
+
+
+def _findings_projection() -> CoverageProjection:
+    return CoverageProjection(
+        queue=(),
+        rules=(),
+        files=(),
+        findings=(
+            FindingSummaryEntry(
+                finding_id="RGF-0001",
+                file_path="src/app.py",
+                rule_id="security",
+                state="open",
+                content="bug",
+                latest_cell_id="RGC-1",
+                actionable=True,
+            ),
+            FindingSummaryEntry(
+                finding_id="RGF-0002",
+                file_path="src/other.py",
+                rule_id="correctness",
+                state="open",
+                content="second bug",
+                latest_cell_id="RGC-2",
+                actionable=True,
+            ),
+            FindingSummaryEntry(
+                finding_id="RGF-0003",
+                file_path="src/ignored.py",
+                rule_id="correctness",
+                state="dismissed",
+                content="not a bug",
+                latest_cell_id="RGC-3",
+                actionable=False,
+            ),
+        ),
+    )
+
+
+def testfindings_panel_title_uses_projection_resolved_counts() -> None:
+    snapshot = RunSnapshot(
+        session_id="RGS-test",
+        coverage={"reviewed": 1},
+        findings={"open": 1, "dismissed": 1},
+        next_ready_prompt="resolve",
+        step=0,
+        agent_status="idle",
+        command_argv=(),
+        elapsed_seconds=0,
+        coverage_projection=_findings_projection(),
+    )
+
+    view = dashboard_state(snapshot, (), active_view="findings")
+
+    assert findings_panel_title(view) == "Findings 1/3"
+
+
+def testfindings_panel_title_falls_back_to_finding_state_counts() -> None:
+    snapshot = RunSnapshot(
+        session_id="RGS-test",
+        coverage={"reviewed": 1},
+        findings={"open": 2, "dismissed": 3},
+        next_ready_prompt="resolve",
+        step=0,
+        agent_status="idle",
+        command_argv=(),
+        elapsed_seconds=0,
+    )
+
+    view = dashboard_state(snapshot, (), active_view="overview")
+
+    assert findings_panel_title(view) == "Findings 3/5"
+
+
+@pytest.mark.parametrize(
+    ("frame", "title"),
+    [(0, "Finding"), (1, "Finding."), (2, "Finding.."), (3, "Finding...")],
+)
+def testfindings_panel_title_animates_during_review(frame: int, title: str) -> None:
+    snapshot = RunSnapshot(
+        session_id="RGS-test",
+        coverage={"pending": 1},
+        findings={"open": 1},
+        next_ready_prompt="review",
+        step=1,
+        agent_status="running",
+        command_argv=("fake-agent",),
+        elapsed_seconds=1,
+        active_step_action="run_review",
+        coverage_projection=_findings_projection(),
+    )
+
+    view = dashboard_state(snapshot, (), activity_frame=frame, active_view="findings")
+
+    assert findings_panel_title(view) == title
+
+
+def test_resolve_findings_title_preserves_counts() -> None:
+    snapshot = RunSnapshot(
+        session_id="RGS-test",
+        coverage={"reviewed": 1},
+        findings={"open": 1, "dismissed": 1},
+        next_ready_prompt="resolve",
+        step=1,
+        agent_status="running",
+        command_argv=("fake-agent",),
+        elapsed_seconds=1,
+        active_step_action="resolve_findings",
+        active_target_finding_ids=("RGF-0001",),
+        coverage_projection=_findings_projection(),
+    )
+
+    view = dashboard_state(snapshot, (), activity_frame=2, active_view="findings")
+
+    assert findings_panel_title(view) == "Findings 1/3"
+
+
+def test_resolve_findings_rows_show_only_targeted_spinner_and_aligned_blank() -> None:
+    snapshot = RunSnapshot(
+        session_id="RGS-test",
+        coverage={"reviewed": 1},
+        findings={"open": 1, "dismissed": 1},
+        next_ready_prompt="resolve",
+        step=1,
+        agent_status="running",
+        command_argv=("fake-agent",),
+        elapsed_seconds=1,
+        active_step_action="resolve_findings",
+        active_target_finding_ids=("RGF-0001",),
+        coverage_projection=_findings_projection(),
+    )
+
+    view = dashboard_state(snapshot, (), activity_frame=1, active_view="findings")
+    rendered = render_tui_lines(findings_tui_lines(view, limit=2)).splitlines()
+
+    assert rendered[0].startswith("⠙ RGF-0001")
+    assert rendered[1].startswith("  RGF-0002")
+    assert rendered[0].index("RGF-0001") == rendered[1].index("RGF-0002")
+
+
+def test_resolve_findings_rows_clear_indicators_without_active_targets() -> None:
+    snapshot = RunSnapshot(
+        session_id="RGS-test",
+        coverage={"reviewed": 1},
+        findings={"open": 1, "dismissed": 1},
+        next_ready_prompt="resolve",
+        step=1,
+        agent_status="running",
+        command_argv=("fake-agent",),
+        elapsed_seconds=1,
+        active_step_action=None,
+        active_target_finding_ids=(),
+        coverage_projection=_findings_projection(),
+    )
+
+    view = dashboard_state(snapshot, (), activity_frame=1, active_view="findings")
+    rendered = render_tui_lines(findings_tui_lines(view, limit=2)).splitlines()
+
+    assert rendered[0].startswith("RGF-0001")
+    assert rendered[1].startswith("RGF-0002")
 
 
 def test_finalize_gates_show_review_and_resolve_phases() -> None:
@@ -500,6 +664,24 @@ def test_finalized_sections_hide_operational_panels_and_running_keeps_them() -> 
     assert running_sections["files"]
     assert running_sections["findings"]
     assert running_sections["activity"]
+
+
+def testfindings_panel_title_preserves_agent_and_empty_detail_views() -> None:
+    snapshot = RunSnapshot(
+        session_id="RGS-test",
+        coverage={"reviewed": 1},
+        findings={"open": 1},
+        next_ready_prompt="resolve",
+        step=0,
+        agent_status="idle",
+        command_argv=(),
+        elapsed_seconds=0,
+        coverage_projection=_findings_projection(),
+    )
+
+    assert findings_panel_title(dashboard_state(snapshot, (), active_view="agent")) == "Agent"
+    for active_view in ("files", "rules", "cells"):
+        assert findings_panel_title(dashboard_state(snapshot, (), active_view=active_view)) == ""
 
 
 def test_finalized_header_keeps_nonzero_progress_in_compact_render() -> None:
