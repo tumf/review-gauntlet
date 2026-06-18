@@ -168,9 +168,41 @@ class ReviewProgressReporter:
     def cell_cancelled(self, cell: ReviewCell) -> None:
         self._emit(f"review cell cancelled: cell_id={cell.id}")
 
+    def run_interrupted(self, *, run_id: int, reviewed_cells: int, pending_cells: int) -> None:
+        self._emit(
+            "review interrupted: "
+            f"run_id={run_id} reviewed_cells={reviewed_cells} pending_cells={pending_cells}"
+        )
+
     def _emit(self, message: str) -> None:
         if self.enabled:
             print(message, file=sys.stderr, flush=True)
+
+
+@dataclass(frozen=True)
+class InterruptedReviewOutcome:
+    run_id: int
+    reviewed_cells: int
+    finding_ids: tuple[str, ...]
+    pending_cell_ids: tuple[str, ...]
+    status: dict[str, object]
+
+    def to_output(self) -> dict[str, object]:
+        return {
+            "run_id": self.run_id,
+            "reviewed_cells": self.reviewed_cells,
+            "finding_ids": list(self.finding_ids),
+            "interrupted": True,
+            "pending_cells": len(self.pending_cell_ids),
+            "pending_cell_ids": list(self.pending_cell_ids),
+            **self.status,
+        }
+
+
+class ReviewInterrupted(RuntimeError):
+    def __init__(self, outcome: InterruptedReviewOutcome) -> None:
+        super().__init__("review interrupted")
+        self.outcome = outcome
 
 
 def fail(message: str, code: int = USAGE_ERROR) -> NoReturn:
@@ -873,7 +905,11 @@ def _run_session_command(args: argparse.Namespace, root: Path) -> None:
     if args.command == "init":
         _cmd_init(args, root, store)
     elif args.command == "review":
-        _cmd_review(args, root, store)
+        try:
+            _cmd_review(args, root, store)
+        except ReviewInterrupted as exc:
+            _emit(exc.outcome.to_output(), args.format)
+            raise SystemExit(130) from None
     elif args.command == "resolve":
         _cmd_resolve(args, root, store)
     elif args.command == "status":
@@ -1068,19 +1104,22 @@ def _cmd_review(args: argparse.Namespace, root: Path, store: SessionStore) -> No
             reporter=reporter,
             on_result=persist_outcome,
         )
-    except KeyboardInterrupt:
-        status = _status(store, root)
-        _emit(
-            {
-                "run_id": run_id,
-                "reviewed_cells": reviewed,
-                "finding_ids": finding_ids,
-                "interrupted": True,
-                **status,
-            },
-            args.format,
+    except KeyboardInterrupt as exc:
+        pending_cell_ids = _pending_review_cell_ids(store, session_id)
+        reporter.run_interrupted(
+            run_id=run_id,
+            reviewed_cells=reviewed,
+            pending_cells=len(pending_cell_ids),
         )
-        raise
+        raise ReviewInterrupted(
+            InterruptedReviewOutcome(
+                run_id=run_id,
+                reviewed_cells=reviewed,
+                finding_ids=tuple(finding_ids),
+                pending_cell_ids=pending_cell_ids,
+                status=_status(store, root),
+            )
+        ) from exc
     status = _status(store, root)
     if first_failure is not None:
         failed_cell, error = first_failure
@@ -1291,6 +1330,16 @@ def _select_review_cells(
             if persisted_states.get(cell.id, CellState.PENDING.value) == CellState.PENDING.value
         ),
         key=lambda cell: (cell.file_path, cell.rule_id, cell.id),
+    )
+
+
+def _pending_review_cell_ids(store: SessionStore, session_id: str) -> tuple[str, ...]:
+    return tuple(
+        sorted(
+            str(row["cell_id"])
+            for row in store.list_cells(session_id)
+            if str(row["state"]) == CellState.PENDING.value
+        )
     )
 
 

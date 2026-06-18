@@ -135,13 +135,17 @@ def test_interrupted_review_persists_successful_cells_and_resume_skips_them(
 
     monkeypatch.setattr(cli, "review_cells_concurrently", interrupted_review_cells)
 
-    with pytest.raises(KeyboardInterrupt):
+    with pytest.raises(SystemExit) as exc:
         main(["review", str(tmp_path), "--fixture", str(fixture), "--format", "json"])
 
-    interrupted_output = json.loads(capsys.readouterr().out)
+    captured = capsys.readouterr()
+    assert exc.value.code == 130
+    assert "Traceback" not in captured.err
+    interrupted_output = json.loads(captured.out)
     reviewed_cell_id = interrupted_cell_ids[0]
     store = SessionStore(tmp_path)
     session_id = store.active_session_id()
+    assert session_id == interrupted_output["session_id"]
     rows_by_id = {str(row["cell_id"]): row for row in store.list_cells(session_id)}
     assert interrupted_output["reviewed_cells"] == 1
     assert interrupted_output["interrupted"] is True

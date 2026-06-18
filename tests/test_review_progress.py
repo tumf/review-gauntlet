@@ -1,14 +1,19 @@
 import json
 import sys
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 import review_gauntlet.cli as cli
-from review_gauntlet.cli import ReviewProgressReporter, main, review_cells_concurrently
-from review_gauntlet.review_adapter import ReviewAdapterResult
+from review_gauntlet.cli import (
+    InterruptedReviewOutcome,
+    ReviewProgressReporter,
+    main,
+    review_cells_concurrently,
+)
+from review_gauntlet.review_adapter import ReviewAdapter, ReviewAdapterError, ReviewAdapterResult
 from review_gauntlet.review_cells import ReviewCell
 from review_gauntlet.session_store import SessionStore
 
@@ -27,6 +32,34 @@ def _test_cell(cell_id: str) -> ReviewCell:
         slice_id="docs",
         content_digest="digest",
     )
+
+
+def test_interrupted_review_outcome_exposes_summary_fields() -> None:
+    outcome = InterruptedReviewOutcome(
+        run_id=7,
+        reviewed_cells=2,
+        finding_ids=("RGF-0001",),
+        pending_cell_ids=("RGC-pending",),
+        status={
+            "session_id": "RGS-test",
+            "session_state": "active",
+            "coverage": {"reviewed": 2, "pending": 1},
+            "next_required_action": "run_review",
+        },
+    )
+
+    assert outcome.to_output() == {
+        "run_id": 7,
+        "reviewed_cells": 2,
+        "finding_ids": ["RGF-0001"],
+        "interrupted": True,
+        "pending_cells": 1,
+        "pending_cell_ids": ["RGC-pending"],
+        "session_id": "RGS-test",
+        "session_state": "active",
+        "coverage": {"reviewed": 2, "pending": 1},
+        "next_required_action": "run_review",
+    }
 
 
 class InterruptingAdapter:
@@ -178,6 +211,58 @@ def test_review_json_stdout_is_clean_when_progress_enabled(
     assert "review progress:" not in captured.out
     assert json.loads(captured.out)["reviewed_cells"] == 1
     assert "review progress:" in captured.err
+
+
+ReviewCallback = Callable[[ReviewCell, ReviewAdapterResult | ReviewAdapterError], None]
+
+
+def test_review_interrupt_exits_130_with_json_without_traceback(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _init_review_repo(tmp_path, capsys)
+    fixture = tmp_path / ".review-gauntlet" / "fixtures" / "fixture.json"
+    fixture.parent.mkdir(parents=True, exist_ok=True)
+    fixture.write_text("{}", encoding="utf-8")
+
+    def interrupted_review_cells(
+        adapter: ReviewAdapter,
+        cells: list[ReviewCell],
+        *,
+        concurrency: int,
+        reporter: ReviewProgressReporter | None = None,
+        on_result: ReviewCallback | None = None,
+    ) -> dict[str, ReviewAdapterResult | ReviewAdapterError]:
+        del adapter, cells, concurrency, reporter, on_result
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(cli, "review_cells_concurrently", interrupted_review_cells)
+
+    with pytest.raises(SystemExit) as exc:
+        main(
+            [
+                "review",
+                str(tmp_path),
+                "--fixture",
+                str(fixture),
+                "--budget",
+                "1",
+                "--format",
+                "json",
+            ]
+        )
+
+    captured = capsys.readouterr()
+    data = json.loads(captured.out)
+    assert exc.value.code == 130
+    assert data["interrupted"] is True
+    assert isinstance(data["run_id"], int)
+    assert data["reviewed_cells"] == 0
+    assert data["session_state"] == "active"
+    assert data["next_required_action"] == "run_review"
+    assert "Traceback" not in captured.err
+    assert "review interrupted:" in captured.err
 
 
 def test_review_agent_audience_suppresses_progress(
