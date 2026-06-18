@@ -1,8 +1,6 @@
 ---
 change_type: implementation
 priority: high
-dependencies:
-  - preserve-interrupted-review-results
 references:
   - src/review_gauntlet/cli.py
   - src/review_gauntlet/review_adapter.py
