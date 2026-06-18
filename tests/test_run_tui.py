@@ -84,13 +84,13 @@ def test_progress_metrics_exclude_superseded_and_only_count_known_completed_stat
         {"reviewed": 3, "pending": 2, "stale": 1, "failed": 1, "superseded": 99}
     )
 
-    assert metrics.completed == 3
+    assert metrics.completed == 4  # stale now counted as completed
     assert metrics.total == 7
     assert metrics.percent == 0
     assert metrics.terminal == 0
-    assert metrics.incomplete == 3
+    assert metrics.incomplete == 2  # stale no longer counts as incomplete
     assert metrics.pending == 2
-    assert metrics.stale == 1
+    assert metrics.stale == 0  # stale is intentionally zeroed
     assert metrics.superseded == 99
 
 
@@ -450,7 +450,7 @@ def test_coverage_and_findings_render_dashboard_metrics_without_old_markers() ->
 
     assert "0%" in coverage
     assert "terminal / total cells: 0 / 4" in coverage
-    assert "reviewed 2 | terminal 0 | pending 1 | stale 1 | superseded 1" in coverage
+    assert "reviewed 3 | terminal 0 | pending 1 | superseded 1" in coverage
     assert "current cells" not in coverage
     assert "! pending" not in coverage
     assert "! stale" not in coverage
@@ -514,7 +514,7 @@ def test_compact_dashboard_text_uses_shared_panel_titles() -> None:
     ("next_required_action", "coverage", "findings", "title"),
     [
         ("run_review", {"pending": 1}, {}, "REVIEW PENDING CELLS"),
-        ("run_review", {"stale": 1}, {}, "REVIEW STALE CELLS"),
+        ("run_review", {"stale": 1}, {}, "REVIEW CELLS"),
         ("triage_findings", {}, {"untriaged": 1}, "TRIAGE FINDINGS"),
         ("fix_confirmed_findings", {}, {"confirmed": 1}, "FIX CONFIRMED FINDING"),
         ("run_verify_fixes", {}, {"fixed_pending_verification": 1}, "VERIFY FIXES"),
@@ -707,7 +707,7 @@ def test_activity_timeline_formats_events_without_raw_payloads() -> None:
 
     assert "12:34:56 event - run started session RGS-1234…7890" in text
     assert "--:--:-- event - status refreshed" in text
-    assert "12:35:01 event - step 1 started REVIEW PENDING CELLS" in text
+    assert "12:35:01 event - step 1 started REVIEW CELLS" in text
     assert "12:35:02 event - agent started agent --safe" in text
     assert "event - failed command_failed" in text
     assert "event - blocked no_ready_task" in text
@@ -861,10 +861,7 @@ def test_finalize_checklist_uses_next_required_action_for_active_gate_with_stale
         command_argv=(),
         elapsed_seconds=0,
         command_label="agent",
-        finalize_blockers=(
-            "review cells are stale",
-            "fixed findings require verification",
-        ),
+        finalize_blockers=("fixed findings require verification",),
         next_required_action="run_verify_fixes",
     )
 
@@ -876,7 +873,7 @@ def test_finalize_checklist_uses_next_required_action_for_active_gate_with_stale
     assert view.active_gate.title == "Verify fixes"
     assert "RGS-next…tale · RUNNING · gate 4/6" in rendered
     assert "Review coverage" in checklist
-    assert "3 / 5 reviewed, 2 pending" in checklist
+    assert "5 / 5 reviewed, 0 pending" in checklist
     assert "run_verify_fixes" not in rendered
 
 

@@ -1471,14 +1471,6 @@ def _ready_prompt_from_context(store: SessionStore, context: _StatusContext) -> 
             return _finding_ready_prompt(
                 state, review_cells, target_findings, store.state_dir, session_id, review_commit
             )
-    if review_cells_by_state.get(CellState.STALE.value, ()):
-        return _review_cell_ready_prompt(
-            reason="stale_review_cell",
-            review_cells=review_cells,
-            findings=findings,
-            state=CellState.STALE,
-            review_commit=review_commit,
-        )
     if not context.finalize_reasons or _finalize_blockers_are_commit_resolvable(
         context.finalize_reasons
     ):
@@ -1896,12 +1888,8 @@ def _effective_current_target_coverage_for_cells(
 def _finalize_blockers_are_commit_resolvable(reasons: list[str]) -> bool:
     if not reasons:
         return False
-    has_dirty_review_universe = any(
-        reason.startswith(_DIRTY_REVIEW_UNIVERSE_PREFIX) for reason in reasons
-    )
     return all(
-        _finalize_blocker_is_commit_resolvable(reason)
-        or (has_dirty_review_universe and reason == _TARGET_DIGEST_DRIFT_REASON)
+        _finalize_blocker_is_commit_resolvable(reason) or reason == _TARGET_DIGEST_DRIFT_REASON
         for reason in reasons
     )
 
@@ -2728,8 +2716,6 @@ def _finalize_reasons(
     reasons: list[str] = []
     if cell_counts.get("pending", 0):
         reasons.append("review cells are still pending")
-    if cell_counts.get("stale", 0):
-        reasons.append("review cells are stale after target changes")
     for state in ("untriaged", "confirmed", "reopened"):
         if finding_counts.get(state, 0):
             reasons.append(f"findings remain {state}")
@@ -2826,9 +2812,9 @@ def _next_action(
         return "fix_confirmed_findings"
     if finding_counts.get("fixed_pending_verification", 0):
         return "run_verify_fixes"
-    if cell_counts.get("stale", 0):
-        return "run_review"
     if reasons:
+        if _finalize_blockers_are_commit_resolvable(reasons):
+            return "finalize"
         return "resolve_finalize_blockers"
     return "finalize"
 

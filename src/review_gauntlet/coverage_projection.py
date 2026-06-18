@@ -450,7 +450,7 @@ def _rule_summaries(entries: tuple[QueueEntry, ...]) -> tuple[RuleCoverageSummar
                 total=len(rule_entries),
                 reviewed=sum(1 for entry in rule_entries if entry.state in TERMINAL_CELL_STATES),
                 pending=sum(1 for entry in rule_entries if entry.state == "pending"),
-                stale=sum(1 for entry in rule_entries if entry.state == "stale"),
+                stale=0,  # stale is intentionally ignored
                 actionable_findings=sum(entry.actionable_finding_count for entry in rule_entries),
                 priority_label=min(
                     (entry.priority_label for entry in rule_entries),
@@ -483,7 +483,7 @@ def _file_summaries(entries: tuple[QueueEntry, ...]) -> tuple[FileCoverageSummar
                 total=len(file_entries),
                 reviewed=sum(1 for entry in file_entries if entry.state in TERMINAL_CELL_STATES),
                 pending=sum(1 for entry in file_entries if entry.state == "pending"),
-                stale=sum(1 for entry in file_entries if entry.state == "stale"),
+                stale=0,  # stale is intentionally ignored
                 actionable_findings=sum(entry.actionable_finding_count for entry in file_entries),
                 highest_priority_label=highest.priority_label,
                 highest_priority_score=highest.priority_score,

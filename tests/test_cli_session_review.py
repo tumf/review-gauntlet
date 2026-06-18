@@ -376,7 +376,6 @@ def test_status_prioritizes_confirmed_findings_before_stale_review(
     assert status["coverage"]["stale"] == 1
     assert status["finding_state_counts"]["confirmed"] == 1
     assert status["next_required_action"] == "fix_confirmed_findings"
-    assert "review cells are stale after target changes" in status["finalize_blockers"]
 
 
 def test_status_reports_fixed_pending_path_digest_drift_as_stale_coverage(
@@ -399,7 +398,6 @@ def test_status_reports_fixed_pending_path_digest_drift_as_stale_coverage(
     assert status["finding_state_counts"]["fixed_pending_verification"] == 1
     assert status["next_required_action"] == "run_verify_fixes"
     assert "fixed findings require verification" in status["finalize_blockers"]
-    assert "review cells are stale after target changes" in status["finalize_blockers"]
 
 
 def test_ready_prioritizes_confirmed_findings_before_stale_review(

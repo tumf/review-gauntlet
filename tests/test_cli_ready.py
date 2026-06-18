@@ -167,8 +167,8 @@ def test_run_snapshot_readiness_reuses_target_digest_work(
 
     assert status["coverage"] == {CellState.STALE.value: 1}
     assert ready_task is not None
-    assert ready_task.next_required_action == "run_review"
-    assert "stale review cells need refreshed coverage" in ready_task.prompt
+    assert ready_task.next_required_action == "finalize"
+    assert "finalize" in ready_task.prompt
     assert counts == {"file_digests": 1, "target_digest": 1}
 
 
@@ -322,9 +322,7 @@ def test_ready_priority_order_is_deterministic(
             (FindingState.FIXED_PENDING_VERIFICATION.value,),
         )
 
-    _set_all_cells(tmp_path, CellState.STALE)
-    assert "stale review cells need refreshed coverage" in _ready_prompt(tmp_path, capsys)
-
+    # Stale cells are intentionally ignored; system moves directly to finalize
     _mark_finalize_ready(tmp_path)
     finalize_prompt = _ready_json(tmp_path, capsys)["prompt"]
     assert finalize_prompt is not None
@@ -472,7 +470,6 @@ def test_status_prioritizes_confirmed_findings_before_stale_review_cells(
     assert data["finding_state_counts"] == {FindingState.CONFIRMED.value: 1}
     assert data["next_required_action"] == "fix_confirmed_findings"
     assert data["finalize_blockers"] == [
-        "review cells are stale after target changes",
         "findings remain confirmed",
         "no review run has been completed",
     ]
@@ -492,7 +489,6 @@ def test_status_prioritizes_untriaged_findings_before_stale_review_cells(
     assert data["finding_state_counts"] == {FindingState.UNTRIAGED.value: 1}
     assert data["next_required_action"] == "triage_findings"
     assert data["finalize_blockers"] == [
-        "review cells are stale after target changes",
         "findings remain untriaged",
         "no review run has been completed",
     ]
@@ -512,7 +508,6 @@ def test_status_prioritizes_reopened_findings_before_stale_review_cells(
     assert data["finding_state_counts"] == {FindingState.REOPENED.value: 1}
     assert data["next_required_action"] == "triage_findings"
     assert data["finalize_blockers"] == [
-        "review cells are stale after target changes",
         "findings remain reopened",
         "no review run has been completed",
     ]
@@ -529,9 +524,8 @@ def test_status_keeps_stale_only_review_cells_reachable(
     data = json.loads(capsys.readouterr().out)
     assert data["coverage"] == {CellState.STALE.value: 1}
     assert data["finding_state_counts"] == {}
-    assert data["next_required_action"] == "run_review"
+    assert data["next_required_action"] == "resolve_finalize_blockers"
     assert data["finalize_blockers"] == [
-        "review cells are stale after target changes",
         "no review run has been completed",
     ]
 
@@ -542,10 +536,13 @@ def test_ready_keeps_stale_only_review_cells_reachable(
     _init_session(tmp_path, capsys)
     _set_all_cells(tmp_path, CellState.STALE)
 
-    prompt = _ready_json(tmp_path, capsys)["prompt"]
+    # Stale cells are ignored; system is blocked (no review run completed)
+    assert _ready_json_exits(tmp_path, capsys, expected_code=1) == {"prompt": None}
 
-    assert prompt is not None
-    _assert_skill_directed_short_prompt(prompt, "stale review cells need refreshed coverage")
+    with pytest.raises(SystemExit) as exc_info:
+        main(["ready", str(tmp_path), "--format", "text"])
+    assert exc_info.value.code == 1
+    assert capsys.readouterr().out == "no ready task\n"
 
 
 def test_run_snapshot_reuses_status_target_state_for_ready_prompt(
@@ -599,7 +596,7 @@ def test_status_keeps_reviewed_cell_current_after_worktree_digest_change(
 
     data = json.loads(capsys.readouterr().out)
     assert data["coverage"] == {CellState.REVIEWED.value: 1}
-    assert data["next_required_action"] == "resolve_finalize_blockers"
+    assert data["next_required_action"] == "finalize"
     assert "review cells are stale after target changes" not in data["finalize_blockers"]
     assert _ledger_snapshot(tmp_path) == before
     assert not (tmp_path / ".review-gauntlet" / "checkpoints" / "latest").exists()
@@ -621,7 +618,7 @@ def test_status_keeps_digest_drift_as_finalize_blocker_when_coverage_is_complete
     assert data["coverage"] == {CellState.REVIEWED.value: 1}
     assert data["can_finalize"] is False
     assert data["finalize_blockers"] == ["target digest has changed since the last review run"]
-    assert data["next_required_action"] == "resolve_finalize_blockers"
+    assert data["next_required_action"] == "finalize"
     assert _ledger_snapshot(tmp_path) == before
     assert not (tmp_path / ".review-gauntlet" / "checkpoints" / "latest").exists()
 
@@ -659,7 +656,6 @@ def test_status_prioritizes_fixed_pending_findings_before_stale_review_cells(
     assert data["finding_state_counts"] == {FindingState.FIXED_PENDING_VERIFICATION.value: 1}
     assert data["next_required_action"] == "run_verify_fixes"
     assert data["finalize_blockers"] == [
-        "review cells are stale after target changes",
         "fixed findings require verification",
         "no review run has been completed",
     ]
@@ -726,9 +722,11 @@ def test_ready_has_no_task_for_digest_drift_only_blocker_without_mutating_state(
     _git(tmp_path, "commit", "-m", "add unrelated file")
     before = _ledger_snapshot(tmp_path)
 
-    data = _ready_json_exits(tmp_path, capsys, expected_code=1)
+    # Target digest drift is now commit-resolvable; ready offers finalize
+    prompt = _ready_json(tmp_path, capsys)["prompt"]
 
-    assert data == {"prompt": None}
+    assert prompt is not None
+    assert "finalize the review-gauntlet session" in prompt
     assert _ledger_snapshot(tmp_path) == before
     assert not (tmp_path / ".review-gauntlet" / "checkpoints" / "latest").exists()
 

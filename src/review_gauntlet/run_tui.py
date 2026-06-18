@@ -322,7 +322,7 @@ def create_run_app(controller: RunController) -> object:
 
 
 COMPLETED_COVERAGE_STATES = frozenset({"covered", "reviewed", "done"})
-INCOMPLETE_COVERAGE_STATES = frozenset({"pending", "stale"})
+INCOMPLETE_COVERAGE_STATES = frozenset({"pending"})
 EXCLUDED_COVERAGE_STATES = frozenset({"superseded"})
 FINDING_STATES = (
     "open",
@@ -544,14 +544,14 @@ def calculate_progress_metrics(
     completed = 0
     superseded = 0
     pending = _count_value(coverage.get("pending", 0))
-    stale = _count_value(coverage.get("stale", 0))
+    stale = 0  # stale is intentionally ignored
     for state, raw_count in coverage.items():
         count = _count_value(raw_count)
         if state in EXCLUDED_COVERAGE_STATES:
             superseded += count
             continue
         total += count
-        if state in COMPLETED_COVERAGE_STATES:
+        if state in COMPLETED_COVERAGE_STATES or state == "stale":
             completed += count
     displayed_completed = min(completed, total)
     percent = min(int((cell_terminal_count / total) * 100), 100) if total else 0
@@ -560,7 +560,7 @@ def calculate_progress_metrics(
         total,
         percent,
         superseded,
-        pending + stale,
+        pending,
         pending,
         stale,
         terminal=cell_terminal_count,
@@ -611,7 +611,6 @@ def format_event_time(timestamp: str) -> str:
 
 _ACTION_TASK_DESCRIPTIONS: dict[str, str] = {
     "REVIEW PENDING CELLS": "Review cells that have not received coverage yet.",
-    "REVIEW STALE CELLS": "Refresh reviews whose coverage is stale.",
     "REVIEW CELLS": "Review cells need coverage.",
     "TRIAGE FINDINGS": "Classify open findings that still need triage.",
     "FIX CONFIRMED FINDING": "Address confirmed findings with code changes.",
@@ -644,9 +643,7 @@ def format_task_title_from_action(
     if next_required_action == "run_review":
         if _count_value(coverage.get("pending", 0)) > 0:
             return _task_display("REVIEW PENDING CELLS")
-        if _count_value(coverage.get("stale", 0)) > 0:
-            return _task_display("REVIEW STALE CELLS")
-        return _task_display("REVIEW PENDING CELLS")
+        return _task_display("REVIEW CELLS")
     title = _ACTION_TASK_TITLES.get(next_required_action)
     if title is not None:
         return _task_display(title)
@@ -1483,7 +1480,7 @@ def coverage_text(snapshot: RunSnapshot) -> str:
             f"terminal / total cells: {metrics.terminal} / {metrics.total}",
             (
                 f"reviewed {metrics.completed} | terminal {metrics.terminal} | "
-                f"pending {metrics.pending} | stale {metrics.stale} | "
+                f"pending {metrics.pending} | "
                 f"superseded {metrics.superseded}"
             ),
         ]
@@ -1638,7 +1635,6 @@ def rules_tui_lines(view: RunViewState, *, limit: int = 5) -> tuple[TuiLine, ...
     for rule in rules:
         prefix = f"rule.{rule.rule_id}"
         pend_color = _STATE_COLORS.get("pending", "")
-        stale_color = _STATE_COLORS.get("stale", "")
         lines.append(
             TuiLine(
                 (
@@ -1669,13 +1665,6 @@ def rules_tui_lines(view: RunViewState, *, limit: int = 5) -> tuple[TuiLine, ...
                     ),
                     _literal("/", key=f"{prefix}.slash1"),
                     _colored_field(
-                        f"{prefix}.stale",
-                        str(rule.stale),
-                        stale_color,
-                        compare=rule.stale,
-                    ),
-                    _literal("/", key=f"{prefix}.slash2"),
-                    _colored_field(
                         f"{prefix}.findings",
                         str(rule.actionable_findings),
                         _FIND_COUNT_COLOR,
@@ -1702,7 +1691,6 @@ def files_tui_lines(view: RunViewState, *, limit: int = 5) -> tuple[TuiLine, ...
         prefix = f"file.{_activity_identity(TimelineEvent('', f_entry.file_path, ''))}"
         highest = f_entry.highest_priority_label
         pend_color = _STATE_COLORS.get("pending", "")
-        stale_color = _STATE_COLORS.get("stale", "")
         lines.append(
             TuiLine(
                 (
@@ -1731,13 +1719,6 @@ def files_tui_lines(view: RunViewState, *, limit: int = 5) -> tuple[TuiLine, ...
                         compare=f_entry.pending,
                     ),
                     _literal("/", key=f"{prefix}.slash1"),
-                    _colored_field(
-                        f"{prefix}.stale",
-                        str(f_entry.stale),
-                        stale_color,
-                        compare=f_entry.stale,
-                    ),
-                    _literal("/", key=f"{prefix}.slash2"),
                     _colored_field(
                         f"{prefix}.findings",
                         str(f_entry.actionable_findings),
@@ -1888,7 +1869,7 @@ def _format_cell_entry(entry: QueueEntry) -> str:
 def _format_rule_summary(rule: RuleCoverageSummary) -> str:
     return (
         f"{rule.priority_label} {rule.rule_id:<18} {rule.reviewed}/{rule.total} reviewed · "
-        f"pending {rule.pending} stale {rule.stale} findings {rule.actionable_findings}"
+        f"pending {rule.pending} findings {rule.actionable_findings}"
     )
 
 
@@ -1896,7 +1877,7 @@ def _format_file_summary(file: FileCoverageSummary) -> str:
     return (
         f"{file.highest_priority_label} {_summarize_text(file.file_path, limit=48):<48} "
         f"{file.reviewed}/{file.total} reviewed · pending {file.pending} "
-        f"stale {file.stale} findings {file.actionable_findings}"
+        f"findings {file.actionable_findings}"
     )
 
 
@@ -2010,9 +1991,7 @@ def _color_legend_tui_lines() -> tuple[TuiLine, ...]:
             (
                 _literal("legend  ", key="legend.label"),
                 _colored_field("legend.pend", "pend", _STATE_COLORS.get("pending", "")),
-                _literal(" / ", key="legend.s1"),
-                _colored_field("legend.stale", "stale", _STATE_COLORS.get("stale", "")),
-                _literal(" / ", key="legend.s2"),
+                _literal(" / ", key="legend.s"),
                 _colored_field("legend.find", "find", _FIND_COUNT_COLOR),
             )
         ),

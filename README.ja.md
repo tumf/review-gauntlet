@@ -152,9 +152,6 @@ review-gauntlet --help
 明示的なレビュー対象を選び、`run` で設定済みの外部エージェント経由で ready タスクをセッション完了まで実行します。
 
 ```bash
-# 現在のワークスペース diff をレビュー
-review-gauntlet init --worktree
-
 # ブランチまたは範囲をレビュー
 review-gauntlet init --from main --to HEAD
 
@@ -170,16 +167,9 @@ review-gauntlet findings
 
 # 誤った init を破棄する場合。チェックポイントは作成しない
 review-gauntlet cancel
-
-# オプション: Git ブランチとリンク worktree を作成してセッションを分離
-review-gauntlet init --git-worktree
-review-gauntlet run
-review-gauntlet finalize --merge
 ```
 
 `run` は通常の進行コマンドです。`review` の constitution に基づく動作は変わりません: `review` は 1 回の呼び出しで正確に 1 バッチだけ進め、`run` は外部エージェント経由で繰り返し ready タスクを実行します。`finalize` はクリーンアップコマンドではなくゲートです。必要なカバレッジが完了し、live findings が閉じられるまで失敗します。誤った `init` を破棄する場合だけ `cancel` を使ってください。`cancel` はセッションを `cancelled` として記録し、アクティブセッションのマーカーを削除しますが、チェックポイントは作成しません。
-
-`--worktree` と `--git-worktree` は意図的に異なる概念です。`init --worktree` は現在のワークスペース diff をレビュー対象として選択します。`init --git-worktree` は `.review-gauntlet/worktrees/<session-id>/` に分離された Git リンク worktree と `review-gauntlet/<session-id>` ブランチを作成します。`init --worktree --git-worktree` のように組み合わせて、ワークスペース diff をレビューしながらセッション作業を分離することもできます。Git worktree を使うセッションでは、`run` は既定でリンクされたセッション worktree 内で設定済みの外部エージェントを実行するため、ソースの読み取りと編集はセッションブランチ上で行われます。Review Gauntlet の永続状態（実行ログ、ledger、active-session マーカー、チェックポイント）は引き続きベースリポジトリの `.review-gauntlet` ディレクトリに保存されます。`finalize --merge` はチェックポイント artifact を書き込み、セッションブランチをコミットし、記録されたベースブランチにファストフォワードマージし、リンク worktree を削除し、セッションブランチを削除します。マージが成功してもクリーンアップが失敗した場合、コマンドは `cleaned_up: false` を報告し、クリーンアップブロッカーを含め、手動修復用に `next_required_action: cleanup_git_worktree` を残します。
 
 ### 高度な `ready` の使い方
 
@@ -216,16 +206,13 @@ review-gauntlet completion fish > ~/.config/fish/completions/review-gauntlet.fis
 
 ## コマンド
 
-対象選択は `init` で行い、`review` はアクティブなセッションを 1 回だけ進めます。裸の `init` は、完全で利用可能なチェックポイントがある場合 `.review-gauntlet/checkpoints/latest/status.json` を使い、その `review_base_commit` から `HEAD` までをレビューします。チェックポイントがない場合、裸の `init` は対象となる全ファイルをレビューします。以前のワークスペース diff 既定動作が必要なスクリプトは、明示的に `--worktree` を渡してください。
+対象選択は `init` で行い、`review` はアクティブなセッションを 1 回だけ進めます。裸の `init` は、完全で利用可能なチェックポイントがある場合 `.review-gauntlet/checkpoints/latest/status.json` を使い、その `review_base_commit` から `HEAD` までをレビューします。チェックポイントがない場合、裸の `init` は対象となる全ファイルをレビューします。
 
 OCR 互換の対象マッピング:
 
 ```bash
 # 既定レビュー: 最新 finalize 済みチェックポイント -> HEAD、初回は全ファイル
 review-gauntlet init
-
-# OCR ワークスペース diff レビュー: staged / unstaged / untracked かつ ignore されていないファイル
-review-gauntlet init --worktree
 
 # OCR ブランチ/範囲レビュー: 2 つの ref 間で変更されたファイル
 review-gauntlet init --from main --to HEAD

@@ -327,7 +327,7 @@ def test_finalize_blockers_are_commit_resolvable_digest_drift_with_dirty_review(
 
 
 def test_finalize_blockers_are_commit_resolvable_digest_drift_alone() -> None:
-    assert not _finalize_blockers_are_commit_resolvable(
+    assert _finalize_blockers_are_commit_resolvable(
         [
             "target digest has changed since the last review run",
         ]

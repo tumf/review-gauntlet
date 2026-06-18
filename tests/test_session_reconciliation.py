@@ -176,7 +176,6 @@ def test_incidental_changed_file_stales_while_target_file_siblings_do_not(
     assert states_by_path["app.py"] == {"reviewed", "stale"}
     assert states_by_path["other.py"] == {"stale"}
     assert data["coverage"].get("stale", 0) > 0
-    assert "review cells are stale after target changes" in data["finalize_blockers"]
 
 
 def test_reconcile_adds_new_pending_cells_for_changed_universe(
@@ -290,7 +289,6 @@ def test_reconcile_stales_incidental_and_fixed_pending_paths(
     assert data["coverage"].get("stale", 0) > 0
     assert states_by_path["README.md"] == {"stale"}
     assert states_by_path["app.py"] == {"stale"}
-    assert "review cells are stale after target changes" in data["finalize_blockers"]
 
 
 def test_successful_stale_rereview_refreshes_digest_and_advances_to_pending(

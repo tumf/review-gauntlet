@@ -99,7 +99,7 @@ The bundled rule corpus SHALL include a local Solidity rule document selected fo
 
 ### Requirement: Review cells SHALL model coverage independently from finding state
 
-Review cell state mutations SHALL be durable and explicit. Attempts to update a review cell state for an unknown session/cell pair SHALL fail rather than silently succeeding with zero changed rows. File freshness refreshes for a successfully evaluated targeted path SHALL update the stored content digest for all cells on that path without changing unselected sibling cell states. Review cell staleness SHALL be determined by comparing the persisted content digest with the current content digest at the review target commit; working tree changes from in-session fixes SHALL NOT cause review cells to become stale.
+Review cell state mutations SHALL be durable and explicit. Attempts to update a review cell state for an unknown session/cell pair SHALL fail rather than silently succeeding with zero changed rows. File freshness refreshes for a successfully evaluated targeted path SHALL update the stored content digest for all cells on that path without changing unselected sibling cell states. Review cell staleness SHALL NOT prevent finalization or trigger re-review; stale cells are treated as terminal for the purpose of action selection and finalize gating.
 
 #### Scenario: Unknown review cell update fails
 
@@ -117,14 +117,14 @@ Review cell state mutations SHALL be durable and explicit. Attempts to update a 
 **And**: unselected `file1` sibling cells are not marked `stale` solely because `file1` changed
 **And**: unselected sibling cells keep their prior coverage states
 
-#### Scenario: Incidental changed files become stale
+#### Scenario: Incidental changed files become stale (non-blocking)
 
 **Given**: an active session with reviewed cells for `file1` and `file2`
 **And**: the current successful review or verification step targets `file1`
 **When**: both `file1` and `file2` have changed since their recorded coverage
 **Then**: `file1` cells are not stale solely because `file1` was intentionally changed and evaluated
 **And**: `file2` cells are stale because `file2` changed incidentally outside the targeted evaluation
-**And**: stale `file2` coverage remains visible as a finalization blocker
+**And**: stale `file2` coverage does NOT block finalization
 
 ### Requirement: Findings SHALL use stable session-level identity
 
@@ -284,7 +284,7 @@ Dirty review-universe blockers SHALL identify that review-universe files are dir
 
 #### Scenario: Failed finalize does not update checkpoint or clean up session
 
-**Given**: an active review session with pending review cells, stale review cells, open findings, fixed findings requiring verification, expired terminal decisions, no completed review run, stale target digest evidence, dirty review-universe files, an unresolved current `HEAD`, or unavailable git cleanliness checks
+**Given**: an active review session with pending review cells, open findings, fixed findings requiring verification, expired terminal decisions, no completed review run, stale target digest evidence, dirty review-universe files, an unresolved current `HEAD`, or unavailable git cleanliness checks
 **And**: an existing latest checkpoint may already exist
 **When**: the developer runs `review-gauntlet finalize --format json`
 **Then**: the command fails with structured blockers
@@ -580,7 +580,7 @@ The README Design section SHALL reflect the current implemented capabilities: in
 
 ### Requirement: Ready command SHALL emit the next skill-directed prompt
 
-`review-gauntlet ready` SHALL emit the next skill-directed prompt from concrete renderable work items. It SHALL preserve deterministic priority across pending review cells, reopened findings, untriaged findings, confirmed findings, fixed-pending verification findings, stale review cells, and finalize readiness. When aggregate session counts and materialized prompt candidates disagree, `ready` SHALL skip empty candidate buckets and continue to the next valid action instead of crashing while building an impossible file-scoped prompt.
+`review-gauntlet ready` SHALL emit the next skill-directed prompt from concrete renderable work items. It SHALL preserve deterministic priority across pending review cells, reopened findings, untriaged findings, confirmed findings, fixed-pending verification findings, and finalize readiness. Stale review cells SHALL NOT trigger review prompts and SHALL NOT block finalization. When aggregate session counts and materialized prompt candidates disagree, `ready` SHALL skip empty candidate buckets and continue to the next valid action instead of crashing while building an impossible file-scoped prompt.
 
 <!-- Expected canonical result after archive: the canonical review-sessions spec will include explicit review-cell bucket drift scenarios in addition to existing finding bucket drift coverage, requiring pending/stale prompt selection to be based on materialized review cells. -->
 
@@ -603,21 +603,20 @@ The README Design section SHALL reflect the current implemented capabilities: in
 **And**: the command skips the empty pending review-cell bucket
 **And**: the command returns the later-priority concrete finding prompt
 
-#### Scenario: Ready skips empty stale review-cell bucket
+#### Scenario: Ready skips stale review cells
 
 **Given**: an active review session whose aggregate coverage counts report stale review cells
-**And**: the concrete ready review-cell rows available for prompt rendering contain no stale review cell
-**And**: no concrete actionable review cell or finding exists
+**And**: no concrete actionable review cell (pending) or finding exists
 **When**: the developer runs `review-gauntlet ready --format json`
-**Then**: the command does not raise a traceback while selecting the target file
-**And**: the command skips the empty stale review-cell bucket
-**And**: the command returns `null` when finalization remains blocked by non-promptable state
+**Then**: the command does not raise a traceback
+**And**: stale review cells are intentionally ignored in action selection
+**And**: the command returns the finalize prompt when no other blockers remain
 
 #### Scenario: Ready priority still uses concrete work
 
 **Given**: an active review session with concrete pending review cells and concrete actionable findings
 **When**: the developer runs `review-gauntlet ready --format json`
-**Then**: the selected prompt corresponds to the first concrete available category in this order: pending review cells, reopened findings, untriaged findings, confirmed findings, fixed-pending verification findings, stale review cells, finalize
+**Then**: the selected prompt corresponds to the first concrete available category in this order: pending review cells, reopened findings, untriaged findings, confirmed findings, fixed-pending verification findings, finalize
 **And**: no category is selected unless it has at least one concrete renderable review cell or finding when that category requires file-scoped work
 
 ### Requirement: Review configuration SHALL support XDG global fallback
@@ -807,12 +806,12 @@ Continuation verdict file detection SHALL be a separate liveness/completion sign
 
 #### Scenario: Pending review work returns file-scoped task
 
-**Given**: an active session has pending or stale review cells for multiple files
+**Given**: an active session has pending review cells for multiple files
 **When**: the developer runs `review-gauntlet ready`
 **Then**: the prompt identifies exactly one target `file_path`
 **And**: the prompt lists the actionable review cells for that file
 **And**: the prompt instructs the agent to review, triage any findings, fix if needed, and mark findings for that file
-**And**: the prompt does not instruct the agent to process all pending or stale cells across the session.
+**And**: the prompt does not instruct the agent to process all pending cells across the session.
 
 #### Scenario: Findings return file-scoped triage-fix-mark task
 
@@ -1216,7 +1215,7 @@ When a command-backed review or verification attempt cannot start its external p
 
 #### Scenario: Overview prioritizes the next review queue
 
-**Given**: an active review session with pending cells, stale cells, and actionable findings
+**Given**: an active review session with pending cells and actionable findings
 **When**: `review-gauntlet run` renders the interactive overview screen
 **Then**: the overview displays a prioritized next review queue derived from concrete current review cells
 **And**: the queue includes file path, rule ID, review state, priority label, and a concise reason for each visible entry
@@ -1226,8 +1225,8 @@ When a command-backed review or verification attempt cannot start its external p
 
 **Given**: an active review session with multiple files and rules
 **When**: `review-gauntlet run` renders the interactive overview screen at a width that can fit aggregate panels
-**Then**: the overview displays rule-level coverage summaries with reviewed, pending, stale, and open-finding counts
-**And**: the overview displays a file hotlist with coverage, pending, stale, and finding counts
+**Then**: the overview displays rule-level coverage summaries with reviewed, pending, and open-finding counts
+**And**: the overview displays a file hotlist with coverage, pending, and finding counts
 **And**: the aggregate lists are sorted deterministically so the riskiest or least-complete entries are visible first
 
 #### Scenario: Narrow overview remains actionable
@@ -1263,20 +1262,19 @@ When a command-backed review or verification attempt cannot start its external p
 **Given**: an active review session with many file × rule cells
 **When**: the developer opens the cells view
 **Then**: the TUI shows cells as a flat sortable or filterable table with state, priority, rule, file, and finding columns
-**And**: filters can narrow the table to stale cells, pending cells, blockers, a rule, a file prefix, or open findings
+**And**: filters can narrow the table to pending cells, blockers, a rule, a file prefix, or open findings
 
 ### Requirement: Run TUI review queue priorities SHALL be deterministic and actionable
 
-`review-gauntlet run` interactive TUI SHALL assign deterministic priority labels to review-cell queue entries. The displayed label SHALL be one of P0, P1, P2, or P3, derived from an internal score or equivalent deterministic ordering. Raw scores SHALL NOT be required in the overview display. Actionable findings, stale cells, pending cells, high-risk rules, changed files, and finding counts SHALL influence ordering so the queue identifies finalization blockers and high-value review work first.
+`review-gauntlet run` interactive TUI SHALL assign deterministic priority labels to review-cell queue entries. The displayed label SHALL be one of P0, P1, P2, or P3, derived from an internal score or equivalent deterministic ordering. Raw scores SHALL NOT be required in the overview display. Actionable findings, pending cells, high-risk rules, changed files, and finding counts SHALL influence ordering so the queue identifies finalization blockers and high-value review work first. Stale cells SHALL NOT be prioritized differently from reviewed cells.
 
 <!-- Expected canonical result after archive: the canonical review-sessions spec will require deterministic actionable priority labels for the run TUI review queue. -->
 
-#### Scenario: Findings and stale cells sort ahead of normal pending cells
+#### Scenario: Findings sort ahead of normal pending cells
 
-**Given**: an active review session with a normal pending cell, a stale cell, and a cell with an actionable finding
+**Given**: an active review session with a normal pending cell and a cell with an actionable finding
 **When**: the run TUI builds the next review queue
 **Then**: the cell with an actionable finding is labeled P0 and appears before normal pending cells
-**And**: the stale cell appears before normal pending cells
 **And**: entries with equal priority are ordered deterministically by stable cell attributes
 
 #### Scenario: Queue labels hide raw scoring details
@@ -1425,7 +1423,7 @@ Review-gauntlet SHALL review committed code rather than the working tree. When a
 
 ### Requirement: Run TUI SHALL derive task labels from structured action signals
 
-`review-gauntlet run` interactive TUI SHALL determine the current task label and Activity `step_started` detail from the structured `next_required_action` signal and coverage/finding counts, not by scanning the ready prompt body text. The TUI SHALL NOT use keyword matching, substring search, or any natural-language parsing of the ready prompt to classify the task kind. When `next_required_action` is `run_review`, the TUI SHALL distinguish `REVIEW PENDING CELLS` from `REVIEW STALE CELLS` by checking whether `coverage.pending > 0` or `coverage.stale > 0` respectively. When `next_required_action` is missing or holds an unknown value, the TUI SHALL display `READY TASK` without misclassifying the task.
+`review-gauntlet run` interactive TUI SHALL determine the current task label and Activity `step_started` detail from the structured `next_required_action` signal and coverage/finding counts, not by scanning the ready prompt body text. The TUI SHALL NOT use keyword matching, substring search, or any natural-language parsing of the ready prompt to classify the task kind. When `next_required_action` is `run_review`, the TUI SHALL display `REVIEW PENDING CELLS` when `coverage.pending > 0` and `REVIEW CELLS` otherwise. Stale review cells do not produce a distinct task label. When `next_required_action` is missing or holds an unknown value, the TUI SHALL display `READY TASK` without misclassifying the task.
 
 <!-- Expected canonical result after archive: the canonical review-sessions spec will require the run TUI to derive task labels from next_required_action and coverage counts, and will prohibit ready-prompt text parsing for task classification. -->
 
@@ -1438,13 +1436,12 @@ Review-gauntlet SHALL review committed code rather than the working tree. When a
 **Then**: the task label is `REVIEW PENDING CELLS`
 **And**: the task label is not `FIX CONFIRMED FINDING`
 
-#### Scenario: Stale review cells display REVIEW STALE CELLS
+#### Scenario: Stale review cells do not produce a distinct task label
 
 **Given**: an active review session with stale review cells, no pending cells, and no actionable findings
-**And**: `next_required_action` is `run_review`
-**And**: `coverage.pending` is `0` and `coverage.stale` is greater than `0`
+**And**: `next_required_action` is `finalize`
 **When**: `review-gauntlet run` renders the TUI current-task display
-**Then**: the task label is `REVIEW STALE CELLS`
+**Then**: the task label is `FINALIZE SESSION`
 
 #### Scenario: Confirmed findings display FIX CONFIRMED FINDING only when action matches
 
