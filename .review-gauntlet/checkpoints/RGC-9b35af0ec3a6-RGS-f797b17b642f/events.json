@@ -1,0 +1,104 @@
+{
+  "checkpoint_id": "RGC-9b35af0ec3a6-RGS-f797b17b642f",
+  "events": [
+    {
+      "checkpoint_id": "RGC-9b35af0ec3a6-RGS-f797b17b642f",
+      "created_at": "2026-06-18 21:26:35",
+      "event_id": 1692,
+      "finding_id": "RGF-1033",
+      "from_state": "open",
+      "metadata": {},
+      "reason": "Verified against inventory.py:40,248: REVIEW_EXCLUDED_TOP_LEVEL_DIRS is matched only on parts[0], so only top-level directories are excluded. SKILL.md line 162 omits this constraint, leading readers to incorrectly assume nested paths like src/tests/ are also excluded.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-9b35af0ec3a6-RGS-f797b17b642f",
+      "created_at": "2026-06-18 22:35:00",
+      "event_id": 1693,
+      "finding_id": "RGF-1028",
+      "from_state": "open",
+      "metadata": {},
+      "reason": "args.owner and args.until are parsed but never referenced in _cmd_mark; both values are silently discarded after argparse, so any --owner or --until the user passes has no effect on the stored finding record.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-9b35af0ec3a6-RGS-f797b17b642f",
+      "created_at": "2026-06-18 22:35:01",
+      "event_id": 1694,
+      "finding_id": "RGF-1029",
+      "from_state": "open",
+      "metadata": {},
+      "reason": "_cmd_mark reads neither args.owner nor args.until before calling the storage layer, so both CLI arguments are effectively no-ops and any values provided by the caller are dropped.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-9b35af0ec3a6-RGS-f797b17b642f",
+      "created_at": "2026-06-18 22:35:05",
+      "event_id": 1695,
+      "finding_id": "RGF-1030",
+      "from_state": "open",
+      "metadata": {},
+      "reason": "The sentinel string used to locate the continuation path inside a prompt is a plain hardcoded literal, making it fragile if the prompt template changes; the sentinel and the template must stay in sync manually.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-9b35af0ec3a6-RGS-f797b17b642f",
+      "created_at": "2026-06-18 22:35:08",
+      "event_id": 1696,
+      "finding_id": "RGF-1031",
+      "from_state": "open",
+      "metadata": {
+        "dismiss_reason": "last_output_at is a float written atomically by reader threads and read by the main thread for timeout comparison only. CPython's GIL ensures float assignment is atomic, and the worst-case race is reading a slightly stale timestamp, which only delays an idle timeout by one polling interval \u2014 not a correctness hazard."
+      },
+      "reason": "last_output_at is a float written atomically by reader threads and read by the main thread for timeout comparison only. CPython's GIL ensures float assignment is atomic, and the worst-case race is reading a slightly stale timestamp, which only delays an idle timeout by one polling interval \u2014 not a correctness hazard.",
+      "to_state": "dismissed"
+    },
+    {
+      "checkpoint_id": "RGC-9b35af0ec3a6-RGS-f797b17b642f",
+      "created_at": "2026-06-18 22:35:13",
+      "event_id": 1697,
+      "finding_id": "RGF-1032",
+      "from_state": "open",
+      "metadata": {},
+      "reason": "CancelledError is treated as a cell failure rather than a cancellation, misrepresenting the cause to callers and to any reporting layer that distinguishes cancellation from errors.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-9b35af0ec3a6-RGS-f797b17b642f",
+      "created_at": "2026-06-18 22:35:14",
+      "event_id": 1698,
+      "finding_id": "RGF-1034",
+      "from_state": "open",
+      "metadata": {
+        "dismiss_reason": "_reconcile_cells accepts target as a parameter to satisfy the function signature expected by the caller, then immediately deletes it because the reconciliation logic does not use the target value; this is an intentional API-compatibility shim, not a bug."
+      },
+      "reason": "_reconcile_cells accepts target as a parameter to satisfy the function signature expected by the caller, then immediately deletes it because the reconciliation logic does not use the target value; this is an intentional API-compatibility shim, not a bug.",
+      "to_state": "dismissed"
+    },
+    {
+      "checkpoint_id": "RGC-9b35af0ec3a6-RGS-f797b17b642f",
+      "created_at": "2026-06-18 22:35:18",
+      "event_id": 1699,
+      "finding_id": "RGF-1035",
+      "from_state": "open",
+      "metadata": {
+        "dismiss_reason": "_agent_output_tail is a display utility that formats the tail of combined output for human-readable diagnostics; strict round-robin interleaving is irrelevant to its correctness because it only needs to produce a representative tail, not a causally-ordered stream."
+      },
+      "reason": "_agent_output_tail is a display utility that formats the tail of combined output for human-readable diagnostics; strict round-robin interleaving is irrelevant to its correctness because it only needs to produce a representative tail, not a causally-ordered stream.",
+      "to_state": "dismissed"
+    },
+    {
+      "checkpoint_id": "RGC-9b35af0ec3a6-RGS-f797b17b642f",
+      "created_at": "2026-06-18 22:35:20",
+      "event_id": 1700,
+      "finding_id": "RGF-1036",
+      "from_state": "open",
+      "metadata": {
+        "dismiss_reason": "The NUL-byte sentinel is an intentional internal implementation choice to protect literal braces from Python format-string expansion; it is unique enough to avoid collisions with real content and is replaced back to braces before the string is used."
+      },
+      "reason": "The NUL-byte sentinel is an intentional internal implementation choice to protect literal braces from Python format-string expansion; it is unique enough to avoid collisions with real content and is replaced back to braces before the string is used.",
+      "to_state": "dismissed"
+    }
+  ],
+  "schema_version": 1
+}

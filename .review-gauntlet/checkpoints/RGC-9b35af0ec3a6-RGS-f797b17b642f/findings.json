@@ -1,0 +1,195 @@
+{
+  "checkpoint_id": "RGC-9b35af0ec3a6-RGS-f797b17b642f",
+  "findings": [
+    {
+      "checkpoint_id": "RGC-9b35af0ec3a6-RGS-f797b17b642f",
+      "content": "The `--owner` and `--until` arguments are defined but silently discarded in `_cmd_mark`. Neither value is referenced in the function body, so user-supplied data is lost without any error or warning. Additionally, the `--until` date string is never validated against the `YYYY-MM-DD` format described in the help text, so invalid dates such as `\"not-a-date\"` are accepted without complaint.",
+      "finding_id": "RGF-1028",
+      "fingerprint": "8aa3d4bc36b503396c2b5906c46a276bce5227255d170824bc4f24e9c08f61a8",
+      "latest_occurrence": {
+        "cell_id": "RGC-6cefdd41be393570",
+        "end_line": 340,
+        "finding_id": "RGF-1028",
+        "imprecise": 0,
+        "occurrence_id": 1028,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 308,
+        "start_line": 336
+      },
+      "metadata": "{\"fingerprint\":\"8aa3d4bc36b503396c2b5906c46a276bce5227255d170824bc4f24e9c08f61a8\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"data-validation\",\"content\":\"The `--owner` and `--until` arguments are defined but silently discarded in `_cmd_mark`. Neither value is referenced in the function body, so user-supplied data is lost without any error or warning. Additionally, the `--until` date string is never validated against the `YYYY-MM-DD` format described in the help text, so invalid dates such as `\\\"not-a-date\\\"` are accepted without complaint.\",\"suggestion_code\":\"    mark.add_argument(\\\"--reason\\\", default=\\\"\\\", help=\\\"Decision reason (default: none)\\\")\\n    mark.add_argument(\\\"--owner\\\", default=\\\"\\\", help=\\\"Decision owner (default: none)\\\")\\n    mark.add_argument(\\n        \\\"--until\\\", default=\\\"\\\", type=_validate_date_arg,\\n        help=\\\"Decision expiry date, YYYY-MM-DD (default: none)\\\"\\n    )\",\"existing_code\":\"    mark.add_argument(\\\"--reason\\\", default=\\\"\\\", help=\\\"Decision reason (default: none)\\\")\\n    mark.add_argument(\\\"--owner\\\", default=\\\"\\\", help=\\\"Decision owner (default: none)\\\")\\n    mark.add_argument(\\n        \\\"--until\\\", default=\\\"\\\", help=\\\"Decision expiry date, YYYY-MM-DD (default: none)\\\"\\n    )\",\"start_line\":336,\"end_line\":340,\"thinking\":\"`_cmd_mark` at line 2544-2549 reads `args.state`, `args.reason`, and `args.finding_id` but never accesses `args.owner` or `args.until`. Both are accepted by the parser and silently dropped, which means the feature is either incomplete or the arguments are dead code that could mislead callers. The `--until` help string promises YYYY-MM-DD but no `type=` validator is attached, so format errors go undetected. A minimal fix is to (a) add a `_validate_date_arg` type-checker that rejects non-ISO dates at parse time, and (b) thread `owner` and `until` into the `metadata` dict passed to `store.mark_finding`.\",\"imprecise\":false,\"dismiss_reason\":null}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-f797b17b642f",
+      "state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-9b35af0ec3a6-RGS-f797b17b642f",
+      "content": "`_cmd_mark` never reads `args.owner` or `args.until`, so both values are silently dropped after parsing. If these fields are intentional (audit trail, expiry enforcement), they must be threaded into `metadata` before being persisted. If they are not yet implemented, the parser arguments should be removed or marked experimental to avoid user confusion.",
+      "finding_id": "RGF-1029",
+      "fingerprint": "52dc51afeb62ec2827176a27af41bdc3955d839d10289b34e0f4d533f5e5c627",
+      "latest_occurrence": {
+        "cell_id": "RGC-6cefdd41be393570",
+        "end_line": 2549,
+        "finding_id": "RGF-1029",
+        "imprecise": 0,
+        "occurrence_id": 1029,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 308,
+        "start_line": 2544
+      },
+      "metadata": "{\"fingerprint\":\"52dc51afeb62ec2827176a27af41bdc3955d839d10289b34e0f4d533f5e5c627\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"data-validation\",\"content\":\"`_cmd_mark` never reads `args.owner` or `args.until`, so both values are silently dropped after parsing. If these fields are intentional (audit trail, expiry enforcement), they must be threaded into `metadata` before being persisted. If they are not yet implemented, the parser arguments should be removed or marked experimental to avoid user confusion.\",\"suggestion_code\":\"def _cmd_mark(args: argparse.Namespace, store: SessionStore) -> None:\\n    store.active_session_id()\\n    state = FindingState(args.state)\\n    metadata: dict[str, str] = {}\\n    if args.state == \\\"dismissed\\\" and args.reason:\\n        metadata[\\\"dismiss_reason\\\"] = args.reason\\n    if args.owner:\\n        metadata[\\\"owner\\\"] = args.owner\\n    if args.until:\\n        metadata[\\\"until\\\"] = args.until\\n    store.mark_finding(args.finding_id, state, args.reason, metadata)\\n    _emit({\\\"finding_id\\\": args.finding_id, \\\"state\\\": state.value}, args.format)\",\"existing_code\":\"def _cmd_mark(args: argparse.Namespace, store: SessionStore) -> None:\\n    store.active_session_id()\\n    state = FindingState(args.state)\\n    metadata = {\\\"dismiss_reason\\\": args.reason} if args.state == \\\"dismissed\\\" and args.reason else {}\\n    store.mark_finding(args.finding_id, state, args.reason, metadata)\\n    _emit({\\\"finding_id\\\": args.finding_id, \\\"state\\\": state.value}, args.format)\",\"start_line\":2544,\"end_line\":2549,\"thinking\":\"The `--owner` and `--until` arguments exist on the parser but `args.owner` and `args.until` are never accessed in this function. Silent discard of user-supplied input is a data-validation anti-pattern: the caller believes the values are being stored, but they are not. This is the most direct data-validation defect in the file.\",\"imprecise\":false,\"dismiss_reason\":null}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-f797b17b642f",
+      "state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-9b35af0ec3a6-RGS-f797b17b642f",
+      "content": "The sentinel string used to locate the continuation path inside a prompt is hardcoded as a plain literal in `_continuation_path_from_prompt`, and the *identical* English sentence is independently hardcoded in `_continuation_prompt_sections` (line 1812). There is no shared constant. If either site is updated without updating the other, verdict-path extraction silently returns `None`: no continuation file is set up, the subprocess runs without verdect monitoring, and a `missing_step_verdict` failure is emitted for every command step. The breakage produces no obvious compile- or import-time error, so it can easily ship undetected.",
+      "finding_id": "RGF-1030",
+      "fingerprint": "f77cceb04189b8968bab30bbc518ec67139d5e7bdee253c6f116baa3d9ed03ea",
+      "latest_occurrence": {
+        "cell_id": "RGC-98d51e4d6441e1d7",
+        "end_line": 2395,
+        "finding_id": "RGF-1030",
+        "imprecise": 0,
+        "occurrence_id": 1030,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 308,
+        "start_line": 2385
+      },
+      "metadata": "{\"fingerprint\":\"f77cceb04189b8968bab30bbc518ec67139d5e7bdee253c6f116baa3d9ed03ea\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"cli-contract\",\"content\":\"The sentinel string used to locate the continuation path inside a prompt is hardcoded as a plain literal in `_continuation_path_from_prompt`, and the *identical* English sentence is independently hardcoded in `_continuation_prompt_sections` (line 1812). There is no shared constant. If either site is updated without updating the other, verdict-path extraction silently returns `None`: no continuation file is set up, the subprocess runs without verdect monitoring, and a `missing_step_verdict` failure is emitted for every command step. The breakage produces no obvious compile- or import-time error, so it can easily ship undetected.\",\"suggestion_code\":\"_CONTINUATION_PATH_SENTINEL = \\\"Before ending this turn, write valid JSON to the following path:\\\"\\n\\n# in _continuation_prompt_sections (line 1812) replace the literal with the constant:\\n#   _CONTINUATION_PATH_SENTINEL,\\n\\n# in _continuation_path_from_prompt:\\n    for index, line in enumerate(lines):\\n        if line.strip() == _CONTINUATION_PATH_SENTINEL:\",\"existing_code\":\"    for index, line in enumerate(lines):\\n        if line.strip() == \\\"Before ending this turn, write valid JSON to the following path:\\\":\",\"start_line\":2385,\"end_line\":2395,\"thinking\":\"The string 'Before ending this turn, write valid JSON to the following path:' appears verbatim in _continuation_prompt_sections at line 1812 (as a list element) and is pattern-matched here at line 2388. No constant ties them together. A rename/reword of the prompt without updating the detector silently disables continuation tracking for all run steps.\",\"imprecise\":false,\"dismiss_reason\":null}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "cli-contract",
+      "session_id": "RGS-f797b17b642f",
+      "state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-9b35af0ec3a6-RGS-f797b17b642f",
+      "content": "`last_output_at` is written by the reader threads under `output_lock` (line 2215) but read by the main polling loop without acquiring the lock (line 2298). In CPython the GIL makes individual float assignments atomic, so no corruption occurs in practice, but this is a data race by Python's memory model and will be incorrect if the code is ever run under a free-threaded build (PEP 703 / CPython 3.13+ `--disable-gil`). Reading `last_output_at` inside the same lock that protects writes is the correct fix.",
+      "finding_id": "RGF-1031",
+      "fingerprint": "7e8ba67840fcb8d808f4fb1f8de24292c9507c55e14eccc974e0a9ed69a441ea",
+      "latest_occurrence": {
+        "cell_id": "RGC-98d51e4d6441e1d7",
+        "end_line": 2298,
+        "finding_id": "RGF-1031",
+        "imprecise": 0,
+        "occurrence_id": 1031,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 308,
+        "start_line": 2297
+      },
+      "metadata": "{\"fingerprint\":\"7e8ba67840fcb8d808f4fb1f8de24292c9507c55e14eccc974e0a9ed69a441ea\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"cli-contract\",\"content\":\"`last_output_at` is written by the reader threads under `output_lock` (line 2215) but read by the main polling loop without acquiring the lock (line 2298). In CPython the GIL makes individual float assignments atomic, so no corruption occurs in practice, but this is a data race by Python's memory model and will be incorrect if the code is ever run under a free-threaded build (PEP 703 / CPython 3.13+ `--disable-gil`). Reading `last_output_at` inside the same lock that protects writes is the correct fix.\",\"suggestion_code\":\"            now = time.monotonic()\\n            with output_lock:\\n                captured_last_output_at = last_output_at\\n            if continuation_path is not None:\\n                detected = _detect_continuation_verdict(continuation_path)\\n                if detected is not None:\\n                    verdict_metadata = detected\\n                    if verdict_detected_at is None:\\n                        verdict_detected_at = now\\n                if verdict_detected_at is not None:\\n                    grace_remaining = config.verdict_grace_seconds - (now - verdict_detected_at)\\n                    if grace_remaining <= 0:\\n                        process.kill()\\n                        returncode = process.wait()\\n                        break\\n                    try:\\n                        returncode = process.wait(timeout=min(grace_remaining, 0.1))\\n                        break\\n                    except subprocess.TimeoutExpired:\\n                        continue\\n            overall_remaining = config.timeout_seconds - (now - started_at)\\n            quiet_remaining = config.quiet_timeout_seconds - (now - captured_last_output_at)\",\"existing_code\":\"            now = time.monotonic()\\n            if continuation_path is not None:\\n                detected = _detect_continuation_verdict(continuation_path)\\n                if detected is not None:\\n                    verdict_metadata = detected\\n                    if verdict_detected_at is None:\\n                        verdict_detected_at = now\\n                if verdict_detected_at is not None:\\n                    grace_remaining = config.verdict_grace_seconds - (now - verdict_detected_at)\\n                    if grace_remaining <= 0:\\n                        process.kill()\\n                        returncode = process.wait()\\n                        break\\n                    try:\\n                        returncode = process.wait(timeout=min(grace_remaining, 0.1))\\n                        break\\n                    except subprocess.TimeoutExpired:\\n                        continue\\n            overall_remaining = config.timeout_seconds - (now - started_at)\\n            quiet_remaining = config.quiet_timeout_seconds - (now - last_output_at)\",\"start_line\":2297,\"end_line\":2298,\"thinking\":\"output_lock guards writes to last_output_at (line 2215 inside read_stream) but the main loop reads it at line 2298 without the lock. The quiet_timeout logic depends on an accurate reading of last_output_at to avoid premature kills.\",\"imprecise\":false,\"dismiss_reason\":null}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "cli-contract",
+      "session_id": "RGS-f797b17b642f",
+      "state": "dismissed"
+    },
+    {
+      "checkpoint_id": "RGC-9b35af0ec3a6-RGS-f797b17b642f",
+      "content": "When `future.result()` raises `CancelledError`, the cell is reported via `progress.cell_failure()` rather than `progress.cell_cancelled()`. This is inconsistent with the explicit interrupt path (lines 1413\u20131417) which calls `progress.cell_cancelled()` for futures that have not yet completed. A future can end up in `_record_completed_review_future` with `CancelledError` if it was cancelled between task submission and first execution, then its result was drained via `_drain_completed_review_futures`. The inconsistency makes progress tracking count the same logical event differently depending on timing.",
+      "finding_id": "RGF-1032",
+      "fingerprint": "e072d6a2728259bd04a4780e714ce87596f7d1e05ce2fff4423f630644c531f1",
+      "latest_occurrence": {
+        "cell_id": "RGC-98d51e4d6441e1d7",
+        "end_line": 1471,
+        "finding_id": "RGF-1032",
+        "imprecise": 0,
+        "occurrence_id": 1032,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 308,
+        "start_line": 1466
+      },
+      "metadata": "{\"fingerprint\":\"e072d6a2728259bd04a4780e714ce87596f7d1e05ce2fff4423f630644c531f1\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"cli-contract\",\"content\":\"When `future.result()` raises `CancelledError`, the cell is reported via `progress.cell_failure()` rather than `progress.cell_cancelled()`. This is inconsistent with the explicit interrupt path (lines 1413\u20131417) which calls `progress.cell_cancelled()` for futures that have not yet completed. A future can end up in `_record_completed_review_future` with `CancelledError` if it was cancelled between task submission and first execution, then its result was drained via `_drain_completed_review_futures`. The inconsistency makes progress tracking count the same logical event differently depending on timing.\",\"suggestion_code\":\"    except CancelledError:\\n        outcome = ReviewAdapterError(\\n            f\\\"review cell cancelled before producing a result: {cell.id}\\\",\\n            failure={\\\"error\\\": \\\"cancelled review result\\\", \\\"cell_id\\\": cell.id},\\n        )\\n        progress.cell_cancelled(cell)\",\"existing_code\":\"    except CancelledError:\\n        outcome = ReviewAdapterError(\\n            f\\\"review cell cancelled before producing a result: {cell.id}\\\",\\n            failure={\\\"error\\\": \\\"cancelled review result\\\", \\\"cell_id\\\": cell.id},\\n        )\\n        progress.cell_failure(cell, outcome)\",\"start_line\":1466,\"end_line\":1471,\"thinking\":\"CancelledError is raised by future.result() when the future was cancelled before it started running. In the interrupt handler at line 1412-1417, such futures are caught by `not future.done()` and reported as cell_cancelled. But if a future was cancelled AND done (its CancelledError result was already set), it goes through _drain_completed_review_futures -> _record_completed_review_future -> except CancelledError -> cell_failure. The same cancellation event gets two different reporter methods.\",\"imprecise\":false,\"dismiss_reason\":null}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "cli-contract",
+      "session_id": "RGS-f797b17b642f",
+      "state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-9b35af0ec3a6-RGS-f797b17b642f",
+      "content": "The file exclusion description omits the critical constraint that `openspec/`, `tests/`, and `docs/` are excluded only when they appear as the top-level (first) path component, not anywhere in the tree. The code enforces `parts[0] in REVIEW_EXCLUDED_TOP_LEVEL_DIRS` (inventory.py:248), so `src/tests/` would NOT be excluded, but a reader of this line would incorrectly expect it to be. This can lead to agents or users miscounting review coverage and assuming nested test directories are silently skipped.",
+      "finding_id": "RGF-1033",
+      "fingerprint": "ced50cf6c70956ba3c262adc647ce5a43d770fdb6a641a47901b3d58b3c85dc3",
+      "latest_occurrence": {
+        "cell_id": "RGC-fe5e0806ad5e1e85",
+        "end_line": 163,
+        "finding_id": "RGF-1033",
+        "imprecise": 0,
+        "occurrence_id": 1033,
+        "path": "skills/review-gauntlet/SKILL.md",
+        "run_id": 308,
+        "start_line": 162
+      },
+      "metadata": "{\"fingerprint\":\"ced50cf6c70956ba3c262adc647ce5a43d770fdb6a641a47901b3d58b3c85dc3\",\"path\":\"skills/review-gauntlet/SKILL.md\",\"rule_id\":\"docs-accuracy\",\"content\":\"The file exclusion description omits the critical constraint that `openspec/`, `tests/`, and `docs/` are excluded only when they appear as the top-level (first) path component, not anywhere in the tree. The code enforces `parts[0] in REVIEW_EXCLUDED_TOP_LEVEL_DIRS` (inventory.py:248), so `src/tests/` would NOT be excluded, but a reader of this line would incorrectly expect it to be. This can lead to agents or users miscounting review coverage and assuming nested test directories are silently skipped.\",\"suggestion_code\":\"Review sessions exclude paths and suffixes by default: top-level `openspec/`, `tests/`, and `docs/` directories (matched only when they are the first path component), common test files (e.g. `test_*.py`, `*.spec.ts`), and package manifests/lock files. These are omitted from review cells but remain in the broader inventory.\",\"existing_code\":\"Review sessions exclude paths and suffixes by default: `openspec/`, `tests/`, `docs/`, common test files, and package manifests/lock files. These are omitted from review cells but remain in the broader inventory.\",\"start_line\":162,\"end_line\":163,\"thinking\":\"Checked inventory.py lines 40 and 248: `REVIEW_EXCLUDED_TOP_LEVEL_DIRS = {\\\"openspec\\\", \\\"tests\\\", \\\"docs\\\"}` and the guard `if parts and parts[0] in REVIEW_EXCLUDED_TOP_LEVEL_DIRS`. The SKILL.md presents these as general path exclusions with trailing slashes, implying any path containing these segments is excluded, which is incorrect.\",\"imprecise\":false,\"dismiss_reason\":null}",
+      "path": "skills/review-gauntlet/SKILL.md",
+      "rule_id": "docs-accuracy",
+      "session_id": "RGS-f797b17b642f",
+      "state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-9b35af0ec3a6-RGS-f797b17b642f",
+      "content": "_reconcile_cells accepts a `target: TargetSpec` parameter but immediately deletes it with `del target`. The parameter is not used anywhere in the function body. This dead-parameter pattern prevents linter warnings but leaves callers unable to know whether `target` influences the behaviour \u2014 which it does not. Any test that verifies reconciliation correctness under different targets will pass vacuously, giving false coverage confidence. Either remove the parameter from the signature (and all call sites) or document and use it.",
+      "finding_id": "RGF-1034",
+      "fingerprint": "b5a62c82e5add32b60caee53169fdcc2b921f8fd1ad7c71de01e5ea06f02dc99",
+      "latest_occurrence": {
+        "cell_id": "RGC-7d47131d23a5f0ce",
+        "end_line": 1510,
+        "finding_id": "RGF-1034",
+        "imprecise": 0,
+        "occurrence_id": 1034,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 308,
+        "start_line": 1504
+      },
+      "metadata": "{\"fingerprint\":\"b5a62c82e5add32b60caee53169fdcc2b921f8fd1ad7c71de01e5ea06f02dc99\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"test-evidence\",\"content\":\"_reconcile_cells accepts a `target: TargetSpec` parameter but immediately deletes it with `del target`. The parameter is not used anywhere in the function body. This dead-parameter pattern prevents linter warnings but leaves callers unable to know whether `target` influences the behaviour \u2014 which it does not. Any test that verifies reconciliation correctness under different targets will pass vacuously, giving false coverage confidence. Either remove the parameter from the signature (and all call sites) or document and use it.\",\"suggestion_code\":\"def _reconcile_cells(store: SessionStore, root: Path) -> None:\\n    session_id = store.active_session_id()\\n    current = _current_target_cells(store, session_id, root)\\n    existing = {str(row[\\\"cell_id\\\"]): row for row in store.list_cells(session_id)}\\n    new_cells = tuple(cell for cell_id, cell in current.items() if cell_id not in existing)\\n    store.add_cells(session_id, new_cells)\",\"existing_code\":\"def _reconcile_cells(store: SessionStore, root: Path, target: TargetSpec) -> None:\\n    del target\\n    session_id = store.active_session_id()\\n    current = _current_target_cells(store, session_id, root)\\n    existing = {str(row[\\\"cell_id\\\"]): row for row in store.list_cells(session_id)}\\n    new_cells = tuple(cell for cell_id, cell in current.items() if cell_id not in existing)\\n    store.add_cells(session_id, new_cells)\",\"start_line\":1504,\"end_line\":1510,\"thinking\":\"The `target` parameter is accepted by `_reconcile_cells` but discarded immediately with `del target`. The `del` only silences linters; it does not signal intent. Call sites (_cmd_review line 1024, _cmd_resolve line 1149) pass `target` believing it to matter. A test cannot distinguish correct-target-used from correct-target-ignored. The signature should match the actual behaviour to avoid misleading test coverage.\",\"imprecise\":false,\"dismiss_reason\":null}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-f797b17b642f",
+      "state": "dismissed"
+    },
+    {
+      "checkpoint_id": "RGC-9b35af0ec3a6-RGS-f797b17b642f",
+      "content": "`_agent_output_tail` interleaves stdout and stderr lines in a strict 1:1 round-robin (both `if` branches execute each iteration, not `elif`), then takes `entries[-limit:]`. When stdout dominates (e.g., 100 stdout lines, 3 stderr lines), the total is 103 entries and the tail-20 slice is entirely stdout \u2014 all stderr entries are silently dropped from the activity log. No test evidence exists for this asymmetric case. A consumer relying on the tail for diagnostics will never see stderr content from a verbose stdout adapter.",
+      "finding_id": "RGF-1035",
+      "fingerprint": "dfc02fd5291829d2661100a20c381674e8eda94383bbe262214f4116c4acc871",
+      "latest_occurrence": {
+        "cell_id": "RGC-7d47131d23a5f0ce",
+        "end_line": 2481,
+        "finding_id": "RGF-1035",
+        "imprecise": 0,
+        "occurrence_id": 1035,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 308,
+        "start_line": 2467
+      },
+      "metadata": "{\"fingerprint\":\"dfc02fd5291829d2661100a20c381674e8eda94383bbe262214f4116c4acc871\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"test-evidence\",\"content\":\"`_agent_output_tail` interleaves stdout and stderr lines in a strict 1:1 round-robin (both `if` branches execute each iteration, not `elif`), then takes `entries[-limit:]`. When stdout dominates (e.g., 100 stdout lines, 3 stderr lines), the total is 103 entries and the tail-20 slice is entirely stdout \u2014 all stderr entries are silently dropped from the activity log. No test evidence exists for this asymmetric case. A consumer relying on the tail for diagnostics will never see stderr content from a verbose stdout adapter.\",\"suggestion_code\":\"    # Interleave last `limit` lines from each stream independently, then merge.\\n    stdout_tail = stdout_lines[-limit:]\\n    stderr_tail = stderr_lines[-limit:]\\n    i = j = 0\\n    while i < len(stdout_tail) or j < len(stderr_tail):\\n        if i < len(stdout_tail):\\n            entries.append(AgentOutputEntry(\\\"stdout\\\", stdout_tail[i]))\\n            i += 1\\n        if j < len(stderr_tail):\\n            entries.append(AgentOutputEntry(\\\"stderr\\\", stderr_tail[j]))\\n            j += 1\\n    return tuple(entries[-limit:])\",\"existing_code\":\"    while i < len(stdout_lines) or j < len(stderr_lines):\\n        if i < len(stdout_lines):\\n            entries.append(AgentOutputEntry(\\\"stdout\\\", stdout_lines[i]))\\n            i += 1\\n        if j < len(stderr_lines):\\n            entries.append(AgentOutputEntry(\\\"stderr\\\", stderr_lines[j]))\\n            j += 1\\n    return tuple(entries[-limit:])\",\"start_line\":2467,\"end_line\":2481,\"thinking\":\"Both `if` branches fire in the same iteration, so entries grow as N+M total. `entries[-limit:]` then slices the last 20. For N=100, M=3: 103 total entries; the last 20 are all stdout. Stderr representation in the activity log is lost. A test with equal-length streams would not reveal this. The fix tails each stream independently before interleaving.\",\"imprecise\":false,\"dismiss_reason\":null}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-f797b17b642f",
+      "state": "dismissed"
+    },
+    {
+      "checkpoint_id": "RGC-9b35af0ec3a6-RGS-f797b17b642f",
+      "content": "`_expand_session_template` uses a NUL-byte string (`\\x00REVIEW_GAUNTLET_LITERAL_BRACE\\x00`) as a sentinel to protect `{{`/`}}` escapes. On line 2495, variable values are sanitised with `variables[name].replace(\"\\x00\", \"\")` before substitution, silently dropping any NUL bytes that legitimately appear in the value (e.g., a path or prompt snippet that contains a binary character). There is no test evidence for this edge case, and the silent truncation could corrupt prompt content without any error signal.",
+      "finding_id": "RGF-1036",
+      "fingerprint": "9d74d8528b728f3ed100051e261ab22c4f3fa450dd99846dd19f4bd9e4fc3647",
+      "latest_occurrence": {
+        "cell_id": "RGC-7d47131d23a5f0ce",
+        "end_line": 2498,
+        "finding_id": "RGF-1036",
+        "imprecise": 0,
+        "occurrence_id": 1036,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 308,
+        "start_line": 2484
+      },
+      "metadata": "{\"fingerprint\":\"9d74d8528b728f3ed100051e261ab22c4f3fa450dd99846dd19f4bd9e4fc3647\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"test-evidence\",\"content\":\"`_expand_session_template` uses a NUL-byte string (`\\\\x00REVIEW_GAUNTLET_LITERAL_BRACE\\\\x00`) as a sentinel to protect `{{`/`}}` escapes. On line 2495, variable values are sanitised with `variables[name].replace(\\\"\\\\x00\\\", \\\"\\\")` before substitution, silently dropping any NUL bytes that legitimately appear in the value (e.g., a path or prompt snippet that contains a binary character). There is no test evidence for this edge case, and the silent truncation could corrupt prompt content without any error signal.\",\"suggestion_code\":\"    # Use a sentinel that cannot appear in any real path or prompt.\\n    placeholder = \\\"\\\\x00REVIEW_GAUNTLET_LITERAL_BRACE\\\\x00\\\"\\n    protected = value.replace(\\\"{{\\\", placeholder + \\\"OPEN\\\").replace(\\\"}}\\\", placeholder + \\\"CLOSE\\\")\\n\\n    def replace(match: re.Match[str]) -> str:\\n        name = match.group(1)\\n        if name not in _SESSION_TEMPLATE_VARIABLES:\\n            raise ValueError(\\n                f\\\"template variable {{{name}}} is not available for run; supported variables: \\\"\\n                + \\\", \\\".join(f\\\"{{{item}}}\\\" for item in sorted(_SESSION_TEMPLATE_VARIABLES))\\n            )\\n        v = variables[name]\\n        if \\\"\\\\x00\\\" in v:\\n            raise ValueError(\\n                f\\\"template variable {{{name}}} contains a NUL byte, which conflicts with the \\\"\\n                \\\"internal sentinel; sanitise the value before passing it to the template\\\"\\n            )\\n        return v\\n\\n    expanded = TEMPLATE_PATTERN.sub(replace, protected)\\n    return expanded.replace(placeholder + \\\"OPEN\\\", \\\"{\\\").replace(placeholder + \\\"CLOSE\\\", \\\"}\\\")\",\"existing_code\":\"    placeholder = \\\"\\\\x00REVIEW_GAUNTLET_LITERAL_BRACE\\\\x00\\\"\\n    protected = value.replace(\\\"{{\\\", placeholder + \\\"OPEN\\\").replace(\\\"}}\\\", placeholder + \\\"CLOSE\\\")\\n\\n    def replace(match: re.Match[str]) -> str:\\n        name = match.group(1)\\n        if name not in _SESSION_TEMPLATE_VARIABLES:\\n            raise ValueError(\\n                f\\\"template variable {{{name}}} is not available for run; supported variables: \\\"\\n                + \\\", \\\".join(f\\\"{{{item}}}\\\" for item in sorted(_SESSION_TEMPLATE_VARIABLES))\\n            )\\n        return variables[name].replace(\\\"\\\\x00\\\", \\\"\\\")\\n\\n    expanded = TEMPLATE_PATTERN.sub(replace, protected)\\n    return expanded.replace(placeholder + \\\"OPEN\\\", \\\"{\\\").replace(placeholder + \\\"CLOSE\\\", \\\"}\\\")\",\"start_line\":2484,\"end_line\":2498,\"thinking\":\"The sentinel relies on NUL bytes being absent from all template variable values. The strip-silently approach on line 2495 is a silent correctness hazard: a variable value with a NUL byte is returned truncated, which could silently truncate a prompt or path. Raising an explicit error makes the contract testable and visible.\",\"imprecise\":false,\"dismiss_reason\":null}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-f797b17b642f",
+      "state": "dismissed"
+    }
+  ],
+  "schema_version": 1
+}
