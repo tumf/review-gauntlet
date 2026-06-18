@@ -5,6 +5,7 @@ import importlib.util
 import math
 import re
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Literal, cast
@@ -23,6 +24,7 @@ from review_gauntlet.run_controller import AgentOutputEntry, RunController, RunE
 
 TUI_FALLBACK_WARNING = "TUI support is not installed; falling back to text mode."
 TUI_INSTALL_GUIDANCE = "Reinstall review-gauntlet to restore bundled TUI dependencies."
+RUN_TUI_FULL_REFRESH_INTERVAL_SECONDS = 2.0
 PANEL_TITLES = {
     "header": "Review Gauntlet",
     "finalize_path": "Finalize checklist",
@@ -47,9 +49,19 @@ def should_use_tui(*, output_format: str, no_tui: bool, stdout_is_tty: bool) -> 
     return output_format == "text" and not no_tui and stdout_is_tty
 
 
-def create_run_app(controller: RunController) -> object:
+def create_run_app(
+    controller: RunController,
+    *,
+    full_refresh_interval_seconds: float = RUN_TUI_FULL_REFRESH_INTERVAL_SECONDS,
+    monotonic: Callable[[], float] = time.monotonic,
+) -> object:
+    if full_refresh_interval_seconds <= 0 or not math.isfinite(full_refresh_interval_seconds):
+        raise ValueError(
+            "full_refresh_interval_seconds must be a finite positive number, "
+            f"got {full_refresh_interval_seconds}"
+        )
     try:
-        from textual.app import App, ComposeResult
+        from textual.app import App, ComposeResult, ScreenStackError
         from textual.containers import Horizontal, Vertical
         from textual.css.query import NoMatches
         from textual.widgets import Static
@@ -130,6 +142,7 @@ def create_run_app(controller: RunController) -> object:
             super().__init__()
             self.controller = run_controller
             self.snapshot = run_controller.snapshot()
+            self._last_full_refresh_at = monotonic()
             self._activity_frame = 0
             self._active_view = "overview"
             self._tui_render_state = empty_tui_render_state()
@@ -191,9 +204,14 @@ def create_run_app(controller: RunController) -> object:
         def _background_refresh(self) -> None:
             if self._completed_result is not None:
                 return
-            self.snapshot = self.controller.snapshot()
-            if self.snapshot.agent_status in {"running", "starting"}:
-                self._activity_frame += 1
+            self._automatic_refresh()
+
+        def _automatic_refresh(self) -> None:
+            now = monotonic()
+            if now - self._last_full_refresh_at >= full_refresh_interval_seconds:
+                self.snapshot = self.controller.snapshot()
+                self._last_full_refresh_at = now
+            self._advance_liveness_frame()
             self._render_from_snapshot()
 
         def _run_controller(self) -> None:
@@ -248,10 +266,17 @@ def create_run_app(controller: RunController) -> object:
             self.refresh_view()
 
         def refresh_view(self) -> None:
+            self._force_full_refresh()
+
+        def _force_full_refresh(self) -> None:
             self.snapshot = self.controller.snapshot()
+            self._last_full_refresh_at = monotonic()
+            self._advance_liveness_frame()
+            self._render_from_snapshot()
+
+        def _advance_liveness_frame(self) -> None:
             if self.snapshot.agent_status in {"running", "starting"}:
                 self._activity_frame += 1
-            self._render_from_snapshot()
 
         def _render_from_snapshot(self) -> None:
             view = dashboard_state(
@@ -280,7 +305,7 @@ def create_run_app(controller: RunController) -> object:
                 activity_timeline = self.query_one("#activity_timeline", Static)
                 activity_panel_container = self.query_one("#activity_panel_container", Vertical)
                 legend = self.query_one("#legend", Static)
-            except NoMatches:
+            except (NoMatches, ScreenStackError):
                 return
             header_status_line.update(
                 render_tui_lines(sections["header_status"], flashes, mode="rich")
@@ -993,6 +1018,7 @@ def header_agent_text(view: RunViewState) -> str:
     parts = [f"Agent    {summary.command}"]
     if view.step_label:
         parts.append(view.step_label)
+    parts.append(view.activity)
     parts.append(summary.output)
     parts.append(f"timeout {summary.timeout}")
     return " · ".join(parts)
@@ -1121,6 +1147,7 @@ def header_agent_tui_lines(view: RunViewState) -> tuple[TuiLine, ...]:
     parts: list[str] = [summary.command]
     if view.step_label:
         parts.append(view.step_label)
+    parts.append(view.activity)
     parts.append(summary.output)
     parts.append(f"timeout {summary.timeout}")
     return (
@@ -1133,6 +1160,7 @@ def header_agent_tui_lines(view: RunViewState) -> tuple[TuiLine, ...]:
                     compare=(
                         view.agent_summary.command,
                         view.step_label,
+                        view.activity,
                         _agent_output_compare(view.agent_summary.output),
                     ),
                 ),

@@ -1455,6 +1455,104 @@ def test_run_controller_maps_verdict_failure_statuses(
     assert snapshot.agent_lifecycle.status == expected_status
 
 
+def test_run_controller_retries_invalid_step_verdict_with_diagnostic(
+    tmp_path: Path,
+) -> None:
+    store = _store(tmp_path)
+    prompts: list[str] = []
+
+    def command(
+        _config: CommandAdapterConfig, _root: Path, _state_dir: Path, prompt: str
+    ) -> SessionCommandResult:
+        prompts.append(prompt)
+        if len(prompts) == 1:
+            return SessionCommandResult(
+                argv=["fake-agent"],
+                cwd=None,
+                returncode=0,
+                stdout="",
+                stderr="",
+                failure={
+                    "reason": "invalid_step_verdict",
+                    "error": "invalid continuation verdict schema: bad state fixed",
+                    "verdict_path": ".review-gauntlet/turns/RGS-test/open__aaaaaaaaaaaa.json",
+                },
+            )
+        store.active_path.unlink()
+        return SessionCommandResult(
+            argv=["fake-agent"],
+            cwd=None,
+            returncode=0,
+            stdout="ok",
+            stderr="",
+        )
+
+    controller = RunController(
+        root=tmp_path,
+        store=store,
+        config_path=None,
+        max_steps=2,
+        ready_prompt=lambda _store, _root: ReadyTask(
+            prompt="ready prompt", next_required_action="run_review"
+        ),
+        status_snapshot=_status,
+        command_runner=command,
+    )
+
+    result = controller.run()
+
+    assert result["completed"] is True
+    assert result["reason"] == "completed"
+    assert len(prompts) == 2
+    assert "## Previous invalid turn verdict" in prompts[1]
+    assert "path: .review-gauntlet/turns/RGS-test/open__aaaaaaaaaaaa.json" in prompts[1]
+    assert "bad state fixed" in prompts[1]
+
+
+def test_run_controller_bounds_repeated_invalid_step_verdict_retries(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    prompts: list[str] = []
+
+    def command(
+        _config: CommandAdapterConfig, _root: Path, _state_dir: Path, prompt: str
+    ) -> SessionCommandResult:
+        prompts.append(prompt)
+        return SessionCommandResult(
+            argv=["fake-agent"],
+            cwd=None,
+            returncode=0,
+            stdout="",
+            stderr="",
+            failure={
+                "reason": "invalid_step_verdict",
+                "error": f"invalid verdict attempt {len(prompts)}",
+                "verdict_path": ".review-gauntlet/turns/RGS-test/open__aaaaaaaaaaaa.json",
+            },
+        )
+
+    controller = RunController(
+        root=tmp_path,
+        store=store,
+        config_path=None,
+        max_steps=2,
+        ready_prompt=lambda _store, _root: ReadyTask(
+            prompt="ready prompt", next_required_action="run_review"
+        ),
+        status_snapshot=_status,
+        command_runner=command,
+    )
+
+    result = controller.run()
+
+    assert result["completed"] is False
+    assert result["reason"] == "invalid_step_verdict"
+    assert result["error"] == "invalid verdict attempt 2"
+    assert len(prompts) == 2
+    assert "## Previous invalid turn verdict" in prompts[1]
+    steps = cast(list[object], result["steps"])
+    assert len(steps) == 2
+
+
 def test_run_controller_includes_verdict_metadata_in_step_payload(tmp_path: Path) -> None:
     store = _store(tmp_path)
     metadata: dict[str, object] = {

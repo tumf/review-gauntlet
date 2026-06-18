@@ -8,6 +8,8 @@ Continuation verdict files SHALL be handoff artifacts only. The session ledger S
 
 The CLI SHALL provide an agent-operable command to validate continuation turn verdict files independently from OCR review-cell verdict validation. The command SHALL reuse the continuation verdict schema, return machine-readable success or failure output when requested, and exit non-zero for invalid continuation verdicts. Generated continuation-aware prompts SHALL instruct agents to run this validation command after writing the turn verdict file, repair invalid output, and re-run validation before ending the turn.
 
+When runtime processing observes an invalid continuation verdict after the agent exits, `review-gauntlet run` SHALL use the invalid-verdict diagnostic as feedback for the same file-scoped continuation task while retry budget remains. Invalid-verdict retries SHALL be bounded. After the bound is exhausted, `run` SHALL report a terminal invalid-verdict failure with the last diagnostic and available artifact paths.
+
 #### Scenario: Finding prompt includes turn verdict validation command
 
 **Given**: an active review session with actionable findings for `src/example.py`
@@ -33,7 +35,27 @@ The CLI SHALL provide an agent-operable command to validate continuation turn ve
 **Then**: the command exits non-zero
 **And**: stdout is parseable JSON containing `valid: false`
 **And**: the error identifies the invalid continuation verdict schema or invalid resolution state
-**And**: the runtime does not wait until after the agent exits to surface the same schema problem
+
+#### Scenario: Invalid runtime verdict is retried with diagnostic feedback
+
+**Given**: `review-gauntlet run` starts a continuation-aware finding turn for `src/example.py`
+**And**: the external agent exits after writing a continuation verdict containing `resolutions: [{"finding_id": "RGF-0001", "state": "fixed"}]`
+**And**: invalid-verdict retry budget remains
+**When**: `run` processes the completed turn
+**Then**: `run` does not immediately terminate the whole run as terminal `VERDICT INVALID`
+**And**: `run` schedules another agent invocation for the same file-scoped task
+**And**: the next prompt includes the invalid verdict path and validation diagnostic
+**And**: no finding state is mutated before a valid verdict is received
+
+#### Scenario: Invalid runtime verdict retry is bounded
+
+**Given**: `review-gauntlet run` starts a continuation-aware finding turn
+**And**: each retry writes an invalid continuation verdict
+**When**: the invalid-verdict retry bound is exhausted
+**Then**: `run` reports a terminal invalid-verdict failure
+**And**: the failure includes the last validation diagnostic
+**And**: the failure includes stdout, stderr, activity, and verdict artifact paths when available
+**And**: the run does not continue indefinitely with the same invalid task
 
 #### Scenario: Turn verdict validation can reject impossible finding transitions
 
