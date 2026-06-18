@@ -11,7 +11,8 @@ import sys
 import threading
 import time
 import uuid
-from concurrent.futures import Future, ThreadPoolExecutor, as_completed
+from collections.abc import Callable
+from concurrent.futures import CancelledError, Future, ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, NoReturn, cast
@@ -1033,32 +1034,53 @@ def _cmd_review(args: argparse.Namespace, root: Path, store: SessionStore) -> No
         timeout_seconds=_adapter_timeout_seconds(adapter),
         artifact_dir=store.state_dir / "runs" / str(run_id),
     )
-    results = review_cells_concurrently(
-        adapter, selected_cells, concurrency=args.parallel, reporter=reporter
-    )
-
     reviewed = 0
     finding_ids: list[str] = []
     first_failure: tuple[ReviewCell, ReviewAdapterError] | None = None
 
-    for selected in selected_cells:
-        outcome = _review_cell_outcome(results, selected)
+    def persist_outcome(
+        selected: ReviewCell, outcome: ReviewAdapterResult | ReviewAdapterError
+    ) -> None:
+        nonlocal reviewed, first_failure
         if isinstance(outcome, ReviewAdapterError):
             if first_failure is None:
                 first_failure = (selected, outcome)
-            continue
-        for comment in outcome.comments:
-            finding = normalize_ocr_comment(
-                comment,
-                repository_id=str(root.resolve()),
-                base_target=json.dumps(metadata["target"], sort_keys=True),
-                rule_id=selected.rule_id,
+            return
+        finding_ids.extend(
+            _persist_successful_review_outcome(
+                store=store,
+                root=root,
+                session_id=session_id,
+                run_id=run_id,
+                cell=selected,
+                outcome=outcome,
+                metadata=metadata,
                 ruleset_digest=ruleset.digest,
             )
-            finding_ids.append(store.upsert_finding(session_id, run_id, selected.id, finding))
-        store.refresh_file_digest(session_id, selected.file_path, selected.content_digest)
-        store.mark_cell_reviewed(session_id, selected)
+        )
         reviewed += 1
+
+    try:
+        review_cells_concurrently(
+            adapter,
+            selected_cells,
+            concurrency=args.parallel,
+            reporter=reporter,
+            on_result=persist_outcome,
+        )
+    except KeyboardInterrupt:
+        status = _status(store, root)
+        _emit(
+            {
+                "run_id": run_id,
+                "reviewed_cells": reviewed,
+                "finding_ids": finding_ids,
+                "interrupted": True,
+                **status,
+            },
+            args.format,
+        )
+        raise
     status = _status(store, root)
     if first_failure is not None:
         failed_cell, error = first_failure
@@ -1272,12 +1294,39 @@ def _select_review_cells(
     )
 
 
+def _persist_successful_review_outcome(
+    *,
+    store: SessionStore,
+    root: Path,
+    session_id: str,
+    run_id: int,
+    cell: ReviewCell,
+    outcome: ReviewAdapterResult,
+    metadata: dict[str, Any],
+    ruleset_digest: str,
+) -> list[str]:
+    finding_ids: list[str] = []
+    for comment in outcome.comments:
+        finding = normalize_ocr_comment(
+            comment,
+            repository_id=str(root.resolve()),
+            base_target=json.dumps(metadata["target"], sort_keys=True),
+            rule_id=cell.rule_id,
+            ruleset_digest=ruleset_digest,
+        )
+        finding_ids.append(store.upsert_finding(session_id, run_id, cell.id, finding))
+    store.refresh_file_digest(session_id, cell.file_path, cell.content_digest)
+    store.mark_cell_reviewed(session_id, cell)
+    return finding_ids
+
+
 def review_cells_concurrently(
     adapter: ReviewAdapter,
     cells: list[ReviewCell],
     *,
     concurrency: int,
     reporter: ReviewProgressReporter | None = None,
+    on_result: Callable[[ReviewCell, ReviewAdapterResult | ReviewAdapterError], None] | None = None,
 ) -> dict[str, ReviewAdapterResult | ReviewAdapterError]:
     if not cells:
         return {}
@@ -1286,30 +1335,34 @@ def review_cells_concurrently(
     max_workers = min(concurrency, len(cells), 64)
     executor = ThreadPoolExecutor(max_workers=max_workers)
     futures: dict[Future[ReviewAdapterResult], ReviewCell] = {}
+    processed: set[Future[ReviewAdapterResult]] = set()
     interrupted = False
     try:
         for cell in cells:
             progress.cell_start(cell)
             futures[executor.submit(adapter.review, cell)] = cell
         for future in as_completed(futures):
-            cell = futures[future]
-            try:
-                results[cell.id] = future.result()
-                progress.cell_success(cell)
-            except ReviewAdapterError as exc:
-                results[cell.id] = exc
-                if _is_timeout_failure(exc):
-                    progress.cell_timeout(cell, exc)
-                else:
-                    progress.cell_failure(cell, exc)
-            except Exception as exc:
-                error = _unexpected_adapter_error(cell, exc)
-                results[cell.id] = error
-                progress.cell_failure(cell, error)
+            _record_completed_review_future(
+                future=future,
+                cell=futures[future],
+                results=results,
+                processed=processed,
+                progress=progress,
+                on_result=on_result,
+            )
     except KeyboardInterrupt:
         interrupted = True
         cancel_adapter(adapter)
+        _drain_completed_review_futures(
+            futures=futures,
+            results=results,
+            processed=processed,
+            progress=progress,
+            on_result=on_result,
+        )
         for future, cell in futures.items():
+            if future in processed:
+                continue
             if not future.done():
                 future.cancel()
                 progress.cell_cancelled(cell)
@@ -1319,16 +1372,60 @@ def review_cells_concurrently(
     return results
 
 
-def _review_cell_outcome(
-    results: dict[str, ReviewAdapterResult | ReviewAdapterError], cell: ReviewCell
-) -> ReviewAdapterResult | ReviewAdapterError:
-    outcome = results.get(cell.id)
-    if outcome is not None:
-        return outcome
-    return ReviewAdapterError(
-        f"review cell produced no result: {cell.id}",
-        failure={"error": "missing review result", "cell_id": cell.id},
-    )
+def _drain_completed_review_futures(
+    *,
+    futures: dict[Future[ReviewAdapterResult], ReviewCell],
+    results: dict[str, ReviewAdapterResult | ReviewAdapterError],
+    processed: set[Future[ReviewAdapterResult]],
+    progress: ReviewProgressReporter,
+    on_result: Callable[[ReviewCell, ReviewAdapterResult | ReviewAdapterError], None] | None,
+) -> None:
+    for future, cell in futures.items():
+        if future in processed or not future.done():
+            continue
+        _record_completed_review_future(
+            future=future,
+            cell=cell,
+            results=results,
+            processed=processed,
+            progress=progress,
+            on_result=on_result,
+        )
+
+
+def _record_completed_review_future(
+    *,
+    future: Future[ReviewAdapterResult],
+    cell: ReviewCell,
+    results: dict[str, ReviewAdapterResult | ReviewAdapterError],
+    processed: set[Future[ReviewAdapterResult]],
+    progress: ReviewProgressReporter,
+    on_result: Callable[[ReviewCell, ReviewAdapterResult | ReviewAdapterError], None] | None,
+) -> None:
+    if future in processed:
+        return
+    processed.add(future)
+    try:
+        outcome: ReviewAdapterResult | ReviewAdapterError = future.result()
+        progress.cell_success(cell)
+    except ReviewAdapterError as exc:
+        outcome = exc
+        if _is_timeout_failure(exc):
+            progress.cell_timeout(cell, exc)
+        else:
+            progress.cell_failure(cell, exc)
+    except CancelledError:
+        outcome = ReviewAdapterError(
+            f"review cell cancelled before producing a result: {cell.id}",
+            failure={"error": "cancelled review result", "cell_id": cell.id},
+        )
+        progress.cell_failure(cell, outcome)
+    except Exception as exc:
+        outcome = _unexpected_adapter_error(cell, exc)
+        progress.cell_failure(cell, outcome)
+    results[cell.id] = outcome
+    if on_result is not None:
+        on_result(cell, outcome)
 
 
 def _is_timeout_failure(error: ReviewAdapterError) -> bool:
