@@ -18,6 +18,7 @@ ARTIFACT_EXCLUDED_DIR_NAMES = {
     ".ruff_cache",
     ".pyright",
     ".mypy_cache",
+    ".codegraph",
     "build",
     "dist",
     "wheels",
