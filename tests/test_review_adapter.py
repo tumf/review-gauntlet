@@ -20,6 +20,7 @@ from review_gauntlet.review_adapter import (
     _line_column_position,  # pyright: ignore[reportPrivateUsage]
     _process_output_text,  # pyright: ignore[reportPrivateUsage]
     _raw_snippet,  # pyright: ignore[reportPrivateUsage]
+    build_resolve_prompt,
     cancel_adapter,
 )
 from review_gauntlet.review_cells import ReviewCell
@@ -46,6 +47,29 @@ def _review_cell(tmp_path: Path) -> ReviewCell:
         slice_id="docs",
         content_digest="digest",
     )
+
+
+def test_build_resolve_prompt_limits_open_finding_target_states(tmp_path: Path) -> None:
+    continuation_path = tmp_path / ".review-gauntlet" / "turns" / "RGS-test" / "open.json"
+
+    prompt = build_resolve_prompt(
+        repository_root=str(tmp_path),
+        file_path="README.md",
+        findings=(
+            {
+                "finding_id": "RGF-0001",
+                "state": "open",
+                "rule_id": "docs",
+                "content": "not a real issue",
+            },
+        ),
+        continuation_path=str(continuation_path),
+    )
+
+    assert "allowed_target_states: confirmed, dismissed" in prompt
+    assert "Each resolution.state must be one of the allowed_target_states" in prompt
+    assert "use confirmed for real issues or dismissed for false positives" in prompt
+    assert "false_positive, accepted_risk, waived" not in prompt
 
 
 def test_fake_adapter_emits_fixture_comments(tmp_path: Path) -> None:

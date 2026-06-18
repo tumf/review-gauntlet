@@ -48,6 +48,7 @@ from review_gauntlet.continuation import (
 )
 from review_gauntlet.coverage_projection import build_session_coverage_projection
 from review_gauntlet.findings import (
+    ALLOWED_TRANSITIONS,
     FindingResolution,
     FindingState,
     assert_transition_allowed,
@@ -797,11 +798,22 @@ def _validate_active_session_resolution_transitions(
         try:
             assert_transition_allowed(current, desired)
         except ValueError as exc:
+            allowed = _allowed_transition_values(current)
+            hint = (
+                f"allowed target states for current state {current.value}: {', '.join(allowed)}"
+                if allowed
+                else f"current state {current.value} is terminal; no transitions are allowed"
+            )
             raise ValueError(
                 "turn verdict contains invalid finding transition for active session "
                 f"{session_id}: finding_id={resolution.finding_id} "
-                f"{current.value} -> {desired.value}"
+                f"current_state={current.value} requested_state={desired.value}; "
+                f"attempted transition {current.value} -> {desired.value}; {hint}"
             ) from exc
+
+
+def _allowed_transition_values(state: FindingState) -> tuple[str, ...]:
+    return tuple(sorted(target.value for target in ALLOWED_TRANSITIONS[state]))
 
 
 def _sql_placeholders(count: int) -> str:
@@ -1614,10 +1626,12 @@ def _ready_prompt_segments(reason: str) -> tuple[list[str], str, str]:
     return (
         [
             "1. resolve: examine the open findings listed in 'Findings for this file' below.",
-            "   Confirm and fix real issues or dismiss non-issues with a reason.",
+            "   Confirm real issues or dismiss non-issues with a durable reason.",
             "   Do NOT discover new findings.",
-            "2. mark: record each finding as confirmed, fixed_pending_verification,"
-            " fixed_verified, false_positive, accepted_risk, waived, or dismissed.",
+            "2. mark: record each finding using only the allowed_target_states shown on that "
+            "finding line.",
+            "   For open findings, valid targets are confirmed or dismissed only.",
+            "   False positives and other non-issues must be state=dismissed with dismiss_reason.",
         ],
         "Stop when all findings listed below have been resolved.",
         "## Review cells for this file (context only, do NOT review for new findings)",
@@ -1698,7 +1712,10 @@ def _ready_finding_lines(findings: tuple[_ReadyFinding, ...]) -> list[str]:
         return ["- none"]
     return [
         "- "
-        f"finding_id: {finding.finding_id}; state: {finding.state}; rule_id: {finding.rule_id}; "
+        f"finding_id: {finding.finding_id}; state: {finding.state}; "
+        f"allowed_target_states: "
+        f"{', '.join(_allowed_transition_values(FindingState(finding.state))) or 'none'}; "
+        f"rule_id: {finding.rule_id}; "
         f"latest_cell_id: {finding.latest_cell_id or 'none'}; "
         f"line_range: {_line_range_text(finding)}; content: {_summarize_text(finding.content)}"
         for finding in sorted(actionable, key=lambda finding: (finding.state, finding.finding_id))

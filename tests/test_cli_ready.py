@@ -54,6 +54,10 @@ def test_ready_prioritizes_pending_cells_then_open_findings_then_finalize(
     main(["ready", str(tmp_path), "--format", "json"])
     prompt = json.loads(capsys.readouterr().out)["prompt"]
     assert "open findings need resolution" in prompt
+    assert "allowed_target_states: confirmed, dismissed" in prompt
+    assert "For open findings, valid targets are confirmed or dismissed only" in prompt
+    assert "False positives and other non-issues must be state=dismissed" in prompt
+    assert "false_positive, accepted_risk, waived" not in prompt
 
     with SessionStore(tmp_path).connect() as conn:
         conn.execute("update findings set state = 'dismissed'")
