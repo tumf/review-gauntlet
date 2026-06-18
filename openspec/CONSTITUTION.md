@@ -8,67 +8,72 @@ review-gauntlet is software that manages not only the results of AI code review,
 
 ## Principles
 
-### 1. Coverage is a product
+### Coverage is a product
 
 Review coverage is not a byproduct.
 It is a first-class output of review-gauntlet.
 
-### 2. Reviewed means executed, not safe
+### The system tracks coverage
 
-`reviewed` does not mean "is safe."
-`reviewed` means only that the defined target was reviewed with the defined rule, in a verifiable form.
+Reviewed scope should not rely only on the LLM's self-reporting.
+The system keeps enough structured state to show which targets were reviewed and which remain.
 
-### 3. The system records coverage
-
-Reviewed scope must not be determined by the LLM's self-reporting.
-The system records it based on file, rule, slice, prompt, model, and code digest.
-
-### 4. Unknown must stay visible
+### Unknown must stay visible
 
 Unreviewed, failed, open, and needs-retry states must not be hidden.
 Incompleteness is part of the output.
 
-### 5. One review command advances one phase
+### One review command advances one phase
 
 `review-gauntlet review` advances the session by exactly one review phase.
 It must not run the resolve phase or finalize the session.
 
-### 6. Orchestration is external
+### Orchestration is external
 
 Developer notification, fix-waiting, retry loops, and CI control are external concerns.
 review-gauntlet provides state and verdicts.
 
-### 7. Findings are stateful
+### Findings are stateful
 
-Every finding is assigned a stable ID.
-A re-detected issue must not be treated as a separate new finding.
+Findings should have stable enough identity to avoid reporting the same issue as new on every pass.
+The system should favor continuity over perfect provenance.
 
-### 8. Human decisions are ledger entries
+### Human decisions are lightweight state
 
-Decisions such as fixed, waived, false positive, and accepted risk must be recorded in a ledger.
-The reason, actor, and timestamp of the decision must never be lost.
+Decisions such as fixed, waived, false positive, and accepted risk should be recorded simply enough to resume work later.
+The system should preserve the decision and a short reason without turning normal review into audit bureaucracy.
 
-### 9. Resolution records judgment and action together
+### Resolution records outcome and next step
 
-Finding resolution must record whether each open finding was confirmed or dismissed.
-Confirmed findings are fixed in the same resolve phase; dismissed findings require a durable reason.
+Finding resolution should record whether each open finding was confirmed or dismissed.
+Confirmed findings should lead to a fix attempt; dismissed findings should include a short reason.
 
-### 10. Completion requires two closures
+### Completion requires two closures
 
 Session completion requires both of the following:
 - The current review coverage is in a terminal state.
 - All live findings are in a terminal state.
 
-### 11. Review truth is deterministic per session
+### Review truth is scoped to the session
 
-Review truth is scoped to the deterministic target, rule, prompt, and code digest recorded for the session.
-Old review results must not be treated as current truth outside that recorded session context.
+Review results are valid for the session inputs they were produced from.
+Old results should not be treated as current after the target or review intent changes.
 
-### 12. Determinism before cleverness
+### Determinism before cleverness
 
-Before making the LLM behave intelligently, implement target partitioning, ID generation, dedupe, coverage computation, and state transitions deterministically.
+Before making the LLM behave intelligently, implement target partitioning, dedupe, coverage computation, and state transitions predictably.
 
-### 13. Be explicit, not optimistic
+### Be explicit, not optimistic
 
 review-gauntlet must never claim "we've probably seen everything."
 Always be explicit about: reviewed scope, unreviewed scope, decided items, and undecided items.
+
+### Best-effort completion over early abort
+
+When an error occurs during a review session, the system must continue processing remaining targets rather than aborting the entire session.
+Individual failures are recorded as failed status on the affected target; unaffected targets must still be reviewed.
+
+### Bounded progress, no infinite loops
+
+Every loop in the orchestration must have an explicit upper bound (e.g., max retries, max phases, max iterations).
+If progress stalls — no state transition after a bounded number of attempts — the system must halt with a clear diagnostic rather than retry indefinitely.
