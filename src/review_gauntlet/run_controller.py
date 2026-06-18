@@ -515,10 +515,8 @@ class RunController:
                 failed=command_result.failure is not None,
             )
             if command_result.failure is not None:
-                if (
-                    command_result.failure.get("reason") == "invalid_step_verdict"
-                    and step_number < self.max_steps
-                ):
+                failure_reason = str(command_result.failure.get("reason", "command_failed"))
+                if failure_reason == "invalid_step_verdict" and step_number < self.max_steps:
                     pending_retry_task = dataclasses.replace(
                         ready_task,
                         prompt=_prompt_with_invalid_verdict_diagnostic(
@@ -533,11 +531,28 @@ class RunController:
                     )
                     self.refresh()
                     continue
-                self._emit("failed", reason=command_result.failure.get("reason", "command_failed"))
+                if failure_reason == "no_progress" and step_number < self.max_steps:
+                    pending_retry_task = dataclasses.replace(
+                        ready_task,
+                        prompt=_prompt_with_no_progress_diagnostic(
+                            ready_task.prompt, command_result.failure
+                        ),
+                    )
+                    self._emit(
+                        "retry_scheduled",
+                        reason="no_progress",
+                        task_key=command_result.failure.get("task_key"),
+                        target_ids=command_result.failure.get("target_ids"),
+                        verdict_path=command_result.failure.get("verdict_path"),
+                        next_step=step_number + 1,
+                    )
+                    self.refresh()
+                    continue
+                self._emit("failed", reason=failure_reason)
                 return _run_result(
                     completed=False,
                     steps=steps,
-                    reason=str(command_result.failure.get("reason", "command_failed")),
+                    reason=failure_reason,
                     error=str(command_result.failure.get("error", "command failed")),
                     session_id=session_id,
                 )
@@ -670,6 +685,50 @@ def _prompt_with_invalid_verdict_diagnostic(prompt: str, failure: Mapping[str, o
             "this turn after validation returns valid=true.",
         ]
     )
+
+
+def _prompt_with_no_progress_diagnostic(prompt: str, failure: Mapping[str, object]) -> str:
+    verdict_path = str(failure.get("verdict_path") or "unknown")
+    task_key = str(failure.get("task_key") or "unknown")
+    target_ids = _diagnostic_string_sequence(failure.get("target_ids"))
+    verdict = str(failure.get("verdict") or "unknown")
+    artifact_context = _diagnostic_artifact_context(failure.get("artifact_context"))
+    return "\n".join(
+        [
+            prompt,
+            "",
+            "## Previous no-progress turn",
+            "The previous continuation verdict was syntactically valid, but review-gauntlet",
+            "detected that none of the targeted session state changed. Do not just write",
+            "another finish/continue verdict. First perform the concrete mutation required by",
+            "the ready task: mark the target, apply the review state transition, finalize the",
+            "session, or otherwise update the repository/session state requested above.",
+            f"verdict_path: {verdict_path}",
+            f"task_key: {task_key}",
+            f"target_ids: {', '.join(target_ids) if target_ids else 'unknown'}",
+            f"previous_verdict: {verdict}",
+            f"artifacts: {artifact_context}",
+            "After the required state change is complete, write the verdict for the same ready",
+            "task and include the validation evidence.",
+        ]
+    )
+
+
+def _diagnostic_string_sequence(value: object) -> tuple[str, ...]:
+    if isinstance(value, str):
+        return (value,) if value else ()
+    if not isinstance(value, tuple | list):
+        return ()
+    items = cast(tuple[object, ...] | list[object], value)
+    return tuple(text for item in items if (text := str(item)))
+
+
+def _diagnostic_artifact_context(value: object) -> str:
+    if not isinstance(value, Mapping):
+        return "none"
+    typed_value = cast(Mapping[object, object], value)
+    parts = [f"{key}={item}" for key, item in typed_value.items() if item is not None]
+    return "; ".join(parts) if parts else "none"
 
 
 def _progress_target_from_prompt(prompt: str) -> ProgressTarget:
