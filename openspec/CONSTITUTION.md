@@ -13,10 +13,10 @@ review-gauntlet is software that manages not only the results of AI code review,
 Review coverage is not a byproduct.
 It is a first-class output of review-gauntlet.
 
-### The system records coverage
+### The system tracks coverage
 
-Reviewed scope must not be determined by the LLM's self-reporting.
-The system records it based on file, rule, slice, prompt, model, and code digest.
+Reviewed scope should not rely only on the LLM's self-reporting.
+The system keeps enough structured state to show which targets were reviewed and which remain.
 
 ### Unknown must stay visible
 
@@ -35,18 +35,18 @@ review-gauntlet provides state and verdicts.
 
 ### Findings are stateful
 
-Every finding is assigned a stable ID.
-A re-detected issue must not be treated as a separate new finding.
+Findings should have stable enough identity to avoid reporting the same issue as new on every pass.
+The system should favor continuity over perfect provenance.
 
-### Human decisions are ledger entries
+### Human decisions are lightweight state
 
-Decisions such as fixed, waived, false positive, and accepted risk must be recorded in a ledger.
-The reason, actor, and timestamp of the decision must never be lost.
+Decisions such as fixed, waived, false positive, and accepted risk should be recorded simply enough to resume work later.
+The system should preserve the decision and a short reason without turning normal review into audit bureaucracy.
 
-### Resolution records judgment and action together
+### Resolution records outcome and next step
 
-Finding resolution must record whether each open finding was confirmed or dismissed.
-Confirmed findings are fixed in the same resolve phase; dismissed findings require a durable reason.
+Finding resolution should record whether each open finding was confirmed or dismissed.
+Confirmed findings should lead to a fix attempt; dismissed findings should include a short reason.
 
 ### Completion requires two closures
 
@@ -54,14 +54,14 @@ Session completion requires both of the following:
 - The current review coverage is in a terminal state.
 - All live findings are in a terminal state.
 
-### Review truth is deterministic per session
+### Review truth is scoped to the session
 
-Review truth is scoped to the deterministic target, rule, prompt, and code digest recorded for the session.
-Old review results must not be treated as current truth outside that recorded session context.
+Review results are valid for the session inputs they were produced from.
+Old results should not be treated as current after the target or review intent changes.
 
 ### Determinism before cleverness
 
-Before making the LLM behave intelligently, implement target partitioning, ID generation, dedupe, coverage computation, and state transitions deterministically.
+Before making the LLM behave intelligently, implement target partitioning, dedupe, coverage computation, and state transitions predictably.
 
 ### Be explicit, not optimistic
 
