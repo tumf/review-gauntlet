@@ -824,7 +824,7 @@ def _cmd_init(args: argparse.Namespace, root: Path, store: SessionStore) -> None
         )
     else:
         target = target_from_latest_checkpoint(root) or TargetSpec(
-            kind=TargetKind.WORKTREE,
+            kind=TargetKind.ALL,
             head_mode=HeadMode.MOVING,
         )
     ruleset = load_ruleset()

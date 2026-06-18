@@ -34,6 +34,7 @@ class TargetSpec(BaseModel):
     head_ref: str | None = None
     commit: str | None = None
     head_mode: HeadMode
+    include_worktree: bool = False
 
 
 def resolve_target(
@@ -74,7 +75,13 @@ def changed_files_for_target(root: Path, target: TargetSpec) -> tuple[str, ...] 
         if target.base_ref is None or target.head_ref is None:
             raise ValueError("branch target requires base_ref and head_ref")
         output = _git(root, "diff", "--name-only", target.base_ref, target.head_ref)
-        return _split_git_paths(output)
+        branch_paths = _split_git_paths(output)
+        if not target.include_worktree:
+            return branch_paths
+        worktree_paths = _workspace_changed_files(root)
+        if worktree_paths is None:
+            return None
+        return tuple(sorted(set(branch_paths) | set(worktree_paths)))
     if target.kind == TargetKind.COMMIT:
         if target.commit is None:
             raise ValueError("commit target requires commit")

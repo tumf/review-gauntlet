@@ -109,7 +109,11 @@ def target_from_latest_checkpoint(root: Path) -> TargetSpec | None:
         raise ValueError("latest checkpoint review_base_commit must be a string")
     head = _git(root, "rev-parse", "--verify", "HEAD^{commit}")
     return TargetSpec(
-        kind=TargetKind.BRANCH, base_ref=base, head_ref=head, head_mode=HeadMode.MOVING
+        kind=TargetKind.BRANCH,
+        base_ref=base,
+        head_ref=head,
+        head_mode=HeadMode.MOVING,
+        include_worktree=True,
     )
 
 

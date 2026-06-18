@@ -41,7 +41,7 @@ def _cell_paths(root: Path) -> set[str]:
     return {str(row["file_path"]) for row in SessionStore(root).list_cells()}
 
 
-def test_default_init_without_checkpoint_uses_worktree_changes(
+def test_default_init_without_checkpoint_uses_all_files(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _init_repo(tmp_path)
@@ -56,13 +56,13 @@ def test_default_init_without_checkpoint_uses_worktree_changes(
 
     data = json.loads(capsys.readouterr().out)
     assert data["cell_count"] > 0
-    assert _cell_paths(tmp_path) == {"staged.py", "unstaged.py", "untracked.py"}
+    assert _cell_paths(tmp_path) == {"unchanged.py", "staged.py", "unstaged.py", "untracked.py"}
     metadata = SessionStore(tmp_path).session_metadata()
-    assert metadata["target"]["kind"] == "worktree"
+    assert metadata["target"]["kind"] == "all"
     assert "review_head_commit" not in metadata
 
 
-def test_default_init_reviews_worktree_files(
+def test_default_init_reviews_all_eligible_files(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _init_repo(tmp_path)
@@ -80,10 +80,10 @@ def test_default_init_reviews_worktree_files(
     main(["init", str(tmp_path), "--format", "json"])
 
     assert json.loads(capsys.readouterr().out)["cell_count"] > 0
-    assert _cell_paths(tmp_path) == {"changed.py"}
+    assert _cell_paths(tmp_path) == {"unchanged.py", "changed.py"}
 
 
-def test_package_only_worktree_changes_create_empty_default_target(
+def test_package_only_worktree_changes_still_review_all_default_target(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _init_repo(tmp_path)
@@ -94,14 +94,14 @@ def test_package_only_worktree_changes_create_empty_default_target(
     main(["init", str(tmp_path), "--format", "json"])
 
     data = json.loads(capsys.readouterr().out)
-    assert data["cell_count"] == 0
+    assert data["cell_count"] > 0
     assert data["run_count"] == 0
     assert data["run_state"] == "none"
-    assert data["next_command"] is None
-    assert _cell_paths(tmp_path) == set()
+    assert data["next_command"] == "review-gauntlet review"
+    assert _cell_paths(tmp_path) == {"unchanged.py"}
 
 
-def test_package_only_worktree_changes_text_output_has_empty_default_target(
+def test_package_only_worktree_changes_text_output_has_all_default_target(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _init_repo(tmp_path)
@@ -112,10 +112,10 @@ def test_package_only_worktree_changes_text_output_has_empty_default_target(
     main(["init", str(tmp_path)])
 
     output = capsys.readouterr().out
-    assert "cell_count: 0" in output
+    assert "cell_count: 0" not in output
     assert "run_count: 0" in output
     assert "run_state: none" in output
-    assert "next_command: None" in output
+    assert "next_command: review-gauntlet review" in output
 
 
 def test_plain_init_does_not_emit_or_run_setup(
@@ -142,14 +142,37 @@ def test_branch_range_init_scopes_to_changed_files(
     _git(tmp_path, "add", "feature.py", "package.json", "go.sum")
     _git(tmp_path, "commit", "-m", "feature")
     head = _git(tmp_path, "rev-parse", "HEAD")
+    (tmp_path / "uncommitted.py").write_text("print('uncommitted')\n", encoding="utf-8")
 
     main(["init", str(tmp_path), "--from", base, "--to", head, "--format", "json"])
 
     assert json.loads(capsys.readouterr().out)["cell_count"] > 0
     assert _cell_paths(tmp_path) == {"feature.py"}
+    metadata = SessionStore(tmp_path).session_metadata()
+    assert (
+        "include_worktree" not in metadata["target"]
+        or metadata["target"]["include_worktree"] is False
+    )
 
 
-def test_default_init_uses_latest_checkpoint_base_to_head(
+def test_worktree_init_excludes_committed_and_unchanged_files(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_repo(tmp_path)
+    (tmp_path / "committed.py").write_text("print('committed')\n", encoding="utf-8")
+    _git(tmp_path, "add", "committed.py")
+    _git(tmp_path, "commit", "-m", "committed")
+    (tmp_path / "worktree.py").write_text("print('worktree')\n", encoding="utf-8")
+
+    main(["init", str(tmp_path), "--worktree", "--format", "json"])
+
+    assert json.loads(capsys.readouterr().out)["cell_count"] > 0
+    metadata = SessionStore(tmp_path).session_metadata()
+    assert metadata["target"]["kind"] == "worktree"
+    assert _cell_paths(tmp_path) == {"worktree.py"}
+
+
+def test_default_init_uses_latest_checkpoint_base_to_head_plus_worktree(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _init_repo(tmp_path)
@@ -158,6 +181,12 @@ def test_default_init_uses_latest_checkpoint_base_to_head(
     (tmp_path / "after.py").write_text("print('after')\n", encoding="utf-8")
     _git(tmp_path, "add", "after.py")
     _git(tmp_path, "commit", "-m", "after")
+    (tmp_path / "staged.py").write_text("print('staged')\n", encoding="utf-8")
+    (tmp_path / "unstaged.py").write_text("print('unstaged')\n", encoding="utf-8")
+    (tmp_path / "untracked.py").write_text("print('untracked')\n", encoding="utf-8")
+    _git(tmp_path, "add", "staged.py")
+    _git(tmp_path, "add", "unstaged.py")
+    (tmp_path / "unstaged.py").write_text("print('unstaged changed')\n", encoding="utf-8")
 
     main(["init", str(tmp_path), "--format", "json"])
 
@@ -165,7 +194,8 @@ def test_default_init_uses_latest_checkpoint_base_to_head(
     metadata = SessionStore(tmp_path).session_metadata()
     assert metadata["target"]["kind"] == "branch"
     assert metadata["target"]["base_ref"] == base
-    assert _cell_paths(tmp_path) == {"after.py"}
+    assert metadata["target"]["include_worktree"] is True
+    assert _cell_paths(tmp_path) == {"after.py", "staged.py", "unstaged.py", "untracked.py"}
 
 
 def test_default_init_rejects_invalid_latest_checkpoint(
@@ -483,9 +513,9 @@ def test_default_init_ignores_unsafe_latest_checkpoint_pointer(
     main(["init", str(tmp_path), "--format", "json"])
 
     data = json.loads(capsys.readouterr().out)
-    assert data["cell_count"] == 0
+    assert data["cell_count"] > 0
     metadata = SessionStore(tmp_path).session_metadata()
-    assert metadata["target"]["kind"] == "worktree"
+    assert metadata["target"]["kind"] == "all"
     assert "review_head_commit" not in metadata
 
 
@@ -542,7 +572,7 @@ def test_init_then_all_init_allows_overlapping_review_cells(
 
     main(["init", str(tmp_path), "--all", "--format", "json"])
     second = json.loads(capsys.readouterr().out)
-    assert second["cell_count"] > first["cell_count"]
+    assert second["cell_count"] == first["cell_count"]
     assert second["session_id"] != first["session_id"]
 
     main(["status", str(tmp_path), "--format", "json"])
