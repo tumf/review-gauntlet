@@ -1,0 +1,40 @@
+{
+  "checkpoint_id": "RGC-76e3ccec22b1-RGS-efeeca905d3a",
+  "events": [
+    {
+      "checkpoint_id": "RGC-76e3ccec22b1-RGS-efeeca905d3a",
+      "created_at": "2026-06-18 11:35:58",
+      "event_id": 1681,
+      "finding_id": "RGF-1017",
+      "from_state": "open",
+      "metadata": {
+        "dismiss_reason": "False positive: _git() at line 111 is wrapped in a try/except CalledProcessError block starting at line 110; the exception is properly caught and re-raised as ValueError. The finding incorrectly asserts it is uncaught."
+      },
+      "reason": "False positive: _git() at line 111 is wrapped in a try/except CalledProcessError block starting at line 110; the exception is properly caught and re-raised as ValueError. The finding incorrectly asserts it is uncaught.",
+      "to_state": "dismissed"
+    },
+    {
+      "checkpoint_id": "RGC-76e3ccec22b1-RGS-efeeca905d3a",
+      "created_at": "2026-06-18 11:36:02",
+      "event_id": 1682,
+      "finding_id": "RGF-1018",
+      "from_state": "open",
+      "metadata": {
+        "dismiss_reason": "Accepted risk: write_latest_checkpoint() is an internal API called only from trusted finalize code within the library. The status values (coverage, finding_state_counts, run_count, blockers) come from SessionStore which returns well-typed data. JSON serialization provides a basic type gate; _validate_latest_checkpoint() catches structural issues on load. Adding runtime type assertions would be redundant over trusted internal callers."
+      },
+      "reason": "Accepted risk: write_latest_checkpoint() is an internal API called only from trusted finalize code within the library. The status values (coverage, finding_state_counts, run_count, blockers) come from SessionStore which returns well-typed data. JSON serialization provides a basic type gate; _validate_latest_checkpoint() catches structural issues on load. Adding runtime type assertions would be redundant over trusted internal callers.",
+      "to_state": "dismissed"
+    },
+    {
+      "checkpoint_id": "RGC-76e3ccec22b1-RGS-efeeca905d3a",
+      "created_at": "2026-06-18 11:36:07",
+      "event_id": 1683,
+      "finding_id": "RGF-1019",
+      "from_state": "open",
+      "metadata": {},
+      "reason": "Real gap: _validate_latest_checkpoint() (lines 120-212) contains 20+ distinct validation branches covering schema_version, checkpoint_id integrity, findings.json/events.json structure, field type checks, base commit SHA format, and git ancestry. No test evidence was found for these branches. This is critical checkpoint integrity logic where untested edge cases could allow a corrupted checkpoint to be silently accepted as valid.",
+      "to_state": "confirmed"
+    }
+  ],
+  "schema_version": 1
+}

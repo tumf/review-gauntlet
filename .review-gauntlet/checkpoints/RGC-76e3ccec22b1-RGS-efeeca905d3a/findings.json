@@ -1,0 +1,69 @@
+{
+  "checkpoint_id": "RGC-76e3ccec22b1-RGS-efeeca905d3a",
+  "findings": [
+    {
+      "checkpoint_id": "RGC-76e3ccec22b1-RGS-efeeca905d3a",
+      "content": "target_from_latest_checkpoint() calls _git(root, 'rev-parse', '--verify', 'HEAD^{commit}') at line 110 without catching subprocess.CalledProcessError. If HEAD does not resolve (empty repo, detached HEAD failure, or git corruption), the raw CalledProcessError propagates to CLI callers. All other git invocations in _validate_latest_checkpoint() (lines 199-212) are wrapped in try/except CalledProcessError with descriptive ValueError messages. This inconsistency breaks the agent-friendly CLI contract: callers must unexpectedly handle subprocess.CalledProcessError from a function whose signature gives no indication of that possibility.",
+      "finding_id": "RGF-1017",
+      "fingerprint": "7b3bee95840690eaaf1a22837df845012e05cfffa4e18bc377fd192f2a42dc1c",
+      "latest_occurrence": {
+        "cell_id": "RGC-3f61aac0876a0d2e",
+        "end_line": 110,
+        "finding_id": "RGF-1017",
+        "imprecise": 0,
+        "occurrence_id": 1017,
+        "path": "src/review_gauntlet/checkpoint.py",
+        "run_id": 304,
+        "start_line": 110
+      },
+      "metadata": "{\"fingerprint\":\"7b3bee95840690eaaf1a22837df845012e05cfffa4e18bc377fd192f2a42dc1c\",\"path\":\"src/review_gauntlet/checkpoint.py\",\"rule_id\":\"cli-contract\",\"content\":\"target_from_latest_checkpoint() calls _git(root, 'rev-parse', '--verify', 'HEAD^{commit}') at line 110 without catching subprocess.CalledProcessError. If HEAD does not resolve (empty repo, detached HEAD failure, or git corruption), the raw CalledProcessError propagates to CLI callers. All other git invocations in _validate_latest_checkpoint() (lines 199-212) are wrapped in try/except CalledProcessError with descriptive ValueError messages. This inconsistency breaks the agent-friendly CLI contract: callers must unexpectedly handle subprocess.CalledProcessError from a function whose signature gives no indication of that possibility.\",\"suggestion_code\":\"\",\"existing_code\":\"\",\"start_line\":110,\"end_line\":110,\"thinking\":null,\"imprecise\":false,\"dismiss_reason\":null}",
+      "path": "src/review_gauntlet/checkpoint.py",
+      "rule_id": "cli-contract",
+      "session_id": "RGS-efeeca905d3a",
+      "state": "dismissed"
+    },
+    {
+      "checkpoint_id": "RGC-76e3ccec22b1-RGS-efeeca905d3a",
+      "content": "write_latest_checkpoint() accepts status: dict[str, object] (line 264) but does not validate the types of values at lines 295-298 before use. status.get('coverage', {}) is passed directly into base_status, and _render_summary() at line 452 calls coverage.items() on it. If a caller passes status['coverage'] as a non-dict (e.g. a string, int, or None from a buggy serialization), the function writes a malformed checkpoint then raises AttributeError inside _render_summary rather than a clear validation error at the boundary. The input should be validated at the point of entry before any writes occur.",
+      "finding_id": "RGF-1018",
+      "fingerprint": "cd2cfda486a69bd576f8d8f0cb403b6e7e97ca83932e0e02d62282e8045aa876",
+      "latest_occurrence": {
+        "cell_id": "RGC-8769b06915f1af11",
+        "end_line": 298,
+        "finding_id": "RGF-1018",
+        "imprecise": 0,
+        "occurrence_id": 1018,
+        "path": "src/review_gauntlet/checkpoint.py",
+        "run_id": 304,
+        "start_line": 295
+      },
+      "metadata": "{\"fingerprint\":\"cd2cfda486a69bd576f8d8f0cb403b6e7e97ca83932e0e02d62282e8045aa876\",\"path\":\"src/review_gauntlet/checkpoint.py\",\"rule_id\":\"data-validation\",\"content\":\"write_latest_checkpoint() accepts status: dict[str, object] (line 264) but does not validate the types of values at lines 295-298 before use. status.get('coverage', {}) is passed directly into base_status, and _render_summary() at line 452 calls coverage.items() on it. If a caller passes status['coverage'] as a non-dict (e.g. a string, int, or None from a buggy serialization), the function writes a malformed checkpoint then raises AttributeError inside _render_summary rather than a clear validation error at the boundary. The input should be validated at the point of entry before any writes occur.\",\"suggestion_code\":\"\",\"existing_code\":\"\",\"start_line\":295,\"end_line\":298,\"thinking\":null,\"imprecise\":false,\"dismiss_reason\":null}",
+      "path": "src/review_gauntlet/checkpoint.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-efeeca905d3a",
+      "state": "dismissed"
+    },
+    {
+      "checkpoint_id": "RGC-76e3ccec22b1-RGS-efeeca905d3a",
+      "content": "_validate_latest_checkpoint() (lines 120-212) contains 20+ distinct validation branches covering schema_version, checkpoint_state, usable_as_review_base, SHA format, git ancestry, per-entry field presence, field types, and state-enum values. There are no direct unit tests for this function. The only test coverage is through two high-level CLI finalize tests (test_finalize_writes_checkpoint_with_two_phase_states and test_finalize_blocks_dirty_review_universe_without_override), which exercise only the happy path and one dirty-tree path. Edge cases \u2014 missing required fields, invalid SHA format, non-ancestor base commit, invalid finding state string \u2014 have no automated regression coverage, making it easy to silently break the validation logic.",
+      "finding_id": "RGF-1019",
+      "fingerprint": "20a2f89b0a02b3f9bbc8b46c87b821e9b7d9503c49ceed88be5640a015f72394",
+      "latest_occurrence": {
+        "cell_id": "RGC-f760d63617535770",
+        "end_line": 212,
+        "finding_id": "RGF-1019",
+        "imprecise": 0,
+        "occurrence_id": 1019,
+        "path": "src/review_gauntlet/checkpoint.py",
+        "run_id": 304,
+        "start_line": 120
+      },
+      "metadata": "{\"fingerprint\":\"20a2f89b0a02b3f9bbc8b46c87b821e9b7d9503c49ceed88be5640a015f72394\",\"path\":\"src/review_gauntlet/checkpoint.py\",\"rule_id\":\"test-evidence\",\"content\":\"_validate_latest_checkpoint() (lines 120-212) contains 20+ distinct validation branches covering schema_version, checkpoint_state, usable_as_review_base, SHA format, git ancestry, per-entry field presence, field types, and state-enum values. There are no direct unit tests for this function. The only test coverage is through two high-level CLI finalize tests (test_finalize_writes_checkpoint_with_two_phase_states and test_finalize_blocks_dirty_review_universe_without_override), which exercise only the happy path and one dirty-tree path. Edge cases \u2014 missing required fields, invalid SHA format, non-ancestor base commit, invalid finding state string \u2014 have no automated regression coverage, making it easy to silently break the validation logic.\",\"suggestion_code\":\"\",\"existing_code\":\"\",\"start_line\":120,\"end_line\":212,\"thinking\":null,\"imprecise\":false,\"dismiss_reason\":null}",
+      "path": "src/review_gauntlet/checkpoint.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-efeeca905d3a",
+      "state": "confirmed"
+    }
+  ],
+  "schema_version": 1
+}
