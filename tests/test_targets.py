@@ -4,9 +4,11 @@ from pathlib import Path
 
 import pytest
 
+import review_gauntlet.targets as targets_module
 from review_gauntlet.targets import (
     HeadMode,
     TargetKind,
+    TargetSpec,
     changed_files_for_target,
     file_digests,
     resolve_target,
@@ -124,6 +126,68 @@ def test_workspace_changed_files_tracks_staged_unstaged_and_untracked(tmp_path: 
         file_digests(tmp_path)["unstaged.py"]
         == hashlib.sha256(b"print('unstaged changed')\n").hexdigest()
     )
+
+
+def test_branch_target_with_worktree_inclusion_returns_union(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def fake_git(root: Path, *args: str) -> str:
+        assert root == tmp_path
+        assert args == ("diff", "--name-only", "base", "head")
+        return "committed.py\noverlap.py\n"
+
+    def fake_workspace_changed_files(root: Path) -> tuple[str, ...]:
+        assert root == tmp_path
+        return ("overlap.py", "staged.py", "unstaged.py", "untracked.py")
+
+    monkeypatch.setattr(targets_module, "_git", fake_git)
+    monkeypatch.setattr(
+        targets_module,
+        "_workspace_changed_files",
+        fake_workspace_changed_files,
+    )
+    target = TargetSpec(
+        kind=TargetKind.BRANCH,
+        base_ref="base",
+        head_ref="head",
+        head_mode=HeadMode.MOVING,
+        include_worktree=True,
+    )
+
+    assert changed_files_for_target(tmp_path, target) == (
+        "committed.py",
+        "overlap.py",
+        "staged.py",
+        "unstaged.py",
+        "untracked.py",
+    )
+
+
+def test_explicit_branch_target_excludes_worktree_changes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def fake_git(root: Path, *args: str) -> str:
+        assert root == tmp_path
+        return "committed.py\n"
+
+    def fake_workspace_changed_files(root: Path) -> tuple[str, ...]:
+        assert root == tmp_path
+        return ("uncommitted.py",)
+
+    monkeypatch.setattr(targets_module, "_git", fake_git)
+    monkeypatch.setattr(
+        targets_module,
+        "_workspace_changed_files",
+        fake_workspace_changed_files,
+    )
+    target = TargetSpec(
+        kind=TargetKind.BRANCH,
+        base_ref="base",
+        head_ref="head",
+        head_mode=HeadMode.MOVING,
+    )
+
+    assert changed_files_for_target(tmp_path, target) == ("committed.py",)
 
 
 def test_target_digest_and_file_digests_skip_symlink_escape(tmp_path: Path) -> None:
