@@ -1,0 +1,46 @@
+{
+  "blockers": [],
+  "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+  "checkpoint_state": "complete",
+  "coverage": {
+    "reviewed": 34
+  },
+  "created_at": "2026-06-18T08:46:23.926209Z",
+  "finding_state_counts": {
+    "accepted_risk": 4,
+    "dismissed": 2,
+    "false_positive": 12,
+    "fixed_verified": 9
+  },
+  "head_commit": "ba0cb48daa28747ddb34284bbd8211498ff520d5",
+  "last_run_target_digest": "7a7d6c5f1d782b394276c364b34169b4e8aa27cad147af8a095ae881214cf5a4",
+  "next_required_action": "init_next_session",
+  "review_base_commit": "ba0cb48daa28747ddb34284bbd8211498ff520d5",
+  "ruleset_digest": "8f6075fa8b3d8ad3606e0f850277b73de14cf786552139cd817a8bd18d34477c",
+  "run_count": 15,
+  "schema_version": 1,
+  "session_id": "RGS-0339f214c5ac",
+  "session_metadata": {
+    "review_head_commit": "db69cfe4ce9b4e9c976814933283eec6b0890da1",
+    "root": "/Users/tumf/work/review-gauntlet",
+    "ruleset_digest": "8f6075fa8b3d8ad3606e0f850277b73de14cf786552139cd817a8bd18d34477c",
+    "session_id": "RGS-0339f214c5ac",
+    "target": {
+      "base_ref": "f490a1af1a8043e59421934363af664f3ec74c3d",
+      "commit": null,
+      "head_mode": "moving",
+      "head_ref": "db69cfe4ce9b4e9c976814933283eec6b0890da1",
+      "kind": "branch"
+    },
+    "target_digest": "32ebc35655786b45e3f2fbed0fdd9942aac6f7073598ec7c4060d210c1688d9d"
+  },
+  "target": {
+    "base_ref": "f490a1af1a8043e59421934363af664f3ec74c3d",
+    "commit": null,
+    "head_mode": "moving",
+    "head_ref": "db69cfe4ce9b4e9c976814933283eec6b0890da1",
+    "kind": "branch"
+  },
+  "target_digest": "7a7d6c5f1d782b394276c364b34169b4e8aa27cad147af8a095ae881214cf5a4",
+  "usable_as_review_base": true
+}

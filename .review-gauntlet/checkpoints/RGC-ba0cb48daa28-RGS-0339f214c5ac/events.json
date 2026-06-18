@@ -1,0 +1,510 @@
+{
+  "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+  "events": [
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "created_at": "2026-06-18 02:29:37",
+      "event_id": 1628,
+      "finding_id": "RGF-0989",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "README.ja.md \u304c init --worktree, init --git-worktree, finalize --merge \u3092\u6587\u66f8\u5316\u3057\u3066\u3044\u308b\u304c\u3001\u3053\u308c\u3089\u306f\u30ec\u30d3\u30e5\u30fc\u5bfe\u8c61\u30b3\u30df\u30c3\u30c8(db69cfe4)\u6642\u70b9\u306eCLI\u306b\u5b58\u5728\u3057\u306a\u3044\u3002--git-worktree/finalize --merge\u306fremove-git-worktree-isolation(3764796)\u3067\u524a\u9664\u6e08\u307f\u3001--worktree\u306f\u672a\u5b9f\u88c5\u3002",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "created_at": "2026-06-18 02:29:47",
+      "event_id": 1629,
+      "finding_id": "RGF-0990",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "README\u306e\u30b3\u30de\u30f3\u30c9\u30bb\u30af\u30b7\u30e7\u30f3(\u884c219,228)\u3067\u3082--worktree\u30d5\u30e9\u30b0\u3092\u53c2\u7167\u3057\u3066\u3044\u308b\u304c\u3001\u3053\u306e\u30d5\u30e9\u30b0\u306f\u30ec\u30d3\u30e5\u30fc\u5bfe\u8c61\u30b3\u30df\u30c3\u30c8\u6642\u70b9\u306eCLI\u306b\u5b58\u5728\u3057\u306a\u3044\u3002init --worktree\u306eOCR\u4e92\u63db\u30de\u30c3\u30d4\u30f3\u30b0\u4f8b\u793a\u3082\u4e0d\u6b63\u78ba\u3002",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "created_at": "2026-06-18 02:31:09",
+      "event_id": 1630,
+      "finding_id": "RGF-0987",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "STDOUT_JSON mode uses completed.stdout directly at line 323-327 without any size guard, skipping the 1 MB VERDICT_OUTPUT_SIZE_LIMIT_BYTES check enforced by _read_output_file (line 583). A buggy or malicious adapter returning huge stdout bypasses this limit.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "created_at": "2026-06-18 02:31:13",
+      "event_id": 1631,
+      "finding_id": "RGF-0988",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "_read_cell_file_metadata (line 488) reads from the working tree via self._root / cell.file_path regardless of review_commit. The returned line_count is used at line 344 for comment line range validation. If the working tree differs from review_commit, validation uses the wrong line count, causing incorrect acceptance or rejection of adapter comments.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "created_at": "2026-06-18 02:33:10",
+      "event_id": 1632,
+      "finding_id": "RGF-0989",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Removed non-existent --worktree, --git-worktree flags and finalize --merge from \u57fa\u672c\u7684\u306a\u4f7f\u3044\u65b9 section; these flags do not exist in CLI at commit db69cfe4",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "created_at": "2026-06-18 02:33:10",
+      "event_id": 1633,
+      "finding_id": "RGF-0990",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Removed --worktree reference from \u30b3\u30de\u30f3\u30c9 section: deleted the sentence about passing --worktree for workspace diff behavior and removed the init --worktree example from OCR mapping",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "created_at": "2026-06-18 02:35:31",
+      "event_id": 1634,
+      "finding_id": "RGF-0987",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Added VERDICT_OUTPUT_SIZE_LIMIT_BYTES guard for STDOUT_JSON mode: check stdout byte size before processing, matching the file-mode guard in _read_output_file",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "created_at": "2026-06-18 02:35:34",
+      "event_id": 1635,
+      "finding_id": "RGF-0988",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Modified _read_cell_file_metadata to read file content from review_commit via git show when self._review_commit is set, rather than always reading from the current working tree",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "created_at": "2026-06-18 02:42:55",
+      "event_id": 1636,
+      "finding_id": "RGF-0990",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "created_at": "2026-06-18 02:42:55",
+      "event_id": 1637,
+      "finding_id": "RGF-0989",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "created_at": "2026-06-18 02:44:49",
+      "event_id": 1638,
+      "finding_id": "RGF-0991",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "\u82f1\u8a9e\u7248 README.md 184\u884c\u76ee\u306b\u5b58\u5728\u3059\u308b '# Review the current workspace diff. / review-gauntlet init --worktree' \u306e\u4f8b\u304c\u65e5\u672c\u8a9e\u7248\u306e\u300c\u57fa\u672c\u7684\u306a\u4f7f\u3044\u65b9\u300d\u30bb\u30af\u30b7\u30e7\u30f3\uff08154-170\u884c\uff09\u304b\u3089\u6b20\u843d\u3057\u3066\u3044\u308b\u3002\u5b9f\u969b\u306e\u30c9\u30ad\u30e5\u30e1\u30f3\u30c8\u4e0d\u6574\u5408\u3002",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "created_at": "2026-06-18 02:44:52",
+      "event_id": 1639,
+      "finding_id": "RGF-0992",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "\u82f1\u8a9e\u7248 README.md 265\u884c\u76ee\u306b\u5b58\u5728\u3059\u308b '# OCR workspace diff review: staged, unstaged, and untracked non-ignored files. / review-gauntlet init --worktree' \u306e\u30a8\u30f3\u30c8\u30ea\u304c\u65e5\u672c\u8a9e\u7248\u306e\u300c\u30b3\u30de\u30f3\u30c9\u300d\u30bb\u30af\u30b7\u30e7\u30f3 OCR \u30de\u30c3\u30d4\u30f3\u30b0\u30b3\u30fc\u30c9\u30d6\u30ed\u30c3\u30af\uff08213-234\u884c\uff09\u304b\u3089\u6b20\u843d\u3057\u3066\u3044\u308b\u3002\u5b9f\u969b\u306e\u30c9\u30ad\u30e5\u30e1\u30f3\u30c8\u4e0d\u6574\u5408\u3002",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "created_at": "2026-06-18 02:44:55",
+      "event_id": 1640,
+      "finding_id": "RGF-0993",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "\u82f1\u8a9e\u7248 README.md 256-257\u884c\u76ee\u306b\u5b58\u5728\u3059\u308b 'Scripts that need the previous workspace-diff default must pass --worktree explicitly.' \u3068\u3044\u3046\u91cd\u8981\u306a\u6ce8\u8a18\u304c\u65e5\u672c\u8a9e\u7248\u306e\u300c\u30b3\u30de\u30f3\u30c9\u300d\u30bb\u30af\u30b7\u30e7\u30f3\u8aac\u660e\u6587\uff08209\u884c\uff09\u304b\u3089\u6b20\u843d\u3057\u3066\u3044\u308b\u3002\u5b9f\u969b\u306e\u30c9\u30ad\u30e5\u30e1\u30f3\u30c8\u4e0d\u6574\u5408\u3002",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "created_at": "2026-06-18 02:46:47",
+      "event_id": 1641,
+      "finding_id": "RGF-0991",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "--worktree \u30d5\u30e9\u30b0\u306f\u30b3\u30df\u30c3\u30c8 db69cfe4 \u6642\u70b9\u306e CLI \u30bd\u30fc\u30b9\u30b3\u30fc\u30c9\u306b\u5b9f\u88c5\u3055\u308c\u3066\u3044\u306a\u3044\u3002\u82f1\u8a9e\u7248 README \u3082\u540c\u69d8\u306b\u4e0d\u6b63\u78ba\u3067\u3001\u524d\u30bf\u30fc\u30f3\u3067 RGF-0989/0990 \u3068\u3057\u3066\u4fee\u6b63\u6e08\u307f\u3002\u6b20\u843d\u3067\u306f\u306a\u304f\u610f\u56f3\u7684\u306a\u524a\u9664\u3002",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "created_at": "2026-06-18 02:46:47",
+      "event_id": 1642,
+      "finding_id": "RGF-0992",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "--worktree \u30d5\u30e9\u30b0\u306f\u30b3\u30df\u30c3\u30c8 db69cfe4 \u6642\u70b9\u306e CLI \u30bd\u30fc\u30b9\u30b3\u30fc\u30c9\u306b\u5b9f\u88c5\u3055\u308c\u3066\u3044\u306a\u3044\u3002\u82f1\u8a9e\u7248 README \u306e init --worktree \u30a8\u30f3\u30c8\u30ea\u3082\u4e0d\u6b63\u78ba\u3002\u610f\u56f3\u7684\u306a\u524a\u9664\u3002",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "created_at": "2026-06-18 02:46:47",
+      "event_id": 1643,
+      "finding_id": "RGF-0993",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "--worktree \u30d5\u30e9\u30b0\u306f\u30b3\u30df\u30c3\u30c8 db69cfe4 \u6642\u70b9\u306e CLI \u30bd\u30fc\u30b9\u30b3\u30fc\u30c9\u306b\u5b9f\u88c5\u3055\u308c\u3066\u3044\u306a\u3044\u3002\u82f1\u8a9e\u7248 README \u306e worktree \u95a2\u9023\u6ce8\u8a18\u3082\u4e0d\u6b63\u78ba\u3002\u610f\u56f3\u7684\u306a\u524a\u9664\u3002",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "created_at": "2026-06-18 02:49:39",
+      "event_id": 1644,
+      "finding_id": "RGF-0987",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "created_at": "2026-06-18 02:49:39",
+      "event_id": 1645,
+      "finding_id": "RGF-0988",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "created_at": "2026-06-18 02:52:16",
+      "event_id": 1646,
+      "finding_id": "RGF-0994",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "subprocess.TimeoutExpired\u304c\u30ad\u30e3\u30c3\u30c1\u3055\u308c\u3066\u3044\u306a\u3044\u3002line 510\u3067timeout=10\u3092\u6307\u5b9a\u3057\u3066\u3044\u308b\u304c\u3001except\u30d6\u30ed\u30c3\u30af(line 514)\u306fCalledProcessError\u306e\u307f\u3092\u6355\u6349\u3057\u3066\u3044\u308b\u3002git show\u304c10\u79d2\u8d85\u904e\u3057\u305f\u5834\u5408\u3001TimeoutExpired\u304cReviewAdapterError\u3067\u30e9\u30c3\u30d7\u3055\u308c\u305a\u547c\u3073\u51fa\u3057\u5143\u306b\u6f0f\u51fa\u3059\u308b\u3002",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "created_at": "2026-06-18 02:52:20",
+      "event_id": 1647,
+      "finding_id": "RGF-0995",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "\u30bb\u30f3\u30c1\u30cd\u30eb\u6587\u5b57\u5217'\\x00REVIEW_GAUNTLET_LITERAL_BRACE\\x00'\u306b\u306fNUL\u30d0\u30a4\u30c8\u304c\u542b\u307e\u308c\u3066\u304a\u308a\u3001\u30c6\u30f3\u30d7\u30ec\u30fc\u30c8\u5909\u6570\u5024(\u30d5\u30a1\u30a4\u30eb\u30d1\u30b9\u30fbID\u30fb\u8a2d\u5b9a\u30d5\u30a1\u30a4\u30eb\u7531\u6765\u306e\u30d7\u30ed\u30f3\u30d7\u30c8\u7b49)\u306fPOSIX\u4ed5\u69d8\u4e0aNUL\u30d0\u30a4\u30c8\u3092\u542b\u3081\u306a\u3044\u305f\u3081\u3001\u5b9f\u969b\u306e\u885d\u7a81\u306f\u4e0d\u53ef\u80fd\u3002\u7406\u8ad6\u4e0a\u306e\u30ea\u30b9\u30af\u306f\u3042\u308b\u304cNUL\u30d0\u30a4\u30c8\u304c\u4e8b\u5b9f\u4e0a\u306e\u4fdd\u8b77\u3068\u3057\u3066\u6a5f\u80fd\u3057\u3066\u3044\u308b\u3002",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "created_at": "2026-06-18 02:52:56",
+      "event_id": 1648,
+      "finding_id": "RGF-0994",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Added subprocess.TimeoutExpired handler in _read_cell_file_metadata before CalledProcessError, raising ReviewAdapterError with an informative timeout message.",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "created_at": "2026-06-18 02:56:18",
+      "event_id": 1649,
+      "finding_id": "RGF-0994",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "created_at": "2026-06-18 03:11:14",
+      "event_id": 1650,
+      "finding_id": "RGF-0996",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "stdout thread (threads[0]) \u304c\u7d42\u4e86\u3059\u308b\u3068 threads[0].join(timeout=0.05) \u304c\u5373\u6642\u8fd4\u5374\u3059\u308b\u305f\u3081\u3001stderr thread \u304c\u307e\u3060\u52d5\u3044\u3066\u3044\u308b\u9593\u306f\u30eb\u30fc\u30d7\u304c 50ms \u30b9\u30ea\u30fc\u30d7\u306a\u3057\u3067\u30b9\u30d4\u30f3\u3059\u308b\u3002\u5b9f\u969b\u306e CPU \u7121\u99c4\u9063\u3044\u3060\u304c\u6b63\u78ba\u6027\u3078\u306e\u5f71\u97ff\u306f\u306a\u304f\u3001\u30bf\u30a4\u30e0\u30a2\u30a6\u30c8\u3067\u4e0a\u9650\u304c\u3042\u308b\u3002",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "created_at": "2026-06-18 03:11:18",
+      "event_id": 1651,
+      "finding_id": "RGF-0997",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "\u30b3\u30fc\u30c9\u30ec\u30d3\u30e5\u30fc\u30c4\u30fc\u30eb\u3068\u3057\u3066\u30bd\u30fc\u30b9\u30d5\u30a1\u30a4\u30eb\u3092\u5bfe\u8c61\u3068\u3059\u308b\u7528\u9014\u3067\u306f\u3001\u4efb\u610f\u30b5\u30a4\u30ba\u306e\u30d5\u30a1\u30a4\u30eb\u3092\u30e1\u30e2\u30ea\u306b\u8aad\u307f\u8fbc\u3080\u30ea\u30b9\u30af\u306f\u4f4e\u3044\u3002\u30b5\u30a4\u30ba\u30ac\u30fc\u30c9\u8ffd\u52a0\u306f\u30e1\u30ea\u30c3\u30c8\u306b\u5bfe\u3057\u3066\u8907\u96d1\u6027\u306e\u30b3\u30b9\u30c8\u304c\u9ad8\u3044\u3002git show \u30d1\u30b9\u3082\u540c\u69d8\u306b\u5168\u5185\u5bb9\u3092\u30e1\u30e2\u30ea\u306b\u8aad\u3093\u3067\u3044\u308b\u3002",
+      "to_state": "accepted_risk"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "created_at": "2026-06-18 03:11:23",
+      "event_id": 1652,
+      "finding_id": "RGF-0998",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "subprocess.run \u306f\u30ea\u30b9\u30c8\u5f15\u6570\u3067 shell=False \u306e\u305f\u3081\u30b7\u30a7\u30eb\u30a4\u30f3\u30b8\u30a7\u30af\u30b7\u30e7\u30f3\u306a\u3057\u3002\u5f15\u6570\u5f62\u5f0f\u304c '{commit}:{path}' \u306a\u306e\u3067 '--option' \u304c\u542b\u307e\u308c\u3066\u3082 git \u306f\u30ea\u30d3\u30b8\u30e7\u30f3\u4ed5\u69d8\u3068\u3057\u3066\u6271\u3044\u3001\u30aa\u30d7\u30b7\u30e7\u30f3\u30d5\u30e9\u30b0\u3068\u8aa4\u89e3\u3057\u306a\u3044\u3002\u307e\u305f\u5024\u306f\u5185\u90e8\u30e1\u30bf\u30c7\u30fc\u30bf(review_head_commit)\u7531\u6765\u3067\u76f4\u63a5\u30e6\u30fc\u30b6\u5165\u529b\u3067\u306f\u306a\u3044\u3002",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "created_at": "2026-06-18 03:12:30",
+      "event_id": 1653,
+      "finding_id": "RGF-0996",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "threads[0].join(timeout=0.05) \u3092 alive \u30b9\u30ec\u30c3\u30c9\u3092\u52d5\u7684\u306b\u9078\u629e\u3059\u308b\u3088\u3046\u5909\u66f4: alive = next((t for t in threads if t.is_alive()), None); if alive: alive.join(timeout=0.05) \u2014 stdout \u30b9\u30ec\u30c3\u30c9\u7d42\u4e86\u5f8c\u306e\u30d3\u30b8\u30fc\u30a6\u30a7\u30a4\u30c8\u3092\u89e3\u6d88",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "created_at": "2026-06-18 03:15:16",
+      "event_id": 1654,
+      "finding_id": "RGF-0996",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "created_at": "2026-06-18 03:16:18",
+      "event_id": 1655,
+      "finding_id": "RGF-0999",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "read_text() loads the entire file into memory before the size guard at line 614. A buggy or adversarial adapter can produce arbitrarily large output, triggering OOM before the limit is enforced. The fix is to stat the file size first.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "created_at": "2026-06-18 03:16:22",
+      "event_id": 1656,
+      "finding_id": "RGF-1000",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "The only call site (line 396) always passes stdout=PIPE and stderr=PIPE to Popen, so process.stdout and process.stderr are guaranteed non-None. Stripping these asserts with -O has no practical effect here.",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "created_at": "2026-06-18 03:18:23",
+      "event_id": 1657,
+      "finding_id": "RGF-0999",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "stat() the file before read_text() to check size without loading content into memory, eliminating the OOM risk for oversized output files",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "created_at": "2026-06-18 03:21:30",
+      "event_id": 1658,
+      "finding_id": "RGF-0999",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "created_at": "2026-06-18 03:24:38",
+      "event_id": 1659,
+      "finding_id": "RGF-1001",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "item.get('input', '') returns None when key exists with None value, causing str(None)='None' to be passed to _line_column_position instead of ''. Pydantic json_invalid errors likely always provide a string input, but the coding pattern is incorrect and should use 'item.get(\"input\") or \"\"'.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "created_at": "2026-06-18 03:24:42",
+      "event_id": 1660,
+      "finding_id": "RGF-1002",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "column bounds check is missing, but the out-of-bounds position value is only used in _raw_snippet where line 746 clamps it via min(start + limit, len(value)). No crash or incorrect behavior beyond a slightly off snippet window. Low practical impact.",
+      "to_state": "accepted_risk"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "created_at": "2026-06-18 03:26:23",
+      "event_id": 1661,
+      "finding_id": "RGF-1001",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "input=None \u306e\u30b1\u30fc\u30b9\u3067 str(None)='None' \u304c _line_column_position \u306b\u6e21\u3055\u308c\u308b\u554f\u984c\u3092\u4fee\u6b63\u3002raw_input = item.get('input') \u3067\u53d6\u5f97\u5f8c\u3001isinstance \u30c1\u30a7\u30c3\u30af\u3067 str \u4ee5\u5916\u306f '' \u306b\u30d5\u30a9\u30fc\u30eb\u30d0\u30c3\u30af\u3059\u308b\u5b9f\u88c5\u306b\u5909\u66f4\u3002",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "created_at": "2026-06-18 03:29:35",
+      "event_id": 1662,
+      "finding_id": "RGF-1001",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "created_at": "2026-06-18 03:30:36",
+      "event_id": 1663,
+      "finding_id": "RGF-1003",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "\u30a2\u30c0\u30d7\u30bf\u30fc\u51fa\u529b\u30d5\u30a1\u30a4\u30eb\u306f\u5916\u90e8\u30d7\u30ed\u30bb\u30b9\u304c\u4e00\u5ea6\u66f8\u304d\u8fbc\u307f\u5f8c\u306b\u8aad\u307e\u308c\u308b\u8a2d\u8a08\u3067\u4e26\u884c\u66f8\u304d\u8fbc\u307f\u306f\u767a\u751f\u3057\u306a\u3044\u3002\u7406\u8ad6\u7684\u306aTOCTOU race\u306f\u5b58\u5728\u3059\u308b\u304c\u3001\u5b9f\u904b\u7528\u4e0a\u306e\u30ea\u30b9\u30af\u306f\u7121\u8996\u3067\u304d\u308b\u6c34\u6e96\u3002read_text()\u306eOSError\u30cf\u30f3\u30c9\u30ea\u30f3\u30b0\u3067\u6700\u60aa\u30b1\u30fc\u30b9\u3082\u5b89\u5168\u306b\u51e6\u7406\u3055\u308c\u308b\u3002\u4fee\u6b63\u3059\u308b\u306b\u306f\u5168\u30d5\u30a1\u30a4\u30eb\u3092\u8aad\u3093\u3067\u304b\u3089\u30b5\u30a4\u30ba\u78ba\u8a8d\u304c\u5fc5\u8981\u306b\u306a\u308a\u30e1\u30e2\u30ea\u5b89\u5168\u6027\u30c1\u30a7\u30c3\u30af\u306e\u610f\u5473\u304c\u5931\u308f\u308c\u308b\u3002",
+      "to_state": "accepted_risk"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "created_at": "2026-06-18 03:36:54",
+      "event_id": 1664,
+      "finding_id": "RGF-1004",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "STDOUT_JSON size limit already implemented at lines 323-331 with VERDICT_OUTPUT_SIZE_LIMIT_BYTES check",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "created_at": "2026-06-18 03:36:55",
+      "event_id": 1665,
+      "finding_id": "RGF-1009",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Duplicate of RGF-1004; size limit already enforced in the STDOUT_JSON branch",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "created_at": "2026-06-18 03:36:55",
+      "event_id": 1666,
+      "finding_id": "RGF-1006",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Busy-wait already fixed: code uses next(t for t in threads if t.is_alive()) to join the correct alive thread",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "created_at": "2026-06-18 03:36:55",
+      "event_id": 1667,
+      "finding_id": "RGF-1008",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Duplicate of RGF-1006; same busy-wait fix is already in place",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "created_at": "2026-06-18 03:36:55",
+      "event_id": 1668,
+      "finding_id": "RGF-1007",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "Missing quiet_timeout test coverage is a test gap; tests/ are excluded from review scope and test addition is deferred",
+      "to_state": "accepted_risk"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "created_at": "2026-06-18 03:37:00",
+      "event_id": 1669,
+      "finding_id": "RGF-1005",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "FakeReviewAdapter uses truthiness check on list; empty [] fixture would fall through to file_path lookup",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "created_at": "2026-06-18 03:37:00",
+      "event_id": 1670,
+      "finding_id": "RGF-1010",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "--worktree, --git-worktree, --merge options documented in README.ja.md but not present in CLI",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "created_at": "2026-06-18 03:37:00",
+      "event_id": 1671,
+      "finding_id": "RGF-1011",
+      "from_state": "untriaged",
+      "metadata": {},
+      "reason": "--worktree option in README.ja.md but not in CLI",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "created_at": "2026-06-18 03:37:48",
+      "event_id": 1672,
+      "finding_id": "RGF-1010",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "README.ja.md does not contain --worktree, --git-worktree, or --merge options at the specified line range; finding based on stale/incorrect code snapshot",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "created_at": "2026-06-18 03:37:48",
+      "event_id": 1673,
+      "finding_id": "RGF-1011",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "README.ja.md does not contain --worktree reference at lines 219-228; finding based on stale/incorrect code snapshot",
+      "to_state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "created_at": "2026-06-18 03:37:56",
+      "event_id": 1674,
+      "finding_id": "RGF-1005",
+      "from_state": "confirmed",
+      "metadata": {},
+      "reason": "Replaced or-chain with explicit is None check at review_adapter.py:67; committed in 89ce9e6",
+      "to_state": "fixed_pending_verification"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "created_at": "2026-06-18 03:41:05",
+      "event_id": 1675,
+      "finding_id": "RGF-1005",
+      "from_state": "fixed_pending_verification",
+      "metadata": {},
+      "reason": "review_verification",
+      "to_state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "created_at": "2026-06-18 08:41:06",
+      "event_id": 1676,
+      "finding_id": "RGF-1013",
+      "from_state": "open",
+      "metadata": {
+        "dismiss_reason": "\u8a2d\u8a08\u4e0a\u306e\u610f\u56f3\u7684\u306a\u52d5\u4f5c: imprecise=True\u306e\u30b3\u30e1\u30f3\u30c8\u306fOCR spec\u306b\u57fa\u3065\u304dstart_line=0,end_line=0\u3092\u6b63\u898f\u306e\u8868\u73fe\u3068\u3057\u3066\u53d7\u3051\u5165\u308c\u308b\u3002\u884c\u756a\u53f7\u30d0\u30ea\u30c7\u30fc\u30b7\u30e7\u30f3\u306e\u30b9\u30ad\u30c3\u30d7\u306f\u8a2d\u8a08\u901a\u308a\u3002"
+      },
+      "reason": "\u8a2d\u8a08\u4e0a\u306e\u610f\u56f3\u7684\u306a\u52d5\u4f5c: imprecise=True\u306e\u30b3\u30e1\u30f3\u30c8\u306fOCR spec\u306b\u57fa\u3065\u304dstart_line=0,end_line=0\u3092\u6b63\u898f\u306e\u8868\u73fe\u3068\u3057\u3066\u53d7\u3051\u5165\u308c\u308b\u3002\u884c\u756a\u53f7\u30d0\u30ea\u30c7\u30fc\u30b7\u30e7\u30f3\u306e\u30b9\u30ad\u30c3\u30d7\u306f\u8a2d\u8a08\u901a\u308a\u3002",
+      "to_state": "dismissed"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "created_at": "2026-06-18 08:41:12",
+      "event_id": 1677,
+      "finding_id": "RGF-1012",
+      "from_state": "open",
+      "metadata": {
+        "dismiss_reason": "\u5b9f\u7528\u7684\u306b\u306f\u975e\u73fe\u5b9f\u7684\u306aTOCTOU: \u30a2\u30c0\u30d7\u30bf\u30d7\u30ed\u30bb\u30b9\u7d42\u4e86\u5f8c\u306bstat()\u3057\u3066read_text()\u3059\u308b\u624b\u9806\u3067\u3001\u30ed\u30fc\u30ab\u30eb\u30d5\u30a1\u30a4\u30eb\u30b7\u30b9\u30c6\u30e0\u306e\u5358\u4e00\u30e6\u30fc\u30b6\u30fc\u30c4\u30fc\u30eb\u3068\u3057\u3066\u30ec\u30fc\u30b9\u30a6\u30a3\u30f3\u30c9\u30a6\u3092\u60aa\u7528\u3059\u308b\u8105\u5a01\u30e2\u30c7\u30eb\u304c\u5b58\u5728\u3057\u306a\u3044\u3002STDOUT_JSON\u30d1\u30b9\u3068\u306e\u4e0d\u6574\u5408\u306f\u3042\u308b\u304c\u5b9f\u5bb3\u306a\u3057\u3002"
+      },
+      "reason": "\u5b9f\u7528\u7684\u306b\u306f\u975e\u73fe\u5b9f\u7684\u306aTOCTOU: \u30a2\u30c0\u30d7\u30bf\u30d7\u30ed\u30bb\u30b9\u7d42\u4e86\u5f8c\u306bstat()\u3057\u3066read_text()\u3059\u308b\u624b\u9806\u3067\u3001\u30ed\u30fc\u30ab\u30eb\u30d5\u30a1\u30a4\u30eb\u30b7\u30b9\u30c6\u30e0\u306e\u5358\u4e00\u30e6\u30fc\u30b6\u30fc\u30c4\u30fc\u30eb\u3068\u3057\u3066\u30ec\u30fc\u30b9\u30a6\u30a3\u30f3\u30c9\u30a6\u3092\u60aa\u7528\u3059\u308b\u8105\u5a01\u30e2\u30c7\u30eb\u304c\u5b58\u5728\u3057\u306a\u3044\u3002STDOUT_JSON\u30d1\u30b9\u3068\u306e\u4e0d\u6574\u5408\u306f\u3042\u308b\u304c\u5b9f\u5bb3\u306a\u3057\u3002",
+      "to_state": "dismissed"
+    }
+  ],
+  "schema_version": 1
+}

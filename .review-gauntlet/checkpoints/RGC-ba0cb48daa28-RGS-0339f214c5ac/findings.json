@@ -1,0 +1,573 @@
+{
+  "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+  "findings": [
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "content": "STDOUT_JSON mode skips the VERDICT_OUTPUT_SIZE_LIMIT_BYTES guard. `_read_output_file` (line 583) enforces the 1 MB cap for FILE_JSON mode, but the STDOUT_JSON branch uses `completed.stdout` directly from `_communicate`, which accumulates chunks without any size bound. A misbehaving adapter can produce arbitrarily large stdout and exhaust memory or inflate stored artifacts without triggering the limit.",
+      "finding_id": "RGF-0987",
+      "fingerprint": "0d3ff07bee73407b56866b827b82790a7fd439138f9acc64442ce334f1651657",
+      "latest_occurrence": {
+        "cell_id": "RGC-188dbb0b34cf9208",
+        "end_line": 327,
+        "finding_id": "RGF-0987",
+        "imprecise": 0,
+        "occurrence_id": 987,
+        "path": "src/review_gauntlet/review_adapter.py",
+        "run_id": 282,
+        "start_line": 323
+      },
+      "metadata": "{\"fingerprint\":\"0d3ff07bee73407b56866b827b82790a7fd439138f9acc64442ce334f1651657\",\"path\":\"src/review_gauntlet/review_adapter.py\",\"rule_id\":\"data-validation\",\"content\":\"STDOUT_JSON mode skips the VERDICT_OUTPUT_SIZE_LIMIT_BYTES guard. `_read_output_file` (line 583) enforces the 1 MB cap for FILE_JSON mode, but the STDOUT_JSON branch uses `completed.stdout` directly from `_communicate`, which accumulates chunks without any size bound. A misbehaving adapter can produce arbitrarily large stdout and exhaust memory or inflate stored artifacts without triggering the limit.\",\"suggestion_code\":\"        if self._config.output.mode == OutputMode.STDOUT_JSON:\\n            stdout_size = len(completed.stdout.encode(\\\"utf-8\\\"))\\n            if stdout_size > VERDICT_OUTPUT_SIZE_LIMIT_BYTES:\\n                self._fail(\\n                    f\\\"verdict stdout exceeds {VERDICT_OUTPUT_SIZE_LIMIT_BYTES} bytes\\\",\\n                    failure_file,\\n                    {\\n                        \\\"output_mode\\\": self._config.output.mode,\\n                        \\\"output_size_bytes\\\": stdout_size,\\n                        \\\"size_limit_bytes\\\": VERDICT_OUTPUT_SIZE_LIMIT_BYTES,\\n                    },\\n                )\\n            verdict_text = completed.stdout\\n        else:\\n            verdict_text = self._read_output_file(output_path, failure_file)\",\"existing_code\":\"        verdict_text = (\\n            completed.stdout\\n            if self._config.output.mode == OutputMode.STDOUT_JSON\\n            else self._read_output_file(output_path, failure_file)\\n        )\",\"start_line\":323,\"end_line\":327,\"thinking\":\"VERDICT_OUTPUT_SIZE_LIMIT_BYTES = 1_000_000 is declared at line 21 and enforced in _read_output_file (line 583), but the STDOUT_JSON branch at line 324 reads completed.stdout without any size check. _communicate at lines 433-442 appends chunks unboundedly. The fix is to apply the same byte-size guard before using the stdout string.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/review_adapter.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-0339f214c5ac",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "content": "`_read_cell_file_metadata` reads the file from the current working tree regardless of `review_commit`. The returned `line_count` is then used in `_validated_comments_for_cell` (line 635) to hard-fail any comment whose `end_line` exceeds it. When `review_commit` points to an older commit where the file was longer, valid line references are incorrectly rejected; when the file has since grown, out-of-range references incorrectly pass. The metadata should be derived from the commit being reviewed.",
+      "finding_id": "RGF-0988",
+      "fingerprint": "ceaae520582628afd98bbbe179f69bab9913d584aa1c216e8b6f0230a06d96c9",
+      "latest_occurrence": {
+        "cell_id": "RGC-188dbb0b34cf9208",
+        "end_line": 500,
+        "finding_id": "RGF-0988",
+        "imprecise": 0,
+        "occurrence_id": 988,
+        "path": "src/review_gauntlet/review_adapter.py",
+        "run_id": 282,
+        "start_line": 487
+      },
+      "metadata": "{\"fingerprint\":\"ceaae520582628afd98bbbe179f69bab9913d584aa1c216e8b6f0230a06d96c9\",\"path\":\"src/review_gauntlet/review_adapter.py\",\"rule_id\":\"data-validation\",\"content\":\"`_read_cell_file_metadata` reads the file from the current working tree regardless of `review_commit`. The returned `line_count` is then used in `_validated_comments_for_cell` (line 635) to hard-fail any comment whose `end_line` exceeds it. When `review_commit` points to an older commit where the file was longer, valid line references are incorrectly rejected; when the file has since grown, out-of-range references incorrectly pass. The metadata should be derived from the commit being reviewed.\",\"suggestion_code\":\"    def _read_cell_file_metadata(self, cell: ReviewCell) -> FileMetadata:\\n        if self._review_commit is not None:\\n            try:\\n                result = subprocess.run(\\n                    [\\\"git\\\", \\\"show\\\", f\\\"{self._review_commit}:{cell.file_path}\\\"],\\n                    cwd=self._root,\\n                    capture_output=True,\\n                    check=True,\\n                )\\n                content = result.stdout\\n            except subprocess.CalledProcessError as exc:\\n                raise ReviewAdapterError(\\n                    f\\\"cannot read review cell at commit {self._review_commit}: {cell.file_path}\\\"\\n                ) from exc\\n            return FileMetadata(\\n                file_size_bytes=len(content),\\n                line_count=content.count(b\\\"\\\\n\\\") + (0 if content.endswith(b\\\"\\\\n\\\") or not content else 1),\\n            )\\n        file_path = (self._root / cell.file_path).resolve()\\n        try:\\n            file_path.relative_to(self._root)\\n        except ValueError as exc:\\n            raise ReviewAdapterError(\\n                f\\\"unsafe review cell path outside repository: {cell.file_path}\\\"\\n            ) from exc\\n        if not file_path.is_file():\\n            raise ReviewAdapterError(f\\\"review cell path is not a file: {cell.file_path}\\\")\\n        content = file_path.read_bytes()\\n        return FileMetadata(\\n            file_size_bytes=len(content),\\n            line_count=content.count(b\\\"\\\\n\\\") + (0 if content.endswith(b\\\"\\\\n\\\") or not content else 1),\\n        )\",\"existing_code\":\"    def _read_cell_file_metadata(self, cell: ReviewCell) -> FileMetadata:\\n        file_path = (self._root / cell.file_path).resolve()\\n        try:\\n            file_path.relative_to(self._root)\\n        except ValueError as exc:\\n            raise ReviewAdapterError(\\n                f\\\"unsafe review cell path outside repository: {cell.file_path}\\\"\\n            ) from exc\\n        if not file_path.is_file():\\n            raise ReviewAdapterError(f\\\"review cell path is not a file: {cell.file_path}\\\")\\n        content = file_path.read_bytes()\\n        return FileMetadata(\\n            file_size_bytes=len(content),\\n            line_count=content.count(b\\\"\\\\n\\\") + (0 if content.endswith(b\\\"\\\\n\\\") or not content else 1),\\n        )\",\"start_line\":487,\"end_line\":500,\"thinking\":\"review_commit is stored at line 237 (self._review_commit). build_review_prompt instructs the LLM to read the file at that commit (line 193-194). But _read_cell_file_metadata at line 497 reads file_path.read_bytes() from the working tree. _validated_comments_for_cell at line 635 then hard-fails when end_line > line_count. If the file was 200 lines at review_commit but is now 150, any comment referencing lines 151-200 fails with a spurious 'exceeds review cell line count' error.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/review_adapter.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-0339f214c5ac",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "content": "README.ja.md \u306f `init --worktree`\u3001`init --git-worktree`\u3001`finalize --merge` \u30d5\u30e9\u30b0\u3092\u6587\u66f8\u5316\u3057\u3066\u3044\u308b\u304c\u3001\u3053\u308c\u3089\u306f\u30ec\u30d3\u30e5\u30fc\u5bfe\u8c61\u30b3\u30df\u30c3\u30c8 (db69cfe4) \u6642\u70b9\u306e CLI \u306b\u5b58\u5728\u3057\u306a\u3044\u3002`--git-worktree` \u3068\u95a2\u9023\u3059\u308b finalize --merge / cleanup_git_worktree \u30ed\u30b8\u30c3\u30af\u306f Apply: remove-git-worktree-isolation (3764796) \u3067\u524a\u9664\u6e08\u307f\u3067\u3042\u308a\u3001`--worktree` \u306f\u5143\u3005\u5b9f\u88c5\u3055\u308c\u3066\u3044\u306a\u3044\u3002\u57fa\u672c\u7684\u306a\u4f7f\u3044\u65b9\u30bb\u30af\u30b7\u30e7\u30f3 (\u884c152-182) \u306e\u30b3\u30fc\u30c9\u30d6\u30ed\u30c3\u30af\u306b `review-gauntlet init --worktree`\u3001`review-gauntlet init --git-worktree`\u3001`review-gauntlet finalize --merge` \u304c\u4f8b\u793a\u3055\u308c\u3066\u304a\u308a\u3001\u884c182\u306e\u8aac\u660e\u6bb5\u843d\u3082\u4e21\u30d5\u30e9\u30b0\u306e\u52d5\u4f5c\u3092\u8a73\u8ff0\u3057\u3066\u3044\u308b\u304c\u3001\u3053\u308c\u3089\u306f\u5168\u3066\u67b6\u7a7a\u306e\u6a5f\u80fd\u306e\u8aac\u660e\u3067\u3042\u308b\u3002",
+      "finding_id": "RGF-0989",
+      "fingerprint": "cc80f6b69da6d8cdfd46d537601b99c3c2d9f6bdbadb7cd5e6242c2461d743ef",
+      "latest_occurrence": {
+        "cell_id": "RGC-74a69a1efd649e46",
+        "end_line": 182,
+        "finding_id": "RGF-0989",
+        "imprecise": 0,
+        "occurrence_id": 989,
+        "path": "README.ja.md",
+        "run_id": 283,
+        "start_line": 152
+      },
+      "metadata": "{\"fingerprint\":\"cc80f6b69da6d8cdfd46d537601b99c3c2d9f6bdbadb7cd5e6242c2461d743ef\",\"path\":\"README.ja.md\",\"rule_id\":\"docs-accuracy\",\"content\":\"README.ja.md \u306f `init --worktree`\u3001`init --git-worktree`\u3001`finalize --merge` \u30d5\u30e9\u30b0\u3092\u6587\u66f8\u5316\u3057\u3066\u3044\u308b\u304c\u3001\u3053\u308c\u3089\u306f\u30ec\u30d3\u30e5\u30fc\u5bfe\u8c61\u30b3\u30df\u30c3\u30c8 (db69cfe4) \u6642\u70b9\u306e CLI \u306b\u5b58\u5728\u3057\u306a\u3044\u3002`--git-worktree` \u3068\u95a2\u9023\u3059\u308b finalize --merge / cleanup_git_worktree \u30ed\u30b8\u30c3\u30af\u306f Apply: remove-git-worktree-isolation (3764796) \u3067\u524a\u9664\u6e08\u307f\u3067\u3042\u308a\u3001`--worktree` \u306f\u5143\u3005\u5b9f\u88c5\u3055\u308c\u3066\u3044\u306a\u3044\u3002\u57fa\u672c\u7684\u306a\u4f7f\u3044\u65b9\u30bb\u30af\u30b7\u30e7\u30f3 (\u884c152-182) \u306e\u30b3\u30fc\u30c9\u30d6\u30ed\u30c3\u30af\u306b `review-gauntlet init --worktree`\u3001`review-gauntlet init --git-worktree`\u3001`review-gauntlet finalize --merge` \u304c\u4f8b\u793a\u3055\u308c\u3066\u304a\u308a\u3001\u884c182\u306e\u8aac\u660e\u6bb5\u843d\u3082\u4e21\u30d5\u30e9\u30b0\u306e\u52d5\u4f5c\u3092\u8a73\u8ff0\u3057\u3066\u3044\u308b\u304c\u3001\u3053\u308c\u3089\u306f\u5168\u3066\u67b6\u7a7a\u306e\u6a5f\u80fd\u306e\u8aac\u660e\u3067\u3042\u308b\u3002\",\"suggestion_code\":\"\",\"existing_code\":\"\",\"start_line\":152,\"end_line\":182,\"thinking\":null,\"imprecise\":false}",
+      "path": "README.ja.md",
+      "rule_id": "docs-accuracy",
+      "session_id": "RGS-0339f214c5ac",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "content": "\u30b3\u30de\u30f3\u30c9\u30bb\u30af\u30b7\u30e7\u30f3 (\u884c219) \u304c\u300c\u4ee5\u524d\u306e\u30ef\u30fc\u30af\u30b9\u30da\u30fc\u30b9 diff \u65e2\u5b9a\u52d5\u4f5c\u304c\u5fc5\u8981\u306a\u30b9\u30af\u30ea\u30d7\u30c8\u306f\u3001\u660e\u793a\u7684\u306b `--worktree` \u3092\u6e21\u3057\u3066\u304f\u3060\u3055\u3044\u300d\u3068\u8a18\u8ff0\u3057\u3066\u3044\u308b\u304c\u3001`--worktree` \u30d5\u30e9\u30b0\u306f\u30ec\u30d3\u30e5\u30fc\u5bfe\u8c61\u30b3\u30df\u30c3\u30c8\u6642\u70b9\u306e CLI \u306b\u5b58\u5728\u3057\u306a\u3044\u3002\u307e\u305f\u884c228\u306e OCR \u4e92\u63db\u5bfe\u8c61\u30de\u30c3\u30d4\u30f3\u30b0\u306e\u30b3\u30fc\u30c9\u30d6\u30ed\u30c3\u30af\u306b\u3082 `review-gauntlet init --worktree` \u304c\u8a18\u8f09\u3055\u308c\u3066\u304a\u308a\u3001\u540c\u69d8\u306b\u4e0d\u6b63\u78ba\u3002",
+      "finding_id": "RGF-0990",
+      "fingerprint": "01f577af85313ccea854b76a5b7cbb7ebed9a02f66c1b0d676a2243388fb9baa",
+      "latest_occurrence": {
+        "cell_id": "RGC-74a69a1efd649e46",
+        "end_line": 230,
+        "finding_id": "RGF-0990",
+        "imprecise": 0,
+        "occurrence_id": 990,
+        "path": "README.ja.md",
+        "run_id": 283,
+        "start_line": 219
+      },
+      "metadata": "{\"fingerprint\":\"01f577af85313ccea854b76a5b7cbb7ebed9a02f66c1b0d676a2243388fb9baa\",\"path\":\"README.ja.md\",\"rule_id\":\"docs-accuracy\",\"content\":\"\u30b3\u30de\u30f3\u30c9\u30bb\u30af\u30b7\u30e7\u30f3 (\u884c219) \u304c\u300c\u4ee5\u524d\u306e\u30ef\u30fc\u30af\u30b9\u30da\u30fc\u30b9 diff \u65e2\u5b9a\u52d5\u4f5c\u304c\u5fc5\u8981\u306a\u30b9\u30af\u30ea\u30d7\u30c8\u306f\u3001\u660e\u793a\u7684\u306b `--worktree` \u3092\u6e21\u3057\u3066\u304f\u3060\u3055\u3044\u300d\u3068\u8a18\u8ff0\u3057\u3066\u3044\u308b\u304c\u3001`--worktree` \u30d5\u30e9\u30b0\u306f\u30ec\u30d3\u30e5\u30fc\u5bfe\u8c61\u30b3\u30df\u30c3\u30c8\u6642\u70b9\u306e CLI \u306b\u5b58\u5728\u3057\u306a\u3044\u3002\u307e\u305f\u884c228\u306e OCR \u4e92\u63db\u5bfe\u8c61\u30de\u30c3\u30d4\u30f3\u30b0\u306e\u30b3\u30fc\u30c9\u30d6\u30ed\u30c3\u30af\u306b\u3082 `review-gauntlet init --worktree` \u304c\u8a18\u8f09\u3055\u308c\u3066\u304a\u308a\u3001\u540c\u69d8\u306b\u4e0d\u6b63\u78ba\u3002\",\"suggestion_code\":\"\",\"existing_code\":\"\",\"start_line\":219,\"end_line\":230,\"thinking\":null,\"imprecise\":false}",
+      "path": "README.ja.md",
+      "rule_id": "docs-accuracy",
+      "session_id": "RGS-0339f214c5ac",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "content": "\u300c\u57fa\u672c\u7684\u306a\u4f7f\u3044\u65b9\u300d\u30bb\u30af\u30b7\u30e7\u30f3\u306e\u30b3\u30fc\u30c9\u30d6\u30ed\u30c3\u30af\u304b\u3089 `--worktree` \u30aa\u30d7\u30b7\u30e7\u30f3\u304c\u6b20\u843d\u3057\u3066\u3044\u307e\u3059\u3002\u82f1\u8a9e\u7248 README \u306b\u306f\u73fe\u5728\u306e\u30ef\u30fc\u30af\u30b9\u30da\u30fc\u30b9\u5dee\u5206\u3092\u30ec\u30d3\u30e5\u30fc\u3059\u308b\u4f8b\uff08`review-gauntlet init --worktree`\uff09\u304c\u6700\u521d\u306e\u4f8b\u3068\u3057\u3066\u542b\u307e\u308c\u3066\u3044\u307e\u3059\u304c\u3001\u65e5\u672c\u8a9e\u7248\u3067\u306f\u3053\u306e\u30aa\u30d7\u30b7\u30e7\u30f3\u304c\u5b8c\u5168\u306b\u7701\u7565\u3055\u308c\u3066\u3044\u307e\u3059\u3002\u3053\u306e\u30aa\u30d7\u30b7\u30e7\u30f3\u306f\u30e6\u30fc\u30b6\u30fc\u304c staged/unstaged/untracked \u30d5\u30a1\u30a4\u30eb\u3092\u30ec\u30d3\u30e5\u30fc\u3059\u308b\u4e3b\u8981\u306a\u30e6\u30fc\u30b9\u30b1\u30fc\u30b9\u3067\u3059\u3002",
+      "finding_id": "RGF-0991",
+      "fingerprint": "3b4a194ed5b275eebd61f5500b993ed24492b6290d16c81c46c0e71e09499a16",
+      "latest_occurrence": {
+        "cell_id": "RGC-74a69a1efd649e46",
+        "end_line": 170,
+        "finding_id": "RGF-0991",
+        "imprecise": 0,
+        "occurrence_id": 991,
+        "path": "README.ja.md",
+        "run_id": 286,
+        "start_line": 154
+      },
+      "metadata": "{\"fingerprint\":\"3b4a194ed5b275eebd61f5500b993ed24492b6290d16c81c46c0e71e09499a16\",\"path\":\"README.ja.md\",\"rule_id\":\"docs-accuracy\",\"content\":\"\u300c\u57fa\u672c\u7684\u306a\u4f7f\u3044\u65b9\u300d\u30bb\u30af\u30b7\u30e7\u30f3\u306e\u30b3\u30fc\u30c9\u30d6\u30ed\u30c3\u30af\u304b\u3089 `--worktree` \u30aa\u30d7\u30b7\u30e7\u30f3\u304c\u6b20\u843d\u3057\u3066\u3044\u307e\u3059\u3002\u82f1\u8a9e\u7248 README \u306b\u306f\u73fe\u5728\u306e\u30ef\u30fc\u30af\u30b9\u30da\u30fc\u30b9\u5dee\u5206\u3092\u30ec\u30d3\u30e5\u30fc\u3059\u308b\u4f8b\uff08`review-gauntlet init --worktree`\uff09\u304c\u6700\u521d\u306e\u4f8b\u3068\u3057\u3066\u542b\u307e\u308c\u3066\u3044\u307e\u3059\u304c\u3001\u65e5\u672c\u8a9e\u7248\u3067\u306f\u3053\u306e\u30aa\u30d7\u30b7\u30e7\u30f3\u304c\u5b8c\u5168\u306b\u7701\u7565\u3055\u308c\u3066\u3044\u307e\u3059\u3002\u3053\u306e\u30aa\u30d7\u30b7\u30e7\u30f3\u306f\u30e6\u30fc\u30b6\u30fc\u304c staged/unstaged/untracked \u30d5\u30a1\u30a4\u30eb\u3092\u30ec\u30d3\u30e5\u30fc\u3059\u308b\u4e3b\u8981\u306a\u30e6\u30fc\u30b9\u30b1\u30fc\u30b9\u3067\u3059\u3002\",\"suggestion_code\":\"```bash\\n# \u73fe\u5728\u306e\u30ef\u30fc\u30af\u30b9\u30da\u30fc\u30b9\u5dee\u5206\u3092\u30ec\u30d3\u30e5\u30fc\\nreview-gauntlet init --worktree\\n\\n# \u30d6\u30e9\u30f3\u30c1\u307e\u305f\u306f\u7bc4\u56f2\u3092\u30ec\u30d3\u30e5\u30fc\\nreview-gauntlet init --from main --to HEAD\\n\\n# \u30ea\u30dd\u30b8\u30c8\u30ea\u5168\u4f53\u3092\u30ec\u30d3\u30e5\u30fc\\nreview-gauntlet init --all\",\"existing_code\":\"```bash\\n# \u30d6\u30e9\u30f3\u30c1\u307e\u305f\u306f\u7bc4\u56f2\u3092\u30ec\u30d3\u30e5\u30fc\\nreview-gauntlet init --from main --to HEAD\\n\\n# \u30ea\u30dd\u30b8\u30c8\u30ea\u5168\u4f53\u3092\u30ec\u30d3\u30e5\u30fc\\nreview-gauntlet init --all\",\"start_line\":154,\"end_line\":170,\"thinking\":\"English README lines 184-186 show `review-gauntlet init --worktree` as the first and most common example in Basic Usage. The Japanese README skips this entirely, which means users reading the Japanese docs would not know about this important option for reviewing workspace changes.\",\"imprecise\":false}",
+      "path": "README.ja.md",
+      "rule_id": "docs-accuracy",
+      "session_id": "RGS-0339f214c5ac",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "content": "\u300c\u30b3\u30de\u30f3\u30c9\u300d\u30bb\u30af\u30b7\u30e7\u30f3\u306e OCR \u4e92\u63db\u30de\u30c3\u30d4\u30f3\u30b0\u306e\u30b3\u30fc\u30c9\u30d6\u30ed\u30c3\u30af\u306b `--worktree` \u30a8\u30f3\u30c8\u30ea\u304c\u6b20\u843d\u3057\u3066\u3044\u307e\u3059\u3002\u82f1\u8a9e\u7248\u3067\u306f `review-gauntlet init` \u306e\u76f4\u5f8c\u306b `# OCR workspace diff review: staged, unstaged, and untracked non-ignored files.` \u3068\u3044\u3046\u30b3\u30e1\u30f3\u30c8\u3068 `review-gauntlet init --worktree` \u304c\u542b\u307e\u308c\u3066\u3044\u307e\u3059\u3002\u3053\u306e\u30a8\u30f3\u30c8\u30ea\u304c\u65e5\u672c\u8a9e\u7248\u304b\u3089\u7701\u7565\u3055\u308c\u3066\u3044\u308b\u305f\u3081\u3001OCR \u4e92\u63db\u306e\u5bfe\u8c61\u30de\u30c3\u30d4\u30f3\u30b0\u306e\u8aac\u660e\u304c\u4e0d\u5b8c\u5168\u3067\u3059\u3002",
+      "finding_id": "RGF-0992",
+      "fingerprint": "4bb78b2ce5dd9ed3837cdc2147088a4ded13a0c312ddb157f4549d6e6e7371b8",
+      "latest_occurrence": {
+        "cell_id": "RGC-74a69a1efd649e46",
+        "end_line": 234,
+        "finding_id": "RGF-0992",
+        "imprecise": 0,
+        "occurrence_id": 992,
+        "path": "README.ja.md",
+        "run_id": 286,
+        "start_line": 213
+      },
+      "metadata": "{\"fingerprint\":\"4bb78b2ce5dd9ed3837cdc2147088a4ded13a0c312ddb157f4549d6e6e7371b8\",\"path\":\"README.ja.md\",\"rule_id\":\"docs-accuracy\",\"content\":\"\u300c\u30b3\u30de\u30f3\u30c9\u300d\u30bb\u30af\u30b7\u30e7\u30f3\u306e OCR \u4e92\u63db\u30de\u30c3\u30d4\u30f3\u30b0\u306e\u30b3\u30fc\u30c9\u30d6\u30ed\u30c3\u30af\u306b `--worktree` \u30a8\u30f3\u30c8\u30ea\u304c\u6b20\u843d\u3057\u3066\u3044\u307e\u3059\u3002\u82f1\u8a9e\u7248\u3067\u306f `review-gauntlet init` \u306e\u76f4\u5f8c\u306b `# OCR workspace diff review: staged, unstaged, and untracked non-ignored files.` \u3068\u3044\u3046\u30b3\u30e1\u30f3\u30c8\u3068 `review-gauntlet init --worktree` \u304c\u542b\u307e\u308c\u3066\u3044\u307e\u3059\u3002\u3053\u306e\u30a8\u30f3\u30c8\u30ea\u304c\u65e5\u672c\u8a9e\u7248\u304b\u3089\u7701\u7565\u3055\u308c\u3066\u3044\u308b\u305f\u3081\u3001OCR \u4e92\u63db\u306e\u5bfe\u8c61\u30de\u30c3\u30d4\u30f3\u30b0\u306e\u8aac\u660e\u304c\u4e0d\u5b8c\u5168\u3067\u3059\u3002\",\"suggestion_code\":\"```bash\\n# \u65e2\u5b9a\u30ec\u30d3\u30e5\u30fc: \u6700\u65b0 finalize \u6e08\u307f\u30c1\u30a7\u30c3\u30af\u30dd\u30a4\u30f3\u30c8 -> HEAD\u3001\u521d\u56de\u306f\u5168\u30d5\u30a1\u30a4\u30eb\\nreview-gauntlet init\\n\\n# OCR \u30ef\u30fc\u30af\u30b9\u30da\u30fc\u30b9 diff \u30ec\u30d3\u30e5\u30fc: staged\u3001unstaged\u3001non-ignored \u306e untracked \u30d5\u30a1\u30a4\u30eb\\nreview-gauntlet init --worktree\\n\\n# OCR \u30d6\u30e9\u30f3\u30c1/\u7bc4\u56f2\u30ec\u30d3\u30e5\u30fc: 2 \u3064\u306e ref \u9593\u3067\u5909\u66f4\u3055\u308c\u305f\u30d5\u30a1\u30a4\u30eb\\nreview-gauntlet init --from main --to HEAD\",\"existing_code\":\"```bash\\n# \u65e2\u5b9a\u30ec\u30d3\u30e5\u30fc: \u6700\u65b0 finalize \u6e08\u307f\u30c1\u30a7\u30c3\u30af\u30dd\u30a4\u30f3\u30c8 -> HEAD\u3001\u521d\u56de\u306f\u5168\u30d5\u30a1\u30a4\u30eb\\nreview-gauntlet init\\n\\n# OCR \u30d6\u30e9\u30f3\u30c1/\u7bc4\u56f2\u30ec\u30d3\u30e5\u30fc: 2 \u3064\u306e ref \u9593\u3067\u5909\u66f4\u3055\u308c\u305f\u30d5\u30a1\u30a4\u30eb\\nreview-gauntlet init --from main --to HEAD\",\"start_line\":213,\"end_line\":234,\"thinking\":\"English README lines 265-266 show `review-gauntlet init --worktree` with a comment about OCR workspace diff review. The Japanese README's command listing is missing this entry, making the OCR-compatible target mapping incomplete.\",\"imprecise\":false}",
+      "path": "README.ja.md",
+      "rule_id": "docs-accuracy",
+      "session_id": "RGS-0339f214c5ac",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "content": "\u300c\u30b3\u30de\u30f3\u30c9\u300d\u30bb\u30af\u30b7\u30e7\u30f3\u306e\u8aac\u660e\u6587\u304b\u3089\u3001\u4ee5\u524d\u306e\u30ef\u30fc\u30af\u30b9\u30da\u30fc\u30b9\u5dee\u5206\u30c7\u30d5\u30a9\u30eb\u30c8\u306b `--worktree` \u304c\u5fc5\u8981\u3068\u3044\u3046\u91cd\u8981\u306a\u6ce8\u8a18\u304c\u6b20\u843d\u3057\u3066\u3044\u307e\u3059\u3002\u82f1\u8a9e\u7248\u3067\u306f\u300cScripts that need the previous workspace-diff default must pass `--worktree` explicitly.\u300d\u3068\u660e\u793a\u3055\u308c\u3066\u3044\u307e\u3059\u304c\u3001\u65e5\u672c\u8a9e\u7248\u3067\u306f\u3053\u306e\u6587\u304c\u7701\u7565\u3055\u308c\u3066\u3044\u308b\u305f\u3081\u3001\u30c7\u30d5\u30a9\u30eb\u30c8\u52d5\u4f5c\u304c\u5909\u66f4\u3055\u308c\u305f\u3053\u3068\u3092\u30e6\u30fc\u30b6\u30fc\u304c\u8a8d\u8b58\u3067\u304d\u307e\u305b\u3093\u3002",
+      "finding_id": "RGF-0993",
+      "fingerprint": "f1be7faba86f184cdb567e50dc26b5da4bdf52983018331300c9fc46ddbd44b4",
+      "latest_occurrence": {
+        "cell_id": "RGC-74a69a1efd649e46",
+        "end_line": 209,
+        "finding_id": "RGF-0993",
+        "imprecise": 0,
+        "occurrence_id": 993,
+        "path": "README.ja.md",
+        "run_id": 286,
+        "start_line": 209
+      },
+      "metadata": "{\"fingerprint\":\"f1be7faba86f184cdb567e50dc26b5da4bdf52983018331300c9fc46ddbd44b4\",\"path\":\"README.ja.md\",\"rule_id\":\"docs-accuracy\",\"content\":\"\u300c\u30b3\u30de\u30f3\u30c9\u300d\u30bb\u30af\u30b7\u30e7\u30f3\u306e\u8aac\u660e\u6587\u304b\u3089\u3001\u4ee5\u524d\u306e\u30ef\u30fc\u30af\u30b9\u30da\u30fc\u30b9\u5dee\u5206\u30c7\u30d5\u30a9\u30eb\u30c8\u306b `--worktree` \u304c\u5fc5\u8981\u3068\u3044\u3046\u91cd\u8981\u306a\u6ce8\u8a18\u304c\u6b20\u843d\u3057\u3066\u3044\u307e\u3059\u3002\u82f1\u8a9e\u7248\u3067\u306f\u300cScripts that need the previous workspace-diff default must pass `--worktree` explicitly.\u300d\u3068\u660e\u793a\u3055\u308c\u3066\u3044\u307e\u3059\u304c\u3001\u65e5\u672c\u8a9e\u7248\u3067\u306f\u3053\u306e\u6587\u304c\u7701\u7565\u3055\u308c\u3066\u3044\u308b\u305f\u3081\u3001\u30c7\u30d5\u30a9\u30eb\u30c8\u52d5\u4f5c\u304c\u5909\u66f4\u3055\u308c\u305f\u3053\u3068\u3092\u30e6\u30fc\u30b6\u30fc\u304c\u8a8d\u8b58\u3067\u304d\u307e\u305b\u3093\u3002\",\"suggestion_code\":\"\u5bfe\u8c61\u9078\u629e\u306f `init` \u3067\u884c\u3044\u3001`review` \u306f\u30a2\u30af\u30c6\u30a3\u30d6\u306a\u30bb\u30c3\u30b7\u30e7\u30f3\u3092 1 \u56de\u3060\u3051\u9032\u3081\u307e\u3059\u3002\u88f8\u306e `init` \u306f\u3001\u5b8c\u5168\u3067\u5229\u7528\u53ef\u80fd\u306a\u30c1\u30a7\u30c3\u30af\u30dd\u30a4\u30f3\u30c8\u304c\u3042\u308b\u5834\u5408 `.review-gauntlet/checkpoints/latest/status.json` \u3092\u4f7f\u3044\u3001\u305d\u306e `review_base_commit` \u304b\u3089 `HEAD` \u307e\u3067\u3092\u30ec\u30d3\u30e5\u30fc\u3057\u307e\u3059\u3002\u30c1\u30a7\u30c3\u30af\u30dd\u30a4\u30f3\u30c8\u304c\u306a\u3044\u5834\u5408\u3001\u88f8\u306e `init` \u306f\u5bfe\u8c61\u3068\u306a\u308b\u5168\u30d5\u30a1\u30a4\u30eb\u3092\u30ec\u30d3\u30e5\u30fc\u3057\u307e\u3059\u3002\u4ee5\u524d\u306e\u30ef\u30fc\u30af\u30b9\u30da\u30fc\u30b9\u5dee\u5206\u30c7\u30d5\u30a9\u30eb\u30c8\u304c\u5fc5\u8981\u306a\u30b9\u30af\u30ea\u30d7\u30c8\u306f `--worktree` \u3092\u660e\u793a\u7684\u306b\u6e21\u3059\u5fc5\u8981\u304c\u3042\u308a\u307e\u3059\u3002\",\"existing_code\":\"\u5bfe\u8c61\u9078\u629e\u306f `init` \u3067\u884c\u3044\u3001`review` \u306f\u30a2\u30af\u30c6\u30a3\u30d6\u306a\u30bb\u30c3\u30b7\u30e7\u30f3\u3092 1 \u56de\u3060\u3051\u9032\u3081\u307e\u3059\u3002\u88f8\u306e `init` \u306f\u3001\u5b8c\u5168\u3067\u5229\u7528\u53ef\u80fd\u306a\u30c1\u30a7\u30c3\u30af\u30dd\u30a4\u30f3\u30c8\u304c\u3042\u308b\u5834\u5408 `.review-gauntlet/checkpoints/latest/status.json` \u3092\u4f7f\u3044\u3001\u305d\u306e `review_base_commit` \u304b\u3089 `HEAD` \u307e\u3067\u3092\u30ec\u30d3\u30e5\u30fc\u3057\u307e\u3059\u3002\u30c1\u30a7\u30c3\u30af\u30dd\u30a4\u30f3\u30c8\u304c\u306a\u3044\u5834\u5408\u3001\u88f8\u306e `init` \u306f\u5bfe\u8c61\u3068\u306a\u308b\u5168\u30d5\u30a1\u30a4\u30eb\u3092\u30ec\u30d3\u30e5\u30fc\u3057\u307e\u3059\u3002\",\"start_line\":209,\"end_line\":209,\"thinking\":\"English README line 257: 'Scripts that need the previous workspace-diff default must pass `--worktree` explicitly.' This is a critical behavioral note indicating a default behavior change. Without this, Japanese users upgrading from previous versions would not know they need to add --worktree to maintain the previous workspace-diff behavior.\",\"imprecise\":false}",
+      "path": "README.ja.md",
+      "rule_id": "docs-accuracy",
+      "session_id": "RGS-0339f214c5ac",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "content": "subprocess.TimeoutExpired is not caught in _read_cell_file_metadata. When `timeout=10` is specified in subprocess.run, a TimeoutExpired exception can be raised if the git command takes too long. The except clause only catches CalledProcessError, so TimeoutExpired propagates uncaught as a raw exception instead of being wrapped in a ReviewAdapterError. This breaks the contract that callers can rely on ReviewAdapterError for all git-related failures.",
+      "finding_id": "RGF-0994",
+      "fingerprint": "673180c43d74bbbbc1e61b73df401f6c023dad20d5d30d24c566675f137cef9d",
+      "latest_occurrence": {
+        "cell_id": "RGC-188dbb0b34cf9208",
+        "end_line": 517,
+        "finding_id": "RGF-0994",
+        "imprecise": 0,
+        "occurrence_id": 994,
+        "path": "src/review_gauntlet/review_adapter.py",
+        "run_id": 287,
+        "start_line": 514
+      },
+      "metadata": "{\"fingerprint\":\"673180c43d74bbbbc1e61b73df401f6c023dad20d5d30d24c566675f137cef9d\",\"path\":\"src/review_gauntlet/review_adapter.py\",\"rule_id\":\"data-validation\",\"content\":\"subprocess.TimeoutExpired is not caught in _read_cell_file_metadata. When `timeout=10` is specified in subprocess.run, a TimeoutExpired exception can be raised if the git command takes too long. The except clause only catches CalledProcessError, so TimeoutExpired propagates uncaught as a raw exception instead of being wrapped in a ReviewAdapterError. This breaks the contract that callers can rely on ReviewAdapterError for all git-related failures.\",\"suggestion_code\":\"            except subprocess.CalledProcessError as exc:\\n                raise ReviewAdapterError(\\n                    f\\\"cannot read review cell path at commit {self._review_commit}: {cell.file_path}\\\"\\n                ) from exc\\n            except subprocess.TimeoutExpired as exc:\\n                raise ReviewAdapterError(\\n                    f\\\"timed out reading review cell path at commit {self._review_commit}: {cell.file_path}\\\"\\n                ) from exc\",\"existing_code\":\"            except subprocess.CalledProcessError as exc:\\n                raise ReviewAdapterError(\\n                    f\\\"cannot read review cell path at commit {self._review_commit}: {cell.file_path}\\\"\\n                ) from exc\",\"start_line\":514,\"end_line\":517,\"thinking\":\"subprocess.run is called with timeout=10 and check=True. CalledProcessError (non-zero exit) is handled, but TimeoutExpired (git takes >10s) is not. It propagates uncaught out of _read_cell_file_metadata and then out of review(), breaking the ReviewAdapterError contract used by callers.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/review_adapter.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-0339f214c5ac",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "content": "The sentinel string used in _expand for brace escaping is constructed by concatenating a null-byte wrapper with 'OPEN'/'CLOSE'. If any variable value injected during substitution itself contains the sentinel prefix '\\x00REVIEW_GAUNTLET_LITERAL_BRACE\\x00', the final replace pass will incorrectly convert it to a literal brace character, corrupting the expanded output. There is no validation that expanded variable values are free of the sentinel before performing the suffix replacements.",
+      "finding_id": "RGF-0995",
+      "fingerprint": "70b28dcdfeb7ce3d74272109e1bfb4561eb8fce46a328255e295f097bd03b100",
+      "latest_occurrence": {
+        "cell_id": "RGC-188dbb0b34cf9208",
+        "end_line": 548,
+        "finding_id": "RGF-0995",
+        "imprecise": 0,
+        "occurrence_id": 995,
+        "path": "src/review_gauntlet/review_adapter.py",
+        "run_id": 287,
+        "start_line": 547
+      },
+      "metadata": "{\"fingerprint\":\"70b28dcdfeb7ce3d74272109e1bfb4561eb8fce46a328255e295f097bd03b100\",\"path\":\"src/review_gauntlet/review_adapter.py\",\"rule_id\":\"data-validation\",\"content\":\"The sentinel string used in _expand for brace escaping is constructed by concatenating a null-byte wrapper with 'OPEN'/'CLOSE'. If any variable value injected during substitution itself contains the sentinel prefix '\\\\x00REVIEW_GAUNTLET_LITERAL_BRACE\\\\x00', the final replace pass will incorrectly convert it to a literal brace character, corrupting the expanded output. There is no validation that expanded variable values are free of the sentinel before performing the suffix replacements.\",\"suggestion_code\":\"        placeholder = \\\"\\\\x00REVIEW_GAUNTLET_LITERAL_BRACE\\\\x00\\\"\\n        # Validate that no variable value contains the sentinel to prevent corruption\\n        for var_name, var_value in variables.items():\\n            if placeholder in var_value:\\n                raise ReviewAdapterError(\\n                    f\\\"template variable '{var_name}' contains reserved sentinel sequence\\\"\\n                )\\n        protected = value.replace(\\\"{{\\\", placeholder + \\\"OPEN\\\").replace(\\\"}}\\\", placeholder + \\\"CLOSE\\\")\",\"existing_code\":\"        placeholder = \\\"\\\\x00REVIEW_GAUNTLET_LITERAL_BRACE\\\\x00\\\"\\n        protected = value.replace(\\\"{{\\\", placeholder + \\\"OPEN\\\").replace(\\\"}}\\\", placeholder + \\\"CLOSE\\\")\",\"start_line\":547,\"end_line\":548,\"thinking\":\"The escaping mechanism protects literal {{ and }} by replacing them with a sentinel before regex substitution and restoring them after. If a variable value (e.g., from env or config) contains the sentinel string, the restore step will incorrectly turn it into { or }. Null bytes in variable values are unusual but not impossible (e.g., from environment variables set by tests or adversarial configs). Pre-validating variable values eliminates the ambiguity.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/review_adapter.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-0339f214c5ac",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "content": "Busy-wait loop after stdout thread finishes: the loop joins only `threads[0]`, so once stdout reading ends, every subsequent iteration returns immediately (0-second wait) and spins until stderr finishes. Under a high-volume review this causes 100% CPU usage on the polling thread until the stderr reader drains.",
+      "finding_id": "RGF-0996",
+      "fingerprint": "8aa56766b02cbbb6a695994f14804e26eaa307c0b6a78fae8c84816000fa62a9",
+      "latest_occurrence": {
+        "cell_id": "RGC-188dbb0b34cf9208",
+        "end_line": 471,
+        "finding_id": "RGF-0996",
+        "imprecise": 0,
+        "occurrence_id": 996,
+        "path": "src/review_gauntlet/review_adapter.py",
+        "run_id": 290,
+        "start_line": 462
+      },
+      "metadata": "{\"fingerprint\":\"8aa56766b02cbbb6a695994f14804e26eaa307c0b6a78fae8c84816000fa62a9\",\"path\":\"src/review_gauntlet/review_adapter.py\",\"rule_id\":\"data-validation\",\"content\":\"Busy-wait loop after stdout thread finishes: the loop joins only `threads[0]`, so once stdout reading ends, every subsequent iteration returns immediately (0-second wait) and spins until stderr finishes. Under a high-volume review this causes 100% CPU usage on the polling thread until the stderr reader drains.\",\"suggestion_code\":\"        while any(t.is_alive() for t in threads):\\n            for t in threads:\\n                if t.is_alive():\\n                    t.join(timeout=0.05)\\n                    break\\n            now = time.monotonic()\",\"existing_code\":\"        while any(t.is_alive() for t in threads):\\n            threads[0].join(timeout=0.05)\\n            now = time.monotonic()\",\"start_line\":462,\"end_line\":471,\"thinking\":\"The loop guard checks all threads but only blocks on threads[0]. After threads[0] exits, every join() returns at once (thread is dead, timeout is irrelevant) creating a tight spin-loop. Joining the first alive thread instead eliminates the busy-wait.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/review_adapter.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-0339f214c5ac",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "content": "No file-size guard before reading the entire source file into memory. `file_path.read_bytes()` will load arbitrarily large files; the `VERDICT_OUTPUT_SIZE_LIMIT_BYTES` constant only protects verdict output. A multi-GB file passed as a review cell would exhaust process memory before any size check is possible.",
+      "finding_id": "RGF-0997",
+      "fingerprint": "c77f1aa00715b0edb698bc0f90b67d62d3730729d999438432445cf6ffd6b8fb",
+      "latest_occurrence": {
+        "cell_id": "RGC-188dbb0b34cf9208",
+        "end_line": 525,
+        "finding_id": "RGF-0997",
+        "imprecise": 0,
+        "occurrence_id": 997,
+        "path": "src/review_gauntlet/review_adapter.py",
+        "run_id": 290,
+        "start_line": 523
+      },
+      "metadata": "{\"fingerprint\":\"c77f1aa00715b0edb698bc0f90b67d62d3730729d999438432445cf6ffd6b8fb\",\"path\":\"src/review_gauntlet/review_adapter.py\",\"rule_id\":\"data-validation\",\"content\":\"No file-size guard before reading the entire source file into memory. `file_path.read_bytes()` will load arbitrarily large files; the `VERDICT_OUTPUT_SIZE_LIMIT_BYTES` constant only protects verdict output. A multi-GB file passed as a review cell would exhaust process memory before any size check is possible.\",\"suggestion_code\":\"            if not file_path.is_file():\\n                raise ReviewAdapterError(f\\\"review cell path is not a file: {cell.file_path}\\\")\\n            stat = file_path.stat()\\n            if stat.st_size > VERDICT_OUTPUT_SIZE_LIMIT_BYTES:\\n                raise ReviewAdapterError(\\n                    f\\\"review cell file exceeds size limit ({stat.st_size} bytes): {cell.file_path}\\\"\\n                )\\n            content = file_path.read_bytes()\",\"existing_code\":\"            if not file_path.is_file():\\n                raise ReviewAdapterError(f\\\"review cell path is not a file: {cell.file_path}\\\")\\n            content = file_path.read_bytes()\",\"start_line\":523,\"end_line\":525,\"thinking\":\"For the git-commit path the content arrives from subprocess output which is naturally bounded, but the filesystem path has no guard. Adding a stat() check before read_bytes() costs one syscall and prevents accidental or adversarial OOM.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/review_adapter.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-0339f214c5ac",
+      "state": "accepted_risk"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "content": "`self._review_commit` is interpolated directly into the git-show argument without any format validation. A value such as `HEAD~1 -- /etc/passwd` or a ref containing shell-unsafe characters (even with `shell=False`, git itself interprets the ref) could produce unexpected git behavior or read files outside the intended commit. The field should be validated as a hex SHA or a safe ref name before use.",
+      "finding_id": "RGF-0998",
+      "fingerprint": "0a6b224347f4071d5415fe22b61ae7ed5f9a5b546709e741062a5f2f5441a880",
+      "latest_occurrence": {
+        "cell_id": "RGC-188dbb0b34cf9208",
+        "end_line": 511,
+        "finding_id": "RGF-0998",
+        "imprecise": 0,
+        "occurrence_id": 998,
+        "path": "src/review_gauntlet/review_adapter.py",
+        "run_id": 290,
+        "start_line": 504
+      },
+      "metadata": "{\"fingerprint\":\"0a6b224347f4071d5415fe22b61ae7ed5f9a5b546709e741062a5f2f5441a880\",\"path\":\"src/review_gauntlet/review_adapter.py\",\"rule_id\":\"data-validation\",\"content\":\"`self._review_commit` is interpolated directly into the git-show argument without any format validation. A value such as `HEAD~1 -- /etc/passwd` or a ref containing shell-unsafe characters (even with `shell=False`, git itself interprets the ref) could produce unexpected git behavior or read files outside the intended commit. The field should be validated as a hex SHA or a safe ref name before use.\",\"suggestion_code\":\"        if self._review_commit is not None:\\n            if not re.fullmatch(r\\\"[0-9a-fA-F]{7,40}|[\\\\w./-]+\\\", self._review_commit):\\n                raise ReviewAdapterError(\\n                    f\\\"invalid review_commit format: {self._review_commit!r}\\\"\\n                )\\n            try:\\n                result = subprocess.run(\\n                    [\\\"git\\\", \\\"show\\\", f\\\"{self._review_commit}:{cell.file_path}\\\"],\",\"existing_code\":\"        if self._review_commit is not None:\\n            try:\\n                result = subprocess.run(\\n                    [\\\"git\\\", \\\"show\\\", f\\\"{self._review_commit}:{cell.file_path}\\\"],\",\"start_line\":504,\"end_line\":511,\"thinking\":\"shell=False prevents shell injection, but git itself parses the combined refspec argument. Without a format check, an attacker who controls review_commit could craft a refspec that resolves to an unintended object. A simple regex guard (hex SHA or safe ref characters) is cheap and effective.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/review_adapter.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-0339f214c5ac",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "content": "File content is read entirely into memory before the size check, creating an OOM risk. A buggy or malicious adapter could write an arbitrarily large verdict file that exhausts heap memory before the `VERDICT_OUTPUT_SIZE_LIMIT_BYTES` guard on line 614 can reject it. Check the file size via `output_path.stat().st_size` before reading.",
+      "finding_id": "RGF-0999",
+      "fingerprint": "c687fccb0f0bf233a278cde5c16786e82fa8b8b97c201fada894ff856dcadf41",
+      "latest_occurrence": {
+        "cell_id": "RGC-188dbb0b34cf9208",
+        "end_line": 613,
+        "finding_id": "RGF-0999",
+        "imprecise": 0,
+        "occurrence_id": 999,
+        "path": "src/review_gauntlet/review_adapter.py",
+        "run_id": 291,
+        "start_line": 606
+      },
+      "metadata": "{\"fingerprint\":\"c687fccb0f0bf233a278cde5c16786e82fa8b8b97c201fada894ff856dcadf41\",\"path\":\"src/review_gauntlet/review_adapter.py\",\"rule_id\":\"data-validation\",\"content\":\"File content is read entirely into memory before the size check, creating an OOM risk. A buggy or malicious adapter could write an arbitrarily large verdict file that exhausts heap memory before the `VERDICT_OUTPUT_SIZE_LIMIT_BYTES` guard on line 614 can reject it. Check the file size via `output_path.stat().st_size` before reading.\",\"suggestion_code\":\"        try:\\n            stat = output_path.stat()\\n        except OSError as exc:\\n            self._fail(\\n                f\\\"cannot stat verdict output file: {exc}\\\",\\n                failure_file,\\n                {\\\"output_path\\\": str(output_path), \\\"error\\\": str(exc)},\\n            )\\n        if stat.st_size > VERDICT_OUTPUT_SIZE_LIMIT_BYTES:\\n            self._fail(\\n                \\\"verdict output file exceeds \\\"\\n                f\\\"{VERDICT_OUTPUT_SIZE_LIMIT_BYTES} bytes: {output_path}\\\",\\n                failure_file,\\n                {\\n                    \\\"output_path\\\": str(output_path),\\n                    \\\"output_size_bytes\\\": stat.st_size,\\n                    \\\"size_limit_bytes\\\": VERDICT_OUTPUT_SIZE_LIMIT_BYTES,\\n                },\\n            )\\n        try:\\n            content = output_path.read_text(encoding=\\\"utf-8\\\")\\n        except (OSError, UnicodeDecodeError) as exc:\\n            self._fail(\\n                f\\\"cannot read verdict output file: {exc}\\\",\\n                failure_file,\\n                {\\\"output_path\\\": str(output_path), \\\"error\\\": str(exc)},\\n            )\\n        output_size = len(content.encode(\\\"utf-8\\\"))\",\"existing_code\":\"        try:\\n            content = output_path.read_text(encoding=\\\"utf-8\\\")\\n        except (OSError, UnicodeDecodeError) as exc:\\n            self._fail(\\n                f\\\"cannot read verdict output file: {exc}\\\",\\n                failure_file,\\n                {\\\"output_path\\\": str(output_path), \\\"error\\\": str(exc)},\\n            )\\n        output_size = len(content.encode(\\\"utf-8\\\"))\",\"start_line\":606,\"end_line\":613,\"thinking\":\"The size guard exists precisely to prevent large outputs from causing problems, but it fires after the entire file is already in memory. Moving a stat()-based pre-check before read_text() closes this window. The stat size is in raw bytes and may differ slightly from the UTF-8 encoded length for multi-byte characters, so the post-read check can remain as an exact guard.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/review_adapter.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-0339f214c5ac",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "content": "`assert` is used to guard `process.stdout` and `process.stderr` being non-None. Python's `-O` / `-OO` flags strip all `assert` statements at compile time, so these checks silently disappear in optimised deployments. Replace with an explicit `if`/raise to keep the guard unconditional.",
+      "finding_id": "RGF-1000",
+      "fingerprint": "0def1906046abc55cb278bc25574f23c51fba0b2d7bec7297d30dca2eb3143ff",
+      "latest_occurrence": {
+        "cell_id": "RGC-188dbb0b34cf9208",
+        "end_line": 441,
+        "finding_id": "RGF-1000",
+        "imprecise": 0,
+        "occurrence_id": 1000,
+        "path": "src/review_gauntlet/review_adapter.py",
+        "run_id": 291,
+        "start_line": 440
+      },
+      "metadata": "{\"fingerprint\":\"0def1906046abc55cb278bc25574f23c51fba0b2d7bec7297d30dca2eb3143ff\",\"path\":\"src/review_gauntlet/review_adapter.py\",\"rule_id\":\"data-validation\",\"content\":\"`assert` is used to guard `process.stdout` and `process.stderr` being non-None. Python's `-O` / `-OO` flags strip all `assert` statements at compile time, so these checks silently disappear in optimised deployments. Replace with an explicit `if`/raise to keep the guard unconditional.\",\"suggestion_code\":\"        if process.stdout is None or process.stderr is None:\\n            raise ReviewAdapterError(\\\"subprocess pipes unexpectedly None\\\")\",\"existing_code\":\"        assert process.stdout is not None\\n        assert process.stderr is not None\",\"start_line\":440,\"end_line\":441,\"thinking\":\"The Popen call always passes stdout=subprocess.PIPE and stderr=subprocess.PIPE, so these values should never be None at runtime. However, using assert means the check is compiled away with -O, which is the norm in many production deployments. An explicit RuntimeError/ReviewAdapterError is more appropriate for an invariant that, if violated, indicates a programming error.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/review_adapter.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-0339f214c5ac",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "content": "`item.get(\"input\", \"\")` uses a default of `\"\"`, but `dict.get(key, default)` only returns the default when the key is absent \u2014 not when the key is present with value `None`. If Pydantic stores `input: None` in the error dict (which can happen for certain validation paths), this expression evaluates to `str(None)` = `\"None\"` (the 4-char string) and passes it to `_line_column_position` as the source text. The position computed from the tiny \"None\" string is almost always wrong or `None`, giving a misleading snippet window in the failure report.",
+      "finding_id": "RGF-1001",
+      "fingerprint": "8405977f4ad2e6e2a0c8caaa9385df7159c7b26500b2232915f6dc5f6274c89f",
+      "latest_occurrence": {
+        "cell_id": "RGC-188dbb0b34cf9208",
+        "end_line": 719,
+        "finding_id": "RGF-1001",
+        "imprecise": 0,
+        "occurrence_id": 1001,
+        "path": "src/review_gauntlet/review_adapter.py",
+        "run_id": 292,
+        "start_line": 719
+      },
+      "metadata": "{\"fingerprint\":\"8405977f4ad2e6e2a0c8caaa9385df7159c7b26500b2232915f6dc5f6274c89f\",\"path\":\"src/review_gauntlet/review_adapter.py\",\"rule_id\":\"data-validation\",\"content\":\"`item.get(\\\"input\\\", \\\"\\\")` uses a default of `\\\"\\\"`, but `dict.get(key, default)` only returns the default when the key is absent \u2014 not when the key is present with value `None`. If Pydantic stores `input: None` in the error dict (which can happen for certain validation paths), this expression evaluates to `str(None)` = `\\\"None\\\"` (the 4-char string) and passes it to `_line_column_position` as the source text. The position computed from the tiny \\\"None\\\" string is almost always wrong or `None`, giving a misleading snippet window in the failure report.\",\"suggestion_code\":\"                raw_input = item.get(\\\"input\\\")\\n                position = _line_column_position(raw_input if isinstance(raw_input, str) else \\\"\\\", raw_error)\",\"existing_code\":\"                position = _line_column_position(str(item.get(\\\"input\\\", \\\"\\\")), raw_error)\",\"start_line\":719,\"end_line\":719,\"thinking\":\"dict.get(key, default) only uses the default when the key is missing. When input=None the key IS present, so the default '' is not used. str(None) produces 'None' which is wrong.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/review_adapter.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-0339f214c5ac",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "content": "`_line_column_position` validates that `line <= len(lines)` but never checks that `column <= len(lines[line - 1])`. If the error message claims a column number beyond the actual line length, the returned byte offset falls into the following line's content. `_raw_snippet` then centres its window on the wrong location, producing a misleading error snippet.",
+      "finding_id": "RGF-1002",
+      "fingerprint": "e07ef7cc68f2c41bfd295d20de2929720470a1ca951fb21311dfde69c8bb7298",
+      "latest_occurrence": {
+        "cell_id": "RGC-188dbb0b34cf9208",
+        "end_line": 736,
+        "finding_id": "RGF-1002",
+        "imprecise": 0,
+        "occurrence_id": 1002,
+        "path": "src/review_gauntlet/review_adapter.py",
+        "run_id": 292,
+        "start_line": 733
+      },
+      "metadata": "{\"fingerprint\":\"e07ef7cc68f2c41bfd295d20de2929720470a1ca951fb21311dfde69c8bb7298\",\"path\":\"src/review_gauntlet/review_adapter.py\",\"rule_id\":\"data-validation\",\"content\":\"`_line_column_position` validates that `line <= len(lines)` but never checks that `column <= len(lines[line - 1])`. If the error message claims a column number beyond the actual line length, the returned byte offset falls into the following line's content. `_raw_snippet` then centres its window on the wrong location, producing a misleading error snippet.\",\"suggestion_code\":\"    lines = value.splitlines(keepends=True)\\n    if line > len(lines):\\n        return None\\n    if column > len(lines[line - 1]):\\n        return None\\n    return sum(len(part) for part in lines[: line - 1]) + column - 1\",\"existing_code\":\"    lines = value.splitlines(keepends=True)\\n    if line > len(lines):\\n        return None\\n    return sum(len(part) for part in lines[: line - 1]) + column - 1\",\"start_line\":733,\"end_line\":736,\"thinking\":\"The function bounds-checks line but not column. An out-of-bounds column produces a position inside the next line, corrupting the snippet window.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/review_adapter.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-0339f214c5ac",
+      "state": "accepted_risk"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "content": "TOCTOU race condition in size validation: `stat().st_size` is checked at line 606 before the file is read at line 625. A verdict file that is within the size limit at stat-time but grows between the two calls will bypass the `VERDICT_OUTPUT_SIZE_LIMIT_BYTES` guard. The validated size may not correspond to the content that is ultimately returned and written to `verdict.raw.json`. The fix is to read the raw bytes first, validate their length, then decode \u2014 eliminating the window between check and use.",
+      "finding_id": "RGF-1003",
+      "fingerprint": "32be63fb65c45b2eb96d445133c4b8bbbe63a960822f6c1a78a675d70af3f43f",
+      "latest_occurrence": {
+        "cell_id": "RGC-188dbb0b34cf9208",
+        "end_line": 632,
+        "finding_id": "RGF-1003",
+        "imprecise": 0,
+        "occurrence_id": 1003,
+        "path": "src/review_gauntlet/review_adapter.py",
+        "run_id": 293,
+        "start_line": 605
+      },
+      "metadata": "{\"fingerprint\":\"32be63fb65c45b2eb96d445133c4b8bbbe63a960822f6c1a78a675d70af3f43f\",\"path\":\"src/review_gauntlet/review_adapter.py\",\"rule_id\":\"data-validation\",\"content\":\"TOCTOU race condition in size validation: `stat().st_size` is checked at line 606 before the file is read at line 625. A verdict file that is within the size limit at stat-time but grows between the two calls will bypass the `VERDICT_OUTPUT_SIZE_LIMIT_BYTES` guard. The validated size may not correspond to the content that is ultimately returned and written to `verdict.raw.json`. The fix is to read the raw bytes first, validate their length, then decode \u2014 eliminating the window between check and use.\",\"suggestion_code\":\"        try:\\n            raw_bytes = output_path.read_bytes()\\n        except OSError as exc:\\n            self._fail(\\n                f\\\"cannot read verdict output file: {exc}\\\",\\n                failure_file,\\n                {\\\"output_path\\\": str(output_path), \\\"error\\\": str(exc)},\\n            )\\n        output_size = len(raw_bytes)\\n        if output_size > VERDICT_OUTPUT_SIZE_LIMIT_BYTES:\\n            self._fail(\\n                \\\"verdict output file exceeds \\\"\\n                f\\\"{VERDICT_OUTPUT_SIZE_LIMIT_BYTES} bytes: {output_path}\\\",\\n                failure_file,\\n                {\\n                    \\\"output_path\\\": str(output_path),\\n                    \\\"output_size_bytes\\\": output_size,\\n                    \\\"size_limit_bytes\\\": VERDICT_OUTPUT_SIZE_LIMIT_BYTES,\\n                },\\n            )\\n        try:\\n            content = raw_bytes.decode(\\\"utf-8\\\")\\n        except UnicodeDecodeError as exc:\\n            self._fail(\\n                f\\\"cannot decode verdict output file as UTF-8: {exc}\\\",\\n                failure_file,\\n                {\\\"output_path\\\": str(output_path), \\\"error\\\": str(exc)},\\n            )\\n        return content\",\"existing_code\":\"        try:\\n            output_size = output_path.stat().st_size\\n        except OSError as exc:\\n            self._fail(\\n                f\\\"cannot stat verdict output file: {exc}\\\",\\n                failure_file,\\n                {\\\"output_path\\\": str(output_path), \\\"error\\\": str(exc)},\\n            )\\n        if output_size > VERDICT_OUTPUT_SIZE_LIMIT_BYTES:\\n            self._fail(\\n                \\\"verdict output file exceeds \\\"\\n                f\\\"{VERDICT_OUTPUT_SIZE_LIMIT_BYTES} bytes: {output_path}\\\",\\n                failure_file,\\n                {\\n                    \\\"output_path\\\": str(output_path),\\n                    \\\"output_size_bytes\\\": output_size,\\n                    \\\"size_limit_bytes\\\": VERDICT_OUTPUT_SIZE_LIMIT_BYTES,\\n                },\\n            )\\n        try:\\n            content = output_path.read_text(encoding=\\\"utf-8\\\")\\n        except (OSError, UnicodeDecodeError) as exc:\\n            self._fail(\\n                f\\\"cannot read verdict output file: {exc}\\\",\\n                failure_file,\\n                {\\\"output_path\\\": str(output_path), \\\"error\\\": str(exc)},\\n            )\\n        return content\",\"start_line\":605,\"end_line\":632,\"thinking\":\"The _read_output_file method performs a stat() call to get the file size, then checks it against VERDICT_OUTPUT_SIZE_LIMIT_BYTES, and only after that reads the actual content with read_text(). This is a classic TOCTOU pattern: the file on disk is not guaranteed to be unchanged between stat() and read_text(). If the external review command is still writing to the file, or if any other process appends to it between these two syscalls, the actual bytes returned from read_text() could exceed the limit. Reading raw bytes first and checking len() atomically avoids this window entirely.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/review_adapter.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-0339f214c5ac",
+      "state": "accepted_risk"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "content": "STDOUT_JSON mode has no size limit on `completed.stdout`, while FILE_JSON mode enforces `VERDICT_OUTPUT_SIZE_LIMIT_BYTES` via `_read_output_file`. A misbehaving adapter can emit unbounded stdout, consuming unlimited memory without any guard.",
+      "finding_id": "RGF-1004",
+      "fingerprint": "12f2c05ff47de950cfbe6491bc95e3c66d6ed2081166fcc5a4bb39b29e6fceed",
+      "latest_occurrence": {
+        "cell_id": "RGC-188dbb0b34cf9208",
+        "end_line": 327,
+        "finding_id": "RGF-1004",
+        "imprecise": 0,
+        "occurrence_id": 1004,
+        "path": "src/review_gauntlet/review_adapter.py",
+        "run_id": 294,
+        "start_line": 323
+      },
+      "metadata": "{\"fingerprint\":\"12f2c05ff47de950cfbe6491bc95e3c66d6ed2081166fcc5a4bb39b29e6fceed\",\"path\":\"src/review_gauntlet/review_adapter.py\",\"rule_id\":\"data-validation\",\"content\":\"STDOUT_JSON mode has no size limit on `completed.stdout`, while FILE_JSON mode enforces `VERDICT_OUTPUT_SIZE_LIMIT_BYTES` via `_read_output_file`. A misbehaving adapter can emit unbounded stdout, consuming unlimited memory without any guard.\",\"suggestion_code\":\"        if self._config.output.mode == OutputMode.STDOUT_JSON:\\n            stdout_size = len(completed.stdout.encode(\\\"utf-8\\\"))\\n            if stdout_size > VERDICT_OUTPUT_SIZE_LIMIT_BYTES:\\n                self._fail(\\n                    f\\\"verdict stdout exceeds {VERDICT_OUTPUT_SIZE_LIMIT_BYTES} bytes\\\",\\n                    failure_file,\\n                    {\\n                        \\\"output_size_bytes\\\": stdout_size,\\n                        \\\"size_limit_bytes\\\": VERDICT_OUTPUT_SIZE_LIMIT_BYTES,\\n                    },\\n                )\\n            verdict_text = completed.stdout\\n        else:\\n            verdict_text = self._read_output_file(output_path, failure_file)\",\"existing_code\":\"        verdict_text = (\\n            completed.stdout\\n            if self._config.output.mode == OutputMode.STDOUT_JSON\\n            else self._read_output_file(output_path, failure_file)\\n        )\",\"start_line\":323,\"end_line\":327,\"thinking\":\"_read_output_file enforces the 1 MB cap on lines 583-591, but the STDOUT_JSON branch at line 324 bypasses it entirely. Consistency requires the same guard on both paths.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/review_adapter.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-0339f214c5ac",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "content": "`self._fixtures.get(cell.id) or self._fixtures.get(cell.file_path)` uses truthiness rather than an explicit `None` check. If a fixture intentionally maps `cell.id` to an empty list `[]` (meaning \"no comments for this cell\"), the falsy empty list causes the expression to fall through to the `cell.file_path` lookup, potentially applying the wrong fixture data.",
+      "finding_id": "RGF-1005",
+      "fingerprint": "16e1e99bd5104dca32cc6ec58913bae48fc0fdd77fcab6c1bb2222e7fe58024a",
+      "latest_occurrence": {
+        "cell_id": "RGC-188dbb0b34cf9208",
+        "end_line": 67,
+        "finding_id": "RGF-1005",
+        "imprecise": 0,
+        "occurrence_id": 1005,
+        "path": "src/review_gauntlet/review_adapter.py",
+        "run_id": 294,
+        "start_line": 67
+      },
+      "metadata": "{\"fingerprint\":\"16e1e99bd5104dca32cc6ec58913bae48fc0fdd77fcab6c1bb2222e7fe58024a\",\"path\":\"src/review_gauntlet/review_adapter.py\",\"rule_id\":\"data-validation\",\"content\":\"`self._fixtures.get(cell.id) or self._fixtures.get(cell.file_path)` uses truthiness rather than an explicit `None` check. If a fixture intentionally maps `cell.id` to an empty list `[]` (meaning \\\"no comments for this cell\\\"), the falsy empty list causes the expression to fall through to the `cell.file_path` lookup, potentially applying the wrong fixture data.\",\"suggestion_code\":\"        _by_id = self._fixtures.get(cell.id)\\n        raw_comments = _by_id if _by_id is not None else (self._fixtures.get(cell.file_path) or [])\",\"existing_code\":\"        raw_comments = self._fixtures.get(cell.id) or self._fixtures.get(cell.file_path) or []\",\"start_line\":67,\"end_line\":67,\"thinking\":\"Using `or` on a list coerces an intentional empty-list fixture entry to falsy, silently falling through to a less-specific key. An explicit `is None` check preserves the intended semantics.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/review_adapter.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-0339f214c5ac",
+      "state": "fixed_verified"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "content": "In `_communicate`, the poll loop only joins `threads[0]` (the stdout reader). When stdout closes before stderr, `threads[0].join(timeout=0.05)` returns immediately every iteration, causing a 100% CPU busy-wait until the stderr thread finishes. No test exercises the case where stderr outlives stdout (e.g. a command that writes nothing to stdout but emits large stderr), so this defect has no test evidence.",
+      "finding_id": "RGF-1006",
+      "fingerprint": "d4c3af9190bd72637d25096f38c53b89a3e79601a4ae7a8517adac189b5dcf04",
+      "latest_occurrence": {
+        "cell_id": "RGC-4c66950bc2ca2dee",
+        "end_line": 454,
+        "finding_id": "RGF-1006",
+        "imprecise": 0,
+        "occurrence_id": 1006,
+        "path": "src/review_gauntlet/review_adapter.py",
+        "run_id": 294,
+        "start_line": 453
+      },
+      "metadata": "{\"fingerprint\":\"d4c3af9190bd72637d25096f38c53b89a3e79601a4ae7a8517adac189b5dcf04\",\"path\":\"src/review_gauntlet/review_adapter.py\",\"rule_id\":\"test-evidence\",\"content\":\"In `_communicate`, the poll loop only joins `threads[0]` (the stdout reader). When stdout closes before stderr, `threads[0].join(timeout=0.05)` returns immediately every iteration, causing a 100% CPU busy-wait until the stderr thread finishes. No test exercises the case where stderr outlives stdout (e.g. a command that writes nothing to stdout but emits large stderr), so this defect has no test evidence.\",\"suggestion_code\":\"        while any(t.is_alive() for t in threads):\\n            for t in threads:\\n                t.join(timeout=0.05)\",\"existing_code\":\"        while any(t.is_alive() for t in threads):\\n            threads[0].join(timeout=0.05)\",\"start_line\":453,\"end_line\":454,\"thinking\":\"threads[0].join(timeout=0.05) only gates on the stdout pipe thread. Once stdout is closed, it returns immediately on every loop tick while threads[1] (stderr) is still reading. The while-condition correctly tests both threads, but the join inside targets only one, producing a spin-loop. Fixing it to join all threads costs at most 100ms extra per iteration (2 x 50ms) and eliminates the hot loop. The existing test suite has no case where stdout closes before stderr, so the bug has never been exercised.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/review_adapter.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-0339f214c5ac",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "content": "The `quiet_timeout_seconds` path (`_QuietTimeoutExpired`) has no test coverage through the public adapter API. `test_command_adapter_timeout_failure` covers absolute timeout (`timeout_seconds`) but there is no analogous test that runs a command that produces initial output and then goes silent, triggering the quiet-timeout branch and verifying partial stdout/stderr are saved to artifacts.",
+      "finding_id": "RGF-1007",
+      "fingerprint": "93486d6f3336a2b13afba1a3ca2275095f8bb1f264e13c4d903e26a879db0a64",
+      "latest_occurrence": {
+        "cell_id": "RGC-4c66950bc2ca2dee",
+        "end_line": 463,
+        "finding_id": "RGF-1007",
+        "imprecise": 0,
+        "occurrence_id": 1007,
+        "path": "src/review_gauntlet/review_adapter.py",
+        "run_id": 294,
+        "start_line": 461
+      },
+      "metadata": "{\"fingerprint\":\"93486d6f3336a2b13afba1a3ca2275095f8bb1f264e13c4d903e26a879db0a64\",\"path\":\"src/review_gauntlet/review_adapter.py\",\"rule_id\":\"test-evidence\",\"content\":\"The `quiet_timeout_seconds` path (`_QuietTimeoutExpired`) has no test coverage through the public adapter API. `test_command_adapter_timeout_failure` covers absolute timeout (`timeout_seconds`) but there is no analogous test that runs a command that produces initial output and then goes silent, triggering the quiet-timeout branch and verifying partial stdout/stderr are saved to artifacts.\",\"suggestion_code\":\"# Add a test such as:\\n# def test_command_adapter_quiet_timeout_failure(tmp_path: Path) -> None:\\n#     config = CommandAdapterConfig.model_validate({\\n#         \\\"type\\\": \\\"command\\\",\\n#         \\\"command\\\": sys.executable,\\n#         \\\"args\\\": [\\\"-c\\\", \\\"import time; print('hi', flush=True); time.sleep(5)\\\"],\\n#         \\\"quiet_timeout_seconds\\\": 0.1,\\n#     })\\n#     with pytest.raises(ReviewAdapterError, match=\\\"no output for\\\"):\\n#         _adapter(tmp_path, config).review(_cell(tmp_path))\\n#     cell_dir = ...\\n#     failure = json.loads((cell_dir / \\\"failure.json\\\").read_text())\\n#     assert failure[\\\"quiet_timeout_seconds\\\"] == 0.1\\n#     assert (cell_dir / \\\"stdout.txt\\\").read_text() == \\\"hi\\\\n\\\"\",\"existing_code\":\"            if idle >= self._config.quiet_timeout_seconds:\\n                timeout_exc = _QuietTimeoutExpired(self._config.quiet_timeout_seconds, \\\"\\\", \\\"\\\")\\n                break\",\"start_line\":461,\"end_line\":463,\"thinking\":\"The quiet-timeout path involves a non-trivial flow: idle detection via activity_lock, raising _QuietTimeoutExpired with empty strings, terminating the process, joining threads, collecting partial output from chunks, then re-raising with actual content. The _run_command except block then writes those partial streams to stdout.txt/stderr.txt and calls _fail. Without a test, any regression in this path (wrong partial output, wrong failure key, wrong error message) would go undetected. The fix is a test analogous to test_command_adapter_timeout_failure.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/review_adapter.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-0339f214c5ac",
+      "state": "accepted_risk"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "content": "Busy-wait when only stderr thread is still alive. The loop condition `any(t.is_alive() for t in threads)` stays True while stderr runs, but `threads[0].join(timeout=0.05)` returns immediately once the stdout thread is already dead. This causes a tight spin loop consuming 100% CPU until stderr finishes or a timeout fires.",
+      "finding_id": "RGF-1008",
+      "fingerprint": "f3eadc18f81fc840289b7438c6d54a3db7879a6b29db3ef891f57f25bcbd9120",
+      "latest_occurrence": {
+        "cell_id": "RGC-9ef94e1cfb21a5c6",
+        "end_line": 454,
+        "finding_id": "RGF-1008",
+        "imprecise": 0,
+        "occurrence_id": 1008,
+        "path": "src/review_gauntlet/review_adapter.py",
+        "run_id": 294,
+        "start_line": 453
+      },
+      "metadata": "{\"fingerprint\":\"f3eadc18f81fc840289b7438c6d54a3db7879a6b29db3ef891f57f25bcbd9120\",\"path\":\"src/review_gauntlet/review_adapter.py\",\"rule_id\":\"cli-contract\",\"content\":\"Busy-wait when only stderr thread is still alive. The loop condition `any(t.is_alive() for t in threads)` stays True while stderr runs, but `threads[0].join(timeout=0.05)` returns immediately once the stdout thread is already dead. This causes a tight spin loop consuming 100% CPU until stderr finishes or a timeout fires.\",\"suggestion_code\":\"        while any(t.is_alive() for t in threads):\\n            for t in threads:\\n                t.join(timeout=0.05)\",\"existing_code\":\"        while any(t.is_alive() for t in threads):\\n            threads[0].join(timeout=0.05)\",\"start_line\":453,\"end_line\":454,\"thinking\":\"The fix is to join all threads in each iteration, or at least the first still-alive thread, so the loop always sleeps for up to 0.05s rather than spinning when thread 0 is already finished.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/review_adapter.py",
+      "rule_id": "cli-contract",
+      "session_id": "RGS-0339f214c5ac",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "content": "STDOUT_JSON mode has no size limit on the verdict, while FILE_JSON mode enforces `VERDICT_OUTPUT_SIZE_LIMIT_BYTES` (1 MB) via `_read_output_file`. A runaway or adversarial subprocess could produce unbounded stdout, causing OOM or excessive memory use before the parse step.",
+      "finding_id": "RGF-1009",
+      "fingerprint": "bbfa62fbfbe4f2668e3e53a698cd31ad1d1d981af2bcda626c1a9b7d88b39fe6",
+      "latest_occurrence": {
+        "cell_id": "RGC-9ef94e1cfb21a5c6",
+        "end_line": 327,
+        "finding_id": "RGF-1009",
+        "imprecise": 0,
+        "occurrence_id": 1009,
+        "path": "src/review_gauntlet/review_adapter.py",
+        "run_id": 294,
+        "start_line": 323
+      },
+      "metadata": "{\"fingerprint\":\"bbfa62fbfbe4f2668e3e53a698cd31ad1d1d981af2bcda626c1a9b7d88b39fe6\",\"path\":\"src/review_gauntlet/review_adapter.py\",\"rule_id\":\"cli-contract\",\"content\":\"STDOUT_JSON mode has no size limit on the verdict, while FILE_JSON mode enforces `VERDICT_OUTPUT_SIZE_LIMIT_BYTES` (1 MB) via `_read_output_file`. A runaway or adversarial subprocess could produce unbounded stdout, causing OOM or excessive memory use before the parse step.\",\"suggestion_code\":\"        if self._config.output.mode == OutputMode.STDOUT_JSON:\\n            stdout_size = len(completed.stdout.encode(\\\"utf-8\\\"))\\n            if stdout_size > VERDICT_OUTPUT_SIZE_LIMIT_BYTES:\\n                self._fail(\\n                    f\\\"verdict stdout exceeds {VERDICT_OUTPUT_SIZE_LIMIT_BYTES} bytes\\\",\\n                    failure_file,\\n                    {\\n                        \\\"output_size_bytes\\\": stdout_size,\\n                        \\\"size_limit_bytes\\\": VERDICT_OUTPUT_SIZE_LIMIT_BYTES,\\n                    },\\n                )\\n            verdict_text = completed.stdout\\n        else:\\n            verdict_text = self._read_output_file(output_path, failure_file)\",\"existing_code\":\"        verdict_text = (\\n            completed.stdout\\n            if self._config.output.mode == OutputMode.STDOUT_JSON\\n            else self._read_output_file(output_path, failure_file)\\n        )\",\"start_line\":323,\"end_line\":327,\"thinking\":\"VERDICT_OUTPUT_SIZE_LIMIT_BYTES is already defined as a module constant and used in _read_output_file; applying the same guard to the STDOUT_JSON branch makes the limit mode-agnostic.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/review_adapter.py",
+      "rule_id": "cli-contract",
+      "session_id": "RGS-0339f214c5ac",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "content": "`init --worktree`\u3001`init --git-worktree`\u3001`finalize --merge` \u306e\u5404\u30aa\u30d7\u30b7\u30e7\u30f3\u304c\u30c9\u30ad\u30e5\u30e1\u30f3\u30c8\u306b\u8a18\u8f09\u3055\u308c\u3066\u3044\u307e\u3059\u304c\u3001\u3053\u306e\u30b3\u30df\u30c3\u30c8\u6642\u70b9\u306e\u5b9f\u969b\u306e CLI \u30b3\u30fc\u30c9\u306b\u306f\u5b58\u5728\u3057\u307e\u305b\u3093\u3002`src/review_gauntlet/cli.py` \u306e `init` \u30b5\u30d6\u30d1\u30fc\u30b5\u30fc\u306b\u306f `--from`\u3001`--to`\u3001`--commit`\u3001`--all` \u3057\u304b\u306a\u304f\u3001`finalize` \u30b5\u30d6\u30d1\u30fc\u30b5\u30fc\u306b\u3082 `--merge` \u30aa\u30d7\u30b7\u30e7\u30f3\u306f\u3042\u308a\u307e\u305b\u3093\u3002\u30e6\u30fc\u30b6\u30fc\u304c\u3053\u308c\u3089\u306e\u30b3\u30de\u30f3\u30c9\u3092\u5b9f\u884c\u3059\u308b\u3068\u30a8\u30e9\u30fc\u306b\u306a\u308a\u307e\u3059\u3002",
+      "finding_id": "RGF-1010",
+      "fingerprint": "7583a0a9af30923adb23b1c6f25853d4a690a7646c8ef5927a9a4540b9e661ba",
+      "latest_occurrence": {
+        "cell_id": "RGC-74a69a1efd649e46",
+        "end_line": 183,
+        "finding_id": "RGF-1010",
+        "imprecise": 0,
+        "occurrence_id": 1010,
+        "path": "README.ja.md",
+        "run_id": 294,
+        "start_line": 154
+      },
+      "metadata": "{\"fingerprint\":\"7583a0a9af30923adb23b1c6f25853d4a690a7646c8ef5927a9a4540b9e661ba\",\"path\":\"README.ja.md\",\"rule_id\":\"docs-accuracy\",\"content\":\"`init --worktree`\u3001`init --git-worktree`\u3001`finalize --merge` \u306e\u5404\u30aa\u30d7\u30b7\u30e7\u30f3\u304c\u30c9\u30ad\u30e5\u30e1\u30f3\u30c8\u306b\u8a18\u8f09\u3055\u308c\u3066\u3044\u307e\u3059\u304c\u3001\u3053\u306e\u30b3\u30df\u30c3\u30c8\u6642\u70b9\u306e\u5b9f\u969b\u306e CLI \u30b3\u30fc\u30c9\u306b\u306f\u5b58\u5728\u3057\u307e\u305b\u3093\u3002`src/review_gauntlet/cli.py` \u306e `init` \u30b5\u30d6\u30d1\u30fc\u30b5\u30fc\u306b\u306f `--from`\u3001`--to`\u3001`--commit`\u3001`--all` \u3057\u304b\u306a\u304f\u3001`finalize` \u30b5\u30d6\u30d1\u30fc\u30b5\u30fc\u306b\u3082 `--merge` \u30aa\u30d7\u30b7\u30e7\u30f3\u306f\u3042\u308a\u307e\u305b\u3093\u3002\u30e6\u30fc\u30b6\u30fc\u304c\u3053\u308c\u3089\u306e\u30b3\u30de\u30f3\u30c9\u3092\u5b9f\u884c\u3059\u308b\u3068\u30a8\u30e9\u30fc\u306b\u306a\u308a\u307e\u3059\u3002\",\"suggestion_code\":\"```bash\\n# \u30d6\u30e9\u30f3\u30c1\u307e\u305f\u306f\u7bc4\u56f2\u3092\u30ec\u30d3\u30e5\u30fc\\nreview-gauntlet init --from main --to HEAD\\n\\n# \u30ea\u30dd\u30b8\u30c8\u30ea\u5168\u4f53\u3092\u30ec\u30d3\u30e5\u30fc\\nreview-gauntlet init --all\\n\\n# \u5358\u4e00\u30b3\u30df\u30c3\u30c8\u3092\u30ec\u30d3\u30e5\u30fc\\nreview-gauntlet init --commit <commit-oid>\\n\\n# \u63a8\u5968: \u30a2\u30af\u30c6\u30a3\u30d6\u30bb\u30c3\u30b7\u30e7\u30f3\u304c finalize \u3055\u308c\u308b\u307e\u3067 ready \u30bf\u30b9\u30af\u3092\u5b9f\u884c\\nreview-gauntlet run\\n\\n# \u30c7\u30d0\u30c3\u30b0\u3084\u76e3\u67fb\u7d50\u679c\u306e\u78ba\u8a8d\\nreview-gauntlet status\\nreview-gauntlet findings\\n\\n# \u8aa4\u3063\u305f init \u3092\u7834\u68c4\u3059\u308b\u5834\u5408\u3002\u30c1\u30a7\u30c3\u30af\u30dd\u30a4\u30f3\u30c8\u306f\u4f5c\u6210\u3057\u306a\u3044\\nreview-gauntlet cancel\\n```\\n\\n`run` \u306f\u901a\u5e38\u306e\u9032\u884c\u30b3\u30de\u30f3\u30c9\u3067\u3059\u3002`review` \u306e constitution \u306b\u57fa\u3065\u304f\u52d5\u4f5c\u306f\u5909\u308f\u308a\u307e\u305b\u3093: `review` \u306f 1 \u56de\u306e\u547c\u3073\u51fa\u3057\u3067\u6b63\u78ba\u306b 1 \u30d0\u30c3\u30c1\u3060\u3051\u9032\u3081\u3001`run` \u306f\u5916\u90e8\u30a8\u30fc\u30b8\u30a7\u30f3\u30c8\u7d4c\u7531\u3067\u7e70\u308a\u8fd4\u3057 ready \u30bf\u30b9\u30af\u3092\u5b9f\u884c\u3057\u307e\u3059\u3002`finalize` \u306f\u30af\u30ea\u30fc\u30f3\u30a2\u30c3\u30d7\u30b3\u30de\u30f3\u30c9\u3067\u306f\u306a\u304f\u30b2\u30fc\u30c8\u3067\u3059\u3002\u5fc5\u8981\u306a\u30ab\u30d0\u30ec\u30c3\u30b8\u304c\u5b8c\u4e86\u3057\u3001live findings \u304c\u9589\u3058\u3089\u308c\u308b\u307e\u3067\u5931\u6557\u3057\u307e\u3059\u3002\u8aa4\u3063\u305f `init` \u3092\u7834\u68c4\u3059\u308b\u5834\u5408\u3060\u3051 `cancel` \u3092\u4f7f\u3063\u3066\u304f\u3060\u3055\u3044\u3002`cancel` \u306f\u30bb\u30c3\u30b7\u30e7\u30f3\u3092 `cancelled` \u3068\u3057\u3066\u8a18\u9332\u3057\u3001\u30a2\u30af\u30c6\u30a3\u30d6\u30bb\u30c3\u30b7\u30e7\u30f3\u306e\u30de\u30fc\u30ab\u30fc\u3092\u524a\u9664\u3057\u307e\u3059\u304c\u3001\u30c1\u30a7\u30c3\u30af\u30dd\u30a4\u30f3\u30c8\u306f\u4f5c\u6210\u3057\u307e\u305b\u3093\u3002\",\"existing_code\":\"```bash\\n# \u73fe\u5728\u306e\u30ef\u30fc\u30af\u30b9\u30da\u30fc\u30b9 diff \u3092\u30ec\u30d3\u30e5\u30fc\\nreview-gauntlet init --worktree\\n\\n# \u30d6\u30e9\u30f3\u30c1\u307e\u305f\u306f\u7bc4\u56f2\u3092\u30ec\u30d3\u30e5\u30fc\\nreview-gauntlet init --from main --to HEAD\\n\\n# \u30ea\u30dd\u30b8\u30c8\u30ea\u5168\u4f53\u3092\u30ec\u30d3\u30e5\u30fc\\nreview-gauntlet init --all\\n\\n# \u63a8\u5968: \u30a2\u30af\u30c6\u30a3\u30d6\u30bb\u30c3\u30b7\u30e7\u30f3\u304c finalize \u3055\u308c\u308b\u307e\u3067 ready \u30bf\u30b9\u30af\u3092\u5b9f\u884c\\nreview-gauntlet run\\n\\n# \u30c7\u30d0\u30c3\u30b0\u3084\u76e3\u67fb\u7d50\u679c\u306e\u78ba\u8a8d\\nreview-gauntlet status\\nreview-gauntlet findings\\n\\n# \u8aa4\u3063\u305f init \u3092\u7834\u68c4\u3059\u308b\u5834\u5408\u3002\u30c1\u30a7\u30c3\u30af\u30dd\u30a4\u30f3\u30c8\u306f\u4f5c\u6210\u3057\u306a\u3044\\nreview-gauntlet cancel\\n\\n# \u30aa\u30d7\u30b7\u30e7\u30f3: Git \u30d6\u30e9\u30f3\u30c1\u3068\u30ea\u30f3\u30af worktree \u3092\u4f5c\u6210\u3057\u3066\u30bb\u30c3\u30b7\u30e7\u30f3\u3092\u5206\u96e2\\nreview-gauntlet init --git-worktree\\nreview-gauntlet run\\nreview-gauntlet finalize --merge\\n```\\n\\n`run` \u306f\u901a\u5e38\u306e\u9032\u884c\u30b3\u30de\u30f3\u30c9\u3067\u3059\u3002`review` \u306e constitution \u306b\u57fa\u3065\u304f\u52d5\u4f5c\u306f\u5909\u308f\u308a\u307e\u305b\u3093: `review` \u306f 1 \u56de\u306e\u547c\u3073\u51fa\u3057\u3067\u6b63\u78ba\u306b 1 \u30d0\u30c3\u30c1\u3060\u3051\u9032\u3081\u3001`run` \u306f\u5916\u90e8\u30a8\u30fc\u30b8\u30a7\u30f3\u30c8\u7d4c\u7531\u3067\u7e70\u308a\u8fd4\u3057 ready \u30bf\u30b9\u30af\u3092\u5b9f\u884c\u3057\u307e\u3059\u3002`finalize` \u306f\u30af\u30ea\u30fc\u30f3\u30a2\u30c3\u30d7\u30b3\u30de\u30f3\u30c9\u3067\u306f\u306a\u304f\u30b2\u30fc\u30c8\u3067\u3059\u3002\u5fc5\u8981\u306a\u30ab\u30d0\u30ec\u30c3\u30b8\u304c\u5b8c\u4e86\u3057\u3001live findings \u304c\u9589\u3058\u3089\u308c\u308b\u307e\u3067\u5931\u6557\u3057\u307e\u3059\u3002\u8aa4\u3063\u305f `init` \u3092\u7834\u68c4\u3059\u308b\u5834\u5408\u3060\u3051 `cancel` \u3092\u4f7f\u3063\u3066\u304f\u3060\u3055\u3044\u3002`cancel` \u306f\u30bb\u30c3\u30b7\u30e7\u30f3\u3092 `cancelled` \u3068\u3057\u3066\u8a18\u9332\u3057\u3001\u30a2\u30af\u30c6\u30a3\u30d6\u30bb\u30c3\u30b7\u30e7\u30f3\u306e\u30de\u30fc\u30ab\u30fc\u3092\u524a\u9664\u3057\u307e\u3059\u304c\u3001\u30c1\u30a7\u30c3\u30af\u30dd\u30a4\u30f3\u30c8\u306f\u4f5c\u6210\u3057\u307e\u305b\u3093\u3002\\n\\n`--worktree` \u3068 `--git-worktree` \u306f\u610f\u56f3\u7684\u306b\u7570\u306a\u308b\u6982\u5ff5\u3067\u3059\u3002`init --worktree` \u306f\u73fe\u5728\u306e\u30ef\u30fc\u30af\u30b9\u30da\u30fc\u30b9 diff \u3092\u30ec\u30d3\u30e5\u30fc\u5bfe\u8c61\u3068\u3057\u3066\u9078\u629e\u3057\u307e\u3059\u3002`init --git-worktree` \u306f `.review-gauntlet/worktrees/<session-id>/` \u306b\u5206\u96e2\u3055\u308c\u305f Git \u30ea\u30f3\u30af worktree \u3068 `review-gauntlet/<session-id>` \u30d6\u30e9\u30f3\u30c1\u3092\u4f5c\u6210\u3057\u307e\u3059\u3002\",\"start_line\":154,\"end_line\":183,\"thinking\":\"\u30b3\u30fc\u30c9\u691c\u67fb: `git show db69cfe4ce9b4e9c976814933283eec6b0890da1:src/review_gauntlet/cli.py` \u306e `init` \u30b5\u30d6\u30d1\u30fc\u30b5\u30fc\uff08194\u884c\u76ee\u4ed8\u8fd1\uff09\u306f `--from`\u3001`--to`\u3001`--commit`\u3001`--all` \u306e\u307f\u5b9a\u7fa9\u3002`--worktree` \u3082 `--git-worktree` \u3082\u5b58\u5728\u3057\u306a\u3044\u3002`finalize` \u30b5\u30d6\u30d1\u30fc\u30b5\u30fc\uff08294\u884c\u76ee\u4ed8\u8fd1\uff09\u306b\u3082 `--merge` \u30aa\u30d7\u30b7\u30e7\u30f3\u306f\u306a\u3044\u3002\u76f4\u8fd1\u306e\u30b3\u30df\u30c3\u30c8\u306b `proposal: revert-commit-range-review-target \u2014 restore WORKTREE-based review` \u304c\u3042\u308a\u3001worktree \u6a5f\u80fd\u304c\u4e00\u6642\u524a\u9664\u3055\u308c\u305f\u3053\u3068\u304c\u793a\u5506\u3055\u308c\u308b\u3002README \u306f\u307e\u3060\u524a\u9664\u6e08\u307f\u306e\u30aa\u30d7\u30b7\u30e7\u30f3\u3092\u53c2\u7167\u3057\u305f\u307e\u307e\u306b\u306a\u3063\u3066\u3044\u308b\u3002\",\"imprecise\":false}",
+      "path": "README.ja.md",
+      "rule_id": "docs-accuracy",
+      "session_id": "RGS-0339f214c5ac",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "content": "\u300c\u4ee5\u524d\u306e\u30ef\u30fc\u30af\u30b9\u30da\u30fc\u30b9 diff \u65e2\u5b9a\u52d5\u4f5c\u304c\u5fc5\u8981\u306a\u30b9\u30af\u30ea\u30d7\u30c8\u306f\u3001\u660e\u793a\u7684\u306b `--worktree` \u3092\u6e21\u3057\u3066\u304f\u3060\u3055\u3044\u300d\u3068\u300cOCR \u30ef\u30fc\u30af\u30b9\u30da\u30fc\u30b9 diff \u30ec\u30d3\u30e5\u30fc: `review-gauntlet init --worktree`\u300d\u306e\u8a18\u8ff0\u304c\u3001\u5b9f\u88c5\u3055\u308c\u3066\u3044\u306a\u3044\u30aa\u30d7\u30b7\u30e7\u30f3\u3092\u53c2\u7167\u3057\u3066\u3044\u307e\u3059\u3002\u3053\u306e\u30b3\u30df\u30c3\u30c8\u6642\u70b9\u306e CLI \u306b\u306f `--worktree` \u30aa\u30d7\u30b7\u30e7\u30f3\u304c\u5b58\u5728\u3057\u306a\u3044\u305f\u3081\u3001\u3053\u306e\u624b\u9806\u3092\u5b9f\u884c\u3059\u308b\u3068\u30a8\u30e9\u30fc\u306b\u306a\u308a\u307e\u3059\u3002",
+      "finding_id": "RGF-1011",
+      "fingerprint": "59112c67dde88720bc4459dc07f0bafb1565a59a2e1a3c48c56493755b373705",
+      "latest_occurrence": {
+        "cell_id": "RGC-74a69a1efd649e46",
+        "end_line": 228,
+        "finding_id": "RGF-1011",
+        "imprecise": 0,
+        "occurrence_id": 1011,
+        "path": "README.ja.md",
+        "run_id": 294,
+        "start_line": 219
+      },
+      "metadata": "{\"fingerprint\":\"59112c67dde88720bc4459dc07f0bafb1565a59a2e1a3c48c56493755b373705\",\"path\":\"README.ja.md\",\"rule_id\":\"docs-accuracy\",\"content\":\"\u300c\u4ee5\u524d\u306e\u30ef\u30fc\u30af\u30b9\u30da\u30fc\u30b9 diff \u65e2\u5b9a\u52d5\u4f5c\u304c\u5fc5\u8981\u306a\u30b9\u30af\u30ea\u30d7\u30c8\u306f\u3001\u660e\u793a\u7684\u306b `--worktree` \u3092\u6e21\u3057\u3066\u304f\u3060\u3055\u3044\u300d\u3068\u300cOCR \u30ef\u30fc\u30af\u30b9\u30da\u30fc\u30b9 diff \u30ec\u30d3\u30e5\u30fc: `review-gauntlet init --worktree`\u300d\u306e\u8a18\u8ff0\u304c\u3001\u5b9f\u88c5\u3055\u308c\u3066\u3044\u306a\u3044\u30aa\u30d7\u30b7\u30e7\u30f3\u3092\u53c2\u7167\u3057\u3066\u3044\u307e\u3059\u3002\u3053\u306e\u30b3\u30df\u30c3\u30c8\u6642\u70b9\u306e CLI \u306b\u306f `--worktree` \u30aa\u30d7\u30b7\u30e7\u30f3\u304c\u5b58\u5728\u3057\u306a\u3044\u305f\u3081\u3001\u3053\u306e\u624b\u9806\u3092\u5b9f\u884c\u3059\u308b\u3068\u30a8\u30e9\u30fc\u306b\u306a\u308a\u307e\u3059\u3002\",\"suggestion_code\":\"OCR \u4e92\u63db\u306e\u5bfe\u8c61\u30de\u30c3\u30d4\u30f3\u30b0:\\n\\n```bash\\n# \u65e2\u5b9a\u30ec\u30d3\u30e5\u30fc: \u6700\u65b0 finalize \u6e08\u307f\u30c1\u30a7\u30c3\u30af\u30dd\u30a4\u30f3\u30c8 -> HEAD\u3001\u521d\u56de\u306f\u5168\u30d5\u30a1\u30a4\u30eb\\nreview-gauntlet init\",\"existing_code\":\"\u4ee5\u524d\u306e\u30ef\u30fc\u30af\u30b9\u30da\u30fc\u30b9 diff \u65e2\u5b9a\u52d5\u4f5c\u304c\u5fc5\u8981\u306a\u30b9\u30af\u30ea\u30d7\u30c8\u306f\u3001\u660e\u793a\u7684\u306b `--worktree` \u3092\u6e21\u3057\u3066\u304f\u3060\u3055\u3044\u3002\\n\\nOCR \u4e92\u63db\u306e\u5bfe\u8c61\u30de\u30c3\u30d4\u30f3\u30b0:\\n\\n```bash\\n# \u65e2\u5b9a\u30ec\u30d3\u30e5\u30fc: \u6700\u65b0 finalize \u6e08\u307f\u30c1\u30a7\u30c3\u30af\u30dd\u30a4\u30f3\u30c8 -> HEAD\u3001\u521d\u56de\u306f\u5168\u30d5\u30a1\u30a4\u30eb\\nreview-gauntlet init\\n\\n# OCR \u30ef\u30fc\u30af\u30b9\u30da\u30fc\u30b9 diff \u30ec\u30d3\u30e5\u30fc: staged / unstaged / untracked \u304b\u3064 ignore \u3055\u308c\u3066\u3044\u306a\u3044\u30d5\u30a1\u30a4\u30eb\\nreview-gauntlet init --worktree\",\"start_line\":219,\"end_line\":228,\"thinking\":\"\u540c\u4e00\u306e\u30b3\u30fc\u30c9\u691c\u67fb\u7d50\u679c\u306b\u3088\u308b\u3002`--worktree` \u306f CLI \u306b\u672a\u5b9f\u88c5\u306e\u305f\u3081\u3053\u306e\u8a18\u8ff0\u306f\u4e0d\u6b63\u78ba\u3002\",\"imprecise\":false}",
+      "path": "README.ja.md",
+      "rule_id": "docs-accuracy",
+      "session_id": "RGS-0339f214c5ac",
+      "state": "false_positive"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "content": "TOCTOU (time-of-check-time-of-use) in `_read_output_file`: `stat().st_size` is checked before the file is read, leaving a window where the file could grow between the check and the read. This is inconsistent with the STDOUT_JSON path (lines 325-326) which checks `len(completed.stdout.encode(\"utf-8\"))` *after* the data is already in memory. The stat-then-read pattern provides a false size guarantee and could allow a race-condition write to bypass the size limit.",
+      "finding_id": "RGF-1012",
+      "fingerprint": "ca7640c2b702d86f269cbcc20bd1e297bbd8e56bf2e5cb2a8449ac8086215a69",
+      "latest_occurrence": {
+        "cell_id": "RGC-188dbb0b34cf9208",
+        "end_line": 633,
+        "finding_id": "RGF-1012",
+        "imprecise": 0,
+        "occurrence_id": 1012,
+        "path": "src/review_gauntlet/review_adapter.py",
+        "run_id": 295,
+        "start_line": 606
+      },
+      "metadata": "{\"fingerprint\":\"ca7640c2b702d86f269cbcc20bd1e297bbd8e56bf2e5cb2a8449ac8086215a69\",\"path\":\"src/review_gauntlet/review_adapter.py\",\"rule_id\":\"data-validation\",\"content\":\"TOCTOU (time-of-check-time-of-use) in `_read_output_file`: `stat().st_size` is checked before the file is read, leaving a window where the file could grow between the check and the read. This is inconsistent with the STDOUT_JSON path (lines 325-326) which checks `len(completed.stdout.encode(\\\"utf-8\\\"))` *after* the data is already in memory. The stat-then-read pattern provides a false size guarantee and could allow a race-condition write to bypass the size limit.\",\"suggestion_code\":\"        try:\\n            content = output_path.read_text(encoding=\\\"utf-8\\\")\\n        except (OSError, UnicodeDecodeError) as exc:\\n            self._fail(\\n                f\\\"cannot read verdict output file: {exc}\\\",\\n                failure_file,\\n                {\\\"output_path\\\": str(output_path), \\\"error\\\": str(exc)},\\n            )\\n        output_size = len(content.encode(\\\"utf-8\\\"))\\n        if output_size > VERDICT_OUTPUT_SIZE_LIMIT_BYTES:\\n            self._fail(\\n                \\\"verdict output file exceeds \\\"\\n                f\\\"{VERDICT_OUTPUT_SIZE_LIMIT_BYTES} bytes: {output_path}\\\",\\n                failure_file,\\n                {\\n                    \\\"output_path\\\": str(output_path),\\n                    \\\"output_size_bytes\\\": output_size,\\n                    \\\"size_limit_bytes\\\": VERDICT_OUTPUT_SIZE_LIMIT_BYTES,\\n                },\\n            )\\n        return content\",\"existing_code\":\"        try:\\n            output_size = output_path.stat().st_size\\n        except OSError as exc:\\n            self._fail(\\n                f\\\"cannot stat verdict output file: {exc}\\\",\\n                failure_file,\\n                {\\\"output_path\\\": str(output_path), \\\"error\\\": str(exc)},\\n            )\\n        if output_size > VERDICT_OUTPUT_SIZE_LIMIT_BYTES:\\n            self._fail(\\n                \\\"verdict output file exceeds \\\"\\n                f\\\"{VERDICT_OUTPUT_SIZE_LIMIT_BYTES} bytes: {output_path}\\\",\\n                failure_file,\\n                {\\n                    \\\"output_path\\\": str(output_path),\\n                    \\\"output_size_bytes\\\": output_size,\\n                    \\\"size_limit_bytes\\\": VERDICT_OUTPUT_SIZE_LIMIT_BYTES,\\n                },\\n            )\\n        try:\\n            content = output_path.read_text(encoding=\\\"utf-8\\\")\\n        except (OSError, UnicodeDecodeError) as exc:\\n            self._fail(\\n                f\\\"cannot read verdict output file: {exc}\\\",\\n                failure_file,\\n                {\\\"output_path\\\": str(output_path), \\\"error\\\": str(exc)},\\n            )\\n        return content\",\"start_line\":606,\"end_line\":633,\"thinking\":\"The current _read_output_file implementation uses stat().st_size before reading. Since the subprocess has already exited, a real race is unlikely, but the pattern is still inconsistent with the STDOUT_JSON path (which does len(completed.stdout.encode('utf-8')) after the data is in memory). Reading first and checking len() afterwards eliminates the TOCTOU window, produces the same byte-accurate count, and aligns the two code paths.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/review_adapter.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-0339f214c5ac",
+      "state": "dismissed"
+    },
+    {
+      "checkpoint_id": "RGC-ba0cb48daa28-RGS-0339f214c5ac",
+      "content": "Imprecise comments bypass all line-range validation, including the basic invariant check (`start_line < 1` or `end_line < start_line`). If an imprecise comment carries semantically invalid line numbers (e.g. `start_line=0`), they pass through unchecked and are inserted into the accepted tuple returned to callers. Downstream consumers that read those line numbers without their own guards will encounter out-of-range values.",
+      "finding_id": "RGF-1013",
+      "fingerprint": "ab5d325a4f34a88e02b080f1fb284dbc4d062d2388fbfb27251dcfb20576845b",
+      "latest_occurrence": {
+        "cell_id": "RGC-188dbb0b34cf9208",
+        "end_line": 661,
+        "finding_id": "RGF-1013",
+        "imprecise": 0,
+        "occurrence_id": 1013,
+        "path": "src/review_gauntlet/review_adapter.py",
+        "run_id": 295,
+        "start_line": 659
+      },
+      "metadata": "{\"fingerprint\":\"ab5d325a4f34a88e02b080f1fb284dbc4d062d2388fbfb27251dcfb20576845b\",\"path\":\"src/review_gauntlet/review_adapter.py\",\"rule_id\":\"data-validation\",\"content\":\"Imprecise comments bypass all line-range validation, including the basic invariant check (`start_line < 1` or `end_line < start_line`). If an imprecise comment carries semantically invalid line numbers (e.g. `start_line=0`), they pass through unchecked and are inserted into the accepted tuple returned to callers. Downstream consumers that read those line numbers without their own guards will encounter out-of-range values.\",\"suggestion_code\":\"            if comment.imprecise:\\n                if comment.start_line is not None and comment.end_line is not None:\\n                    if comment.start_line < 1 or comment.end_line < comment.start_line:\\n                        self._fail(\\n                            \\\"imprecise verdict comment has an invalid line range\\\",\\n                            failure_file,\\n                            {\\n                                \\\"comment_index\\\": index,\\n                                \\\"comment_path\\\": comment.path,\\n                                \\\"start_line\\\": comment.start_line,\\n                                \\\"end_line\\\": comment.end_line,\\n                            },\\n                        )\\n                accepted.append(comment)\\n                continue\",\"existing_code\":\"            if comment.imprecise:\\n                accepted.append(comment)\\n                continue\",\"start_line\":659,\"end_line\":661,\"thinking\":\"The `imprecise` flag is meant to skip bounds checking against the file's actual line count (since an imprecise comment may not have a meaningful line reference). However, basic range invariants (start >= 1, end >= start) are universal and should be enforced regardless of the imprecise flag. The suggestion checks these invariants only when both line numbers are present, preserving the intent of skipping upper-bound (line_count) validation for imprecise comments.\",\"imprecise\":false}",
+      "path": "src/review_gauntlet/review_adapter.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-0339f214c5ac",
+      "state": "dismissed"
+    }
+  ],
+  "schema_version": 1
+}
