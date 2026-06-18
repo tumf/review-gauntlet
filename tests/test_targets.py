@@ -7,8 +7,8 @@ import pytest
 from review_gauntlet.targets import (
     HeadMode,
     TargetKind,
+    changed_files_for_target,
     file_digests,
-    file_digests_at_commit,
     resolve_target,
     target_digest,
 )
@@ -29,15 +29,13 @@ def _init_repo(root: Path) -> None:
     _git(root, "commit", "-m", "initial")
 
 
-def test_default_target_is_head_commit(tmp_path: Path) -> None:
+def test_default_target_is_worktree(tmp_path: Path) -> None:
     _init_repo(tmp_path)
-    head = _git(tmp_path, "rev-parse", "HEAD")
 
     target = resolve_target(root=tmp_path, base_ref=None, head_ref=None, commit=None)
 
-    assert target.kind == TargetKind.COMMIT
-    assert target.commit == head
-    assert target.head_mode == HeadMode.FIXED
+    assert target.kind == TargetKind.WORKTREE
+    assert target.head_mode == HeadMode.MOVING
 
 
 def test_branch_target_has_moving_head(tmp_path: Path) -> None:
@@ -46,17 +44,15 @@ def test_branch_target_has_moving_head(tmp_path: Path) -> None:
     assert target.head_mode == HeadMode.MOVING
 
 
-def test_all_target_is_head_commit(tmp_path: Path) -> None:
+def test_all_target_reviews_full_inventory(tmp_path: Path) -> None:
     _init_repo(tmp_path)
-    head = _git(tmp_path, "rev-parse", "HEAD")
 
     target = resolve_target(
         root=tmp_path, base_ref=None, head_ref=None, commit=None, all_files=True
     )
 
-    assert target.kind == TargetKind.COMMIT
-    assert target.commit == head
-    assert target.head_mode == HeadMode.FIXED
+    assert target.kind == TargetKind.ALL
+    assert target.head_mode == HeadMode.MOVING
 
 
 def test_commit_target_has_fixed_head(tmp_path: Path) -> None:
@@ -68,6 +64,15 @@ def test_commit_target_has_fixed_head(tmp_path: Path) -> None:
     assert target.kind == TargetKind.COMMIT
     assert target.commit == commit
     assert target.head_mode == HeadMode.FIXED
+
+
+def test_changed_files_for_all_target_uses_full_inventory(tmp_path: Path) -> None:
+    _init_repo(tmp_path)
+    target = resolve_target(
+        root=tmp_path, base_ref=None, head_ref=None, commit=None, all_files=True
+    )
+
+    assert changed_files_for_target(tmp_path, target) is None
 
 
 @pytest.mark.parametrize(
@@ -100,24 +105,24 @@ def test_rejects_partial_branch_options(tmp_path: Path) -> None:
         resolve_target(root=tmp_path, base_ref="main", head_ref=None, commit=None)
 
 
-def test_file_digests_at_commit_reads_committed_content(tmp_path: Path) -> None:
+def test_workspace_changed_files_tracks_staged_unstaged_and_untracked(tmp_path: Path) -> None:
     _init_repo(tmp_path)
-    (tmp_path / "src").mkdir()
-    source = tmp_path / "src" / "app.py"
-    source.write_text("print('committed')\n", encoding="utf-8")
-    _git(tmp_path, "add", "src/app.py")
-    _git(tmp_path, "commit", "-m", "add app")
-    commit = _git(tmp_path, "rev-parse", "HEAD")
+    (tmp_path / "staged.py").write_text("print('staged')\n", encoding="utf-8")
+    (tmp_path / "unstaged.py").write_text("print('unstaged')\n", encoding="utf-8")
+    (tmp_path / "untracked.py").write_text("print('untracked')\n", encoding="utf-8")
+    _git(tmp_path, "add", "staged.py")
+    _git(tmp_path, "add", "unstaged.py")
+    (tmp_path / "unstaged.py").write_text("print('unstaged changed')\n", encoding="utf-8")
+    target = resolve_target(root=tmp_path, base_ref=None, head_ref=None, commit=None)
 
-    source.write_text("print('working tree')\n", encoding="utf-8")
-
-    assert (
-        file_digests_at_commit(tmp_path, commit)["src/app.py"]
-        == hashlib.sha256(b"print('committed')\n").hexdigest()
+    assert changed_files_for_target(tmp_path, target) == (
+        "staged.py",
+        "unstaged.py",
+        "untracked.py",
     )
     assert (
-        file_digests(tmp_path)["src/app.py"]
-        == hashlib.sha256(b"print('working tree')\n").hexdigest()
+        file_digests(tmp_path)["unstaged.py"]
+        == hashlib.sha256(b"print('unstaged changed')\n").hexdigest()
     )
 
 

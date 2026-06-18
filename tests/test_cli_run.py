@@ -470,8 +470,8 @@ def test_run_reports_no_ready_task_without_traceback(
     assert exc_info.value.code == 1
     result = json.loads(capsys.readouterr().out)
     assert result["completed"] is False
-    assert result["reason"] == "max_steps_exhausted"
-    assert len(result["steps"]) == 100
+    assert result["reason"] == "no_ready_task"
+    assert result["steps"] == []
 
 
 def test_run_reports_command_failure_and_diagnostics(

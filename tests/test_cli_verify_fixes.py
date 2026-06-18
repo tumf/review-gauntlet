@@ -396,7 +396,7 @@ def test_verify_fixes_uses_working_tree_digest_for_fixed_path(
     (tmp_path / "README.md").write_text("# docs\n", encoding="utf-8")
     _git(tmp_path, "add", "README.md")
     _git(tmp_path, "commit", "-m", "initial")
-    main(["init", str(tmp_path), "--format", "json"])
+    main(["init", str(tmp_path), "--all", "--format", "json"])
     capsys.readouterr()
     cell_id = _cell_for_path(tmp_path, "README.md")
     committed_digest = str(_cell_rows_by_path(tmp_path, "README.md")[0]["content_digest"])

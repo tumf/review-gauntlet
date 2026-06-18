@@ -13,12 +13,7 @@ from review_gauntlet.models import Inventory, ReviewPlan
 from review_gauntlet.planner import build_plan
 from review_gauntlet.review_cells import cells_from_plan
 from review_gauntlet.session_store import SessionStore
-from review_gauntlet.targets import (
-    TargetSpec,
-    changed_files_for_target,
-    file_digests,
-    file_digests_at_commit,
-)
+from review_gauntlet.targets import TargetSpec, changed_files_for_target, file_digests
 
 ACTIONABLE_FINDING_STATES = frozenset(
     {"reopened", "untriaged", "confirmed", "fixed_pending_verification"}
@@ -134,12 +129,7 @@ def build_session_coverage_projection(
 ) -> CoverageProjection:
     metadata = store.session_metadata(session_id)
     target = TargetSpec.model_validate(metadata["target"])
-    review_head_commit = metadata.get("review_head_commit")
-    current_digests = (
-        file_digests_at_commit(root, review_head_commit)
-        if isinstance(review_head_commit, str) and review_head_commit
-        else file_digests(root)
-    )
+    current_digests = file_digests(root)
     current_cells = {
         cell.id: cell for cell in cells_from_plan(_build_target_plan(root, target), current_digests)
     }
