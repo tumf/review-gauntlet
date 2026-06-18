@@ -716,7 +716,10 @@ def _json_error_position(error: ValueError | ValidationError) -> int | None:
                 continue
             raw_error = ctx.get("error")
             if isinstance(raw_error, str):
-                position = _line_column_position(str(item.get("input", "")), raw_error)
+                raw_input = item.get("input")
+                position = _line_column_position(
+                    raw_input if isinstance(raw_input, str) else "", raw_error
+                )
                 if position is not None:
                     return position
     return None
