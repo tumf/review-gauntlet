@@ -23,7 +23,7 @@ from review_gauntlet.session_store import SessionStore
 
 def _init_session(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     (tmp_path / "README.md").write_text("# docs\n", encoding="utf-8")
-    main(["init", str(tmp_path), "--worktree", "--format", "json"])
+    main(["init", str(tmp_path), "--format", "json"])
     capsys.readouterr()
 
 
@@ -205,7 +205,7 @@ def test_init_creates_active_session_without_run(
 ) -> None:
     (tmp_path / "README.md").write_text("# docs\n", encoding="utf-8")
 
-    main(["init", str(tmp_path), "--worktree", "--format", "json"])
+    main(["init", str(tmp_path), "--format", "json"])
 
     data = json.loads(capsys.readouterr().out)
     session_id = _active_session_id(tmp_path)
@@ -224,7 +224,7 @@ def test_init_text_output_distinguishes_session_from_run(
 ) -> None:
     (tmp_path / "README.md").write_text("# docs\n", encoding="utf-8")
 
-    main(["init", str(tmp_path), "--worktree"])
+    main(["init", str(tmp_path)])
 
     output = capsys.readouterr().out
     assert "session_state: active" in output
@@ -278,7 +278,7 @@ def test_review_selects_all_rule_cells_for_seeded_file(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     (tmp_path / "app.py").write_text("print('ok')\n", encoding="utf-8")
-    main(["init", str(tmp_path), "--worktree", "--format", "json"])
+    main(["init", str(tmp_path), "--format", "json"])
     capsys.readouterr()
     fixture = tmp_path / ".review-gauntlet" / "fixtures" / "fixture.json"
     fixture.parent.mkdir(parents=True, exist_ok=True)
@@ -379,7 +379,7 @@ def test_status_prioritizes_confirmed_findings_before_stale_review(
     assert "review cells are stale after target changes" in status["finalize_blockers"]
 
 
-def test_status_excludes_fixed_pending_path_digest_drift_from_stale_coverage(
+def test_status_reports_fixed_pending_path_digest_drift_as_stale_coverage(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _init_session(tmp_path, capsys)
@@ -394,12 +394,12 @@ def test_status_excludes_fixed_pending_path_digest_drift_from_stale_coverage(
     main(["status", str(tmp_path), "--format", "json"])
 
     status = json.loads(capsys.readouterr().out)
-    assert status["coverage"].get("stale", 0) == 0
-    assert status["coverage"].get("reviewed", 0) == 1
+    assert status["coverage"].get("stale", 0) > 0
+    assert status["coverage"].get("reviewed", 0) == 0
     assert status["finding_state_counts"]["fixed_pending_verification"] == 1
     assert status["next_required_action"] == "run_verify_fixes"
     assert "fixed findings require verification" in status["finalize_blockers"]
-    assert "review cells are stale after target changes" not in status["finalize_blockers"]
+    assert "review cells are stale after target changes" in status["finalize_blockers"]
 
 
 def test_ready_prioritizes_confirmed_findings_before_stale_review(

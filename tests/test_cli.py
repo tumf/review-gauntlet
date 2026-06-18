@@ -96,7 +96,8 @@ def _assert_usage_error(argv: list[str]) -> None:
     assert exc_info.value.code == 64
 
 
-def test_cli_init_git_worktree_rejected() -> None:
+def test_cli_init_worktree_flags_rejected() -> None:
+    _assert_usage_error(["init", ".", "--worktree"])
     _assert_usage_error(["init", ".", "--git-worktree"])
 
 
@@ -510,7 +511,8 @@ def test_cli_finalize_help_omits_merge(capsys: pytest.CaptureFixture[str]) -> No
 def test_cli_init_help_shows_boolean_defaults(capsys: pytest.CaptureFixture[str]) -> None:
     output = _help_output(["init"], capsys)
 
-    assert "Review workspace/worktree changes as the target" in output
+    assert "Review workspace/worktree changes as the target" not in output
+    assert "--worktree" not in output
     assert "Create an isolated Git linked worktree" not in output
     assert "--git-worktree" not in output
     assert "--no-setup" not in output
@@ -542,7 +544,7 @@ def test_cli_init_creates_session_without_run(
 ) -> None:
     (tmp_path / "README.md").write_text("# docs\n", encoding="utf-8")
 
-    main(["init", str(tmp_path), "--worktree", "--format", "json"])
+    main(["init", str(tmp_path), "--format", "json"])
 
     data = json.loads(capsys.readouterr().out)
     assert data["run_count"] == 0
@@ -554,7 +556,7 @@ def test_cli_cancel_removes_active_marker_and_records_cancelled_state(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     (tmp_path / "README.md").write_text("# docs\n", encoding="utf-8")
-    main(["init", str(tmp_path), "--worktree", "--format", "json"])
+    main(["init", str(tmp_path), "--format", "json"])
     session_id = json.loads(capsys.readouterr().out)["session_id"]
 
     main(["cancel", str(tmp_path), "--format", "json"])
@@ -577,7 +579,7 @@ def test_cli_session_commands_fail_after_cancel_until_reinit(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], command: str
 ) -> None:
     (tmp_path / "README.md").write_text("# docs\n", encoding="utf-8")
-    main(["init", str(tmp_path), "--worktree", "--format", "json"])
+    main(["init", str(tmp_path), "--format", "json"])
     capsys.readouterr()
     main(["cancel", str(tmp_path), "--format", "json"])
     capsys.readouterr()
@@ -593,7 +595,7 @@ def test_cli_cancel_creates_no_review_runs_or_checkpoints(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     (tmp_path / "README.md").write_text("# docs\n", encoding="utf-8")
-    main(["init", str(tmp_path), "--worktree", "--format", "json"])
+    main(["init", str(tmp_path), "--format", "json"])
     session_id = json.loads(capsys.readouterr().out)["session_id"]
 
     main(["cancel", str(tmp_path), "--format", "json"])
@@ -638,7 +640,7 @@ def test_cli_mark_json_outputs_string_state(
     from review_gauntlet.session_store import SessionStore
 
     (tmp_path / "README.md").write_text("# docs\n", encoding="utf-8")
-    main(["init", str(tmp_path), "--worktree", "--format", "json"])
+    main(["init", str(tmp_path), "--format", "json"])
     capsys.readouterr()
 
     store = SessionStore(tmp_path)
@@ -681,7 +683,7 @@ def test_review_enforces_budget_with_multiple_cells_per_file(
     fixture = tmp_path / "fixture.json"
     fixture.write_text(json.dumps({}), encoding="utf-8")
 
-    main(["init", str(tmp_path), "--worktree"])
+    main(["init", str(tmp_path)])
 
     main(
         [
@@ -704,7 +706,7 @@ def test_review_enforces_budget_with_multiple_cells_per_file(
 
 def test_cli_status_json_after_init(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     (tmp_path / "README.md").write_text("# docs\n", encoding="utf-8")
-    main(["init", str(tmp_path), "--worktree", "--format", "json"])
+    main(["init", str(tmp_path), "--format", "json"])
     capsys.readouterr()
 
     main(["status", str(tmp_path), "--format", "json"])
@@ -731,9 +733,9 @@ def test_finalize_reasons_blocks_when_git_status_check_hits_emfile(
         {
             "session_id": "RGS-test",
             "root": str(tmp_path),
-            "target": TargetSpec(kind=TargetKind.ALL, head_mode=HeadMode.MOVING).model_dump(
-                mode="json"
-            ),
+            "target": TargetSpec(
+                kind=TargetKind.COMMIT, commit="HEAD", head_mode=HeadMode.FIXED
+            ).model_dump(mode="json"),
         },
         (),
     )
@@ -753,7 +755,7 @@ def test_cli_status_json_blocks_when_git_status_check_hits_emfile(
 
     (tmp_path / ".git").mkdir()
     (tmp_path / "README.md").write_text("# docs\n", encoding="utf-8")
-    main(["init", str(tmp_path), "--worktree", "--format", "json"])
+    main(["init", str(tmp_path), "--format", "json"])
     capsys.readouterr()
     monkeypatch.setattr(checkpoint_module, "_git", _raise_emfile_git)
 
@@ -777,7 +779,7 @@ def test_cli_finalize_emfile_blocks_without_writing_checkpoint(
 
     (tmp_path / ".git").mkdir()
     (tmp_path / "README.md").write_text("# docs\n", encoding="utf-8")
-    main(["init", str(tmp_path), "--worktree", "--format", "json"])
+    main(["init", str(tmp_path), "--format", "json"])
     session_id = json.loads(capsys.readouterr().out)["session_id"]
     store = SessionStore(tmp_path)
     for row in store.list_cells(str(session_id)):
@@ -904,7 +906,7 @@ def test_cli_run_no_tui_accepts_flag(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     (tmp_path / "README.md").write_text("# docs\n", encoding="utf-8")
-    main(["init", str(tmp_path), "--worktree", "--format", "json"])
+    main(["init", str(tmp_path), "--format", "json"])
     capsys.readouterr()
     monkeypatch.setattr("review_gauntlet.cli.sys.stdout.isatty", lambda: True)
     monkeypatch.setattr("review_gauntlet.cli._cmd_run", _fake_cmd_run)
@@ -931,7 +933,7 @@ def test_cli_run_json_keyboard_interrupt_emits_parseable_json_without_traceback(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     (tmp_path / "README.md").write_text("# docs\n", encoding="utf-8")
-    main(["init", str(tmp_path), "--worktree", "--format", "json"])
+    main(["init", str(tmp_path), "--format", "json"])
     capsys.readouterr()
     monkeypatch.setattr(
         "review_gauntlet.cli.RunController.run", _raise_controller_keyboard_interrupt
@@ -957,7 +959,7 @@ def test_cli_run_text_keyboard_interrupt_emits_concise_failure_without_traceback
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     (tmp_path / "README.md").write_text("# docs\n", encoding="utf-8")
-    main(["init", str(tmp_path), "--worktree", "--format", "json"])
+    main(["init", str(tmp_path), "--format", "json"])
     capsys.readouterr()
     monkeypatch.setattr(
         "review_gauntlet.cli.RunController.run", _raise_controller_keyboard_interrupt
@@ -982,7 +984,7 @@ def test_cli_run_json_does_not_emit_tui_fallback_warning(
     (tmp_path / "review-gauntlet.json").write_text(
         json.dumps({"adapter": {"type": "command", "command": "fake-agent"}}), encoding="utf-8"
     )
-    main(["init", str(tmp_path), "--worktree", "--format", "json"])
+    main(["init", str(tmp_path), "--format", "json"])
     capsys.readouterr()
     monkeypatch.setattr("review_gauntlet.cli.sys.stdout.isatty", lambda: True)
     monkeypatch.setattr("review_gauntlet.cli.textual_available", lambda: False)
@@ -1003,7 +1005,7 @@ def test_cli_run_interactive_text_missing_textual_falls_back_with_warning(
     (tmp_path / "review-gauntlet.json").write_text(
         json.dumps({"adapter": {"type": "command", "command": "fake-agent"}}), encoding="utf-8"
     )
-    main(["init", str(tmp_path), "--worktree", "--format", "json"])
+    main(["init", str(tmp_path), "--format", "json"])
     capsys.readouterr()
     monkeypatch.setattr("review_gauntlet.cli.sys.stdout.isatty", lambda: True)
     monkeypatch.setattr("review_gauntlet.cli.textual_available", lambda: False)
@@ -1024,7 +1026,7 @@ def test_cli_run_interactive_text_with_tui_available_chooses_tui_path(
     (tmp_path / "review-gauntlet.json").write_text(
         json.dumps({"adapter": {"type": "command", "command": "fake-agent"}}), encoding="utf-8"
     )
-    main(["init", str(tmp_path), "--worktree", "--format", "json"])
+    main(["init", str(tmp_path), "--format", "json"])
     capsys.readouterr()
     monkeypatch.setattr("review_gauntlet.cli.sys.stdout.isatty", lambda: True)
     monkeypatch.setattr("review_gauntlet.cli.textual_available", lambda: True)
@@ -1056,7 +1058,7 @@ def test_cli_run_non_tty_text_chooses_text_path(
     (tmp_path / "review-gauntlet.json").write_text(
         json.dumps({"adapter": {"type": "command", "command": "fake-agent"}}), encoding="utf-8"
     )
-    main(["init", str(tmp_path), "--worktree", "--format", "json"])
+    main(["init", str(tmp_path), "--format", "json"])
     capsys.readouterr()
     monkeypatch.setattr("review_gauntlet.cli.sys.stdout.isatty", lambda: False)
     monkeypatch.setattr("review_gauntlet.cli.textual_available", lambda: True)

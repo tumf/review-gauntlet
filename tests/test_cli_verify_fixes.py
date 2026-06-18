@@ -1,5 +1,6 @@
 import json
 import sqlite3
+import subprocess
 import sys
 from pathlib import Path
 
@@ -9,10 +10,16 @@ from review_gauntlet.cli import build_parser, main
 from review_gauntlet.session_store import SessionStore
 
 
+def _git(root: Path, *args: str) -> str:
+    return subprocess.run(
+        ["git", *args], cwd=root, check=True, capture_output=True, text=True
+    ).stdout.strip()
+
+
 def _init_session(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     (tmp_path / "README.md").write_text("# docs\n", encoding="utf-8")
     (tmp_path / "app.py").write_text("print('hello')\n", encoding="utf-8")
-    main(["init", str(tmp_path), "--worktree", "--format", "json"])
+    main(["init", str(tmp_path), "--format", "json"])
     capsys.readouterr()
 
 
@@ -209,7 +216,7 @@ def test_verify_fixes_refreshes_stale_targeted_file_siblings_without_promoting_t
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     (tmp_path / "app.py").write_text("print('hello')\n", encoding="utf-8")
-    main(["init", str(tmp_path), "--worktree", "--format", "json"])
+    main(["init", str(tmp_path), "--format", "json"])
     capsys.readouterr()
     target_cell = _python_cell_for_rule(tmp_path, "app.py", "data-validation")
     sibling_cell = _python_cell_for_rule(tmp_path, "app.py", "test-evidence")
@@ -378,6 +385,58 @@ def test_verify_fixes_rejects_unsafe_path_before_adapter_execution(
 
     assert exc_info.value.code == 64
     assert _count_runs_and_events(tmp_path) == before
+
+
+def test_verify_fixes_uses_working_tree_digest_for_fixed_path(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _git(tmp_path, "init")
+    _git(tmp_path, "config", "user.email", "test@example.com")
+    _git(tmp_path, "config", "user.name", "Test User")
+    (tmp_path / "README.md").write_text("# docs\n", encoding="utf-8")
+    _git(tmp_path, "add", "README.md")
+    _git(tmp_path, "commit", "-m", "initial")
+    main(["init", str(tmp_path), "--format", "json"])
+    capsys.readouterr()
+    cell_id = _cell_for_path(tmp_path, "README.md")
+    committed_digest = str(_cell_rows_by_path(tmp_path, "README.md")[0]["content_digest"])
+    fixture = _fixture(
+        tmp_path,
+        {
+            cell_id: [
+                {
+                    "path": "README.md",
+                    "content": "Docs issue",
+                    "existing_code": "# docs",
+                    "start_line": 1,
+                    "end_line": 1,
+                }
+            ]
+        },
+    )
+    main(["review", str(tmp_path), "--fixture", str(fixture), "--format", "json"])
+    capsys.readouterr()
+    with sqlite3.connect(tmp_path / ".review-gauntlet" / "ledger.sqlite") as conn:
+        finding_id = str(conn.execute("select finding_id from findings").fetchone()[0])
+    main(["mark", str(tmp_path), finding_id, "fixed", "--format", "json"])
+    capsys.readouterr()
+    (tmp_path / "README.md").write_text("# docs\n\nfixed in working tree\n", encoding="utf-8")
+
+    main(
+        [
+            "verify-fixes",
+            str(tmp_path),
+            "--fixture",
+            str(_fixture(tmp_path, {})),
+            "--format",
+            "json",
+        ]
+    )
+
+    data = json.loads(capsys.readouterr().out)
+    refreshed_digest = str(_cell_rows_by_path(tmp_path, "README.md")[0]["content_digest"])
+    assert data["fixed_verified_ids"] == [finding_id]
+    assert refreshed_digest != committed_digest
 
 
 def test_verify_fixes_help_output(capsys: pytest.CaptureFixture[str]) -> None:

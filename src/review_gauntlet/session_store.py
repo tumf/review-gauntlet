@@ -234,9 +234,6 @@ class SessionStore:
             ).fetchone()
             return int(row["count"]) if row else 0
 
-    def fixed_pending_paths(self, session_id: str) -> set[str]:
-        return {str(row["path"]) for row in self.list_fixed_pending_findings(session_id)}
-
     def list_fixed_pending_findings(self, session_id: str) -> list[sqlite3.Row]:
         with self.connect() as conn:
             return list(

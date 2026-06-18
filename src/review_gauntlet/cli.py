@@ -94,9 +94,12 @@ from review_gauntlet.subprocess_failures import (
     subprocess_startup_failure_details,
 )
 from review_gauntlet.targets import (
+    HeadMode,
+    TargetKind,
     TargetSpec,
     changed_files_for_target,
     file_digests,
+    file_digests_at_commit,
     resolve_target,
     target_digest,
 )
@@ -192,11 +195,6 @@ def build_parser() -> argparse.ArgumentParser:
     _root_arg(init)
     init.add_argument("--from", dest="base_ref")
     init.add_argument("--to", dest="head_ref")
-    init.add_argument(
-        "--worktree",
-        action="store_true",
-        help="Review workspace/worktree changes as the target (default: false)",
-    )
     init.add_argument("--commit")
     init.add_argument(
         "--all", dest="all_files", action="store_true", help="Review all files (default: false)"
@@ -802,30 +800,31 @@ def _run_session_command(args: argparse.Namespace, root: Path) -> None:
 
 
 def _cmd_init(args: argparse.Namespace, root: Path, store: SessionStore) -> None:
-    explicit_target = bool(
-        args.base_ref or args.head_ref or args.worktree or args.commit or args.all_files
-    )
+    review_head_commit = _review_head_commit(root)
+    explicit_target = bool(args.base_ref or args.head_ref or args.commit or args.all_files)
     if explicit_target:
         target = resolve_target(
             root=root,
             base_ref=args.base_ref,
             head_ref=args.head_ref,
-            worktree=bool(args.worktree),
             commit=args.commit,
             all_files=bool(args.all_files),
         )
     else:
-        target = target_from_latest_checkpoint(root) or resolve_target(
-            root=root,
-            base_ref=None,
-            head_ref=None,
-            worktree=False,
-            commit=None,
-            all_files=True,
+        target = target_from_latest_checkpoint(root) or TargetSpec(
+            kind=TargetKind.COMMIT,
+            base_ref="__all__",
+            commit=review_head_commit or "HEAD",
+            head_mode=HeadMode.FIXED,
         )
     ruleset = load_ruleset()
     plan = _build_target_plan(root, target)
-    cells = cells_from_plan(plan, file_digests(root))
+    init_digests = (
+        file_digests_at_commit(root, review_head_commit)
+        if review_head_commit is not None
+        else file_digests(root)
+    )
+    cells = cells_from_plan(plan, init_digests)
     session_id = f"RGS-{uuid.uuid4().hex[:12]}"
     metadata = {
         "session_id": session_id,
@@ -834,6 +833,8 @@ def _cmd_init(args: argparse.Namespace, root: Path, store: SessionStore) -> None
         "ruleset_digest": ruleset.digest,
         "target_digest": target_digest(root),
     }
+    if review_head_commit is not None:
+        metadata["review_head_commit"] = review_head_commit
     output: dict[str, object] = {
         "session_id": session_id,
         "session_state": "active",
@@ -845,6 +846,21 @@ def _cmd_init(args: argparse.Namespace, root: Path, store: SessionStore) -> None
     store.create_session(metadata, cells)
     (store.state_dir / "rules.lock").write_text(ruleset.model_dump_json(indent=2), encoding="utf-8")
     _emit(output, args.format)
+
+
+def _review_head_commit(root: Path) -> str | None:
+    try:
+        completed = subprocess.run(
+            ["git", "rev-parse", "HEAD^{commit}"],
+            cwd=root,
+            text=True,
+            capture_output=True,
+            timeout=10,
+            check=True,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return completed.stdout.strip()
 
 
 def _build_target_plan(root: Path, target: TargetSpec) -> ReviewPlan:
@@ -881,7 +897,7 @@ def _cmd_review(args: argparse.Namespace, root: Path, store: SessionStore) -> No
         )
         return
     adapter_config = load_config(root, args.config) if args.fixture is None else None
-    current_cells = cells_from_plan(_build_target_plan(root, target), file_digests(root))
+    current_cells = tuple(_current_target_cells(store, session_id, root).values())
     selected_cells = _select_review_cells(
         store=store,
         session_id=session_id,
@@ -907,6 +923,7 @@ def _cmd_review(args: argparse.Namespace, root: Path, store: SessionStore) -> No
             state_dir=store.state_dir,
             run_id=run_id,
             ruleset=ruleset,
+            review_commit=_metadata_review_commit(metadata),
         )
     else:
         raise ValueError(_missing_config_guidance("review"))
@@ -1189,7 +1206,7 @@ def _select_review_cells(
     cells_by_path: dict[str, list[ReviewCell]] = {}
     for cell in current_cells:
         cells_by_path.setdefault(cell.file_path, []).append(cell)
-    fixed_pending_paths = store.fixed_pending_paths(session_id)
+    verification_paths = {str(row["path"]) for row in store.list_fixed_pending_findings(session_id)}
     selected: list[ReviewCell] = []
     selected_ids: set[str] = set()
     selected_paths: set[str] = set()
@@ -1201,7 +1218,7 @@ def _select_review_cells(
             continue
         if (
             row["state"] not in {CellState.PENDING, CellState.STALE}
-            and file_path not in fixed_pending_paths
+            and file_path not in verification_paths
         ):
             continue
         for cell in cells_by_path.get(file_path, []):
@@ -1298,12 +1315,9 @@ def _adapter_timeout_seconds(adapter: ReviewAdapter) -> float | None:
 
 
 def _reconcile_cells(store: SessionStore, root: Path, target: TargetSpec) -> None:
+    del target
     session_id = store.active_session_id()
-    current = {
-        cell.id: cell
-        for cell in cells_from_plan(_build_target_plan(root, target), file_digests(root))
-    }
-    fixed_pending_paths = store.fixed_pending_paths(session_id)
+    current = _current_target_cells(store, session_id, root)
     existing = {str(row["cell_id"]): row for row in store.list_cells(session_id)}
     new_cells = tuple(cell for cell_id, cell in current.items() if cell_id not in existing)
     store.add_cells(session_id, new_cells)
@@ -1311,10 +1325,7 @@ def _reconcile_cells(store: SessionStore, root: Path, target: TargetSpec) -> Non
         current_cell = current.get(cell_id)
         if current_cell is None:
             store.update_cell_state(session_id, cell_id, CellState.SUPERSEDED)
-        elif (
-            row["content_digest"] != current_cell.content_digest
-            and current_cell.file_path not in fixed_pending_paths
-        ):
+        elif row["content_digest"] != current_cell.content_digest:
             store.update_cell_state(session_id, cell_id, CellState.STALE)
 
 
@@ -1435,19 +1446,21 @@ def _ready_prompt_from_context(store: SessionStore, context: _StatusContext) -> 
     review_cells = _ready_review_cells(store, session_id, context.current_cells)
     review_cells_by_state = _ready_review_cells_by_state(review_cells)
     findings = _ready_findings(store, session_id)
+    review_commit = _metadata_review_commit(store.session_metadata(session_id))
     if review_cells_by_state.get(CellState.PENDING.value, ()):
         return _review_cell_ready_prompt(
             reason="pending_review_cell",
             review_cells=review_cells,
             findings=findings,
             state=CellState.PENDING,
+            review_commit=review_commit,
         )
     findings_by_actionable_state = _ready_findings_by_actionable_state(findings)
     for state in _ACTIONABLE_FINDING_STATES:
         target_findings = findings_by_actionable_state.get(state.value, ())
         if target_findings:
             return _finding_ready_prompt(
-                state, review_cells, target_findings, store.state_dir, session_id
+                state, review_cells, target_findings, store.state_dir, session_id, review_commit
             )
     if review_cells_by_state.get(CellState.STALE.value, ()):
         return _review_cell_ready_prompt(
@@ -1455,6 +1468,7 @@ def _ready_prompt_from_context(store: SessionStore, context: _StatusContext) -> 
             review_cells=review_cells,
             findings=findings,
             state=CellState.STALE,
+            review_commit=review_commit,
         )
     if not context.finalize_reasons or _finalize_blockers_are_commit_resolvable(
         context.finalize_reasons
@@ -1471,6 +1485,7 @@ def _review_cell_ready_prompt(
     state: CellState,
     state_dir: Path | None = None,
     session_id: str | None = None,
+    review_commit: str | None = None,
 ) -> str:
     target_cells = tuple(cell for cell in review_cells if cell.state == state.value)
     target_file = _first_file_path_from_cells(target_cells)
@@ -1485,6 +1500,7 @@ def _review_cell_ready_prompt(
         review_cells=tuple(cell for cell in review_cells if cell.file_path == target_file),
         findings=tuple(finding for finding in findings if finding.file_path == target_file),
         continuation_path=continuation_path,
+        review_commit=review_commit,
     )
 
 
@@ -1508,6 +1524,7 @@ def _finding_ready_prompt(
     findings: tuple[_ReadyFinding, ...],
     state_dir: Path | None = None,
     session_id: str | None = None,
+    review_commit: str | None = None,
 ) -> str:
     target_findings = tuple(finding for finding in findings if finding.state == state.value)
     target_file = _first_file_path_from_findings(target_findings)
@@ -1522,6 +1539,7 @@ def _finding_ready_prompt(
         review_cells=tuple(cell for cell in review_cells if cell.file_path == target_file),
         findings=tuple(finding for finding in findings if finding.file_path == target_file),
         continuation_path=continuation_path,
+        review_commit=review_commit,
     )
 
 
@@ -1557,6 +1575,7 @@ def _build_file_scoped_ready_prompt(
     review_cells: tuple[_ReadyReviewCell, ...],
     findings: tuple[_ReadyFinding, ...],
     continuation_path: Path | None = None,
+    review_commit: str | None = None,
 ) -> str:
     workflow_lines, completion_text, cells_header = _ready_prompt_segments(reason)
     lines = [
@@ -1564,6 +1583,7 @@ def _build_file_scoped_ready_prompt(
         "",
         "## Target file",
         f"file_path: {file_path}",
+        *([] if review_commit is None else [f"review_commit: {review_commit}"]),
         f"reason: {_READY_REASON_LABELS[reason]}",
         "Scope: work only on this file_path. Other files are out of scope for this agent run.",
         "You may inspect related files for context, but do not triage, fix, or mark other files.",
@@ -1729,7 +1749,6 @@ def _line_range_text(finding: _ReadyFinding) -> str:
 def _ready_review_cells(
     store: SessionStore, session_id: str, current_cells: dict[str, ReviewCell]
 ) -> tuple[_ReadyReviewCell, ...]:
-    fixed_pending_paths = store.fixed_pending_paths(session_id)
     rows = {str(row["cell_id"]): row for row in store.list_cells(session_id)}
     ready_cells: list[_ReadyReviewCell] = []
     for cell_id, current_cell in current_cells.items():
@@ -1737,10 +1756,7 @@ def _ready_review_cells(
         state = CellState.PENDING.value
         if row is not None:
             state = str(row["state"])
-            if (
-                row["content_digest"] != current_cell.content_digest
-                and current_cell.file_path not in fixed_pending_paths
-            ):
+            if row["content_digest"] != current_cell.content_digest:
                 state = CellState.STALE.value
         ready_cells.append(
             _ReadyReviewCell(
@@ -1828,24 +1844,36 @@ def _current_target_cells(
     target = TargetSpec.model_validate(metadata["target"])
     return {
         cell.id: cell
-        for cell in cells_from_plan(_build_target_plan(root, target), file_digests(root))
+        for cell in cells_from_plan(
+            _build_target_plan(root, target), _file_digests_for_session(root, metadata)
+        )
     }
+
+
+def _file_digests_for_session(root: Path, metadata: dict[str, Any]) -> dict[str, str]:
+    review_head_commit = _metadata_review_commit(metadata)
+    if review_head_commit is not None:
+        return file_digests_at_commit(root, review_head_commit)
+    return file_digests(root)
+
+
+def _metadata_review_commit(metadata: dict[str, Any]) -> str | None:
+    review_head_commit = metadata.get("review_head_commit")
+    if isinstance(review_head_commit, str) and review_head_commit:
+        return review_head_commit
+    return None
 
 
 def _effective_current_target_coverage_for_cells(
     store: SessionStore, session_id: str, current_cells: dict[str, ReviewCell]
 ) -> dict[str, int]:
-    fixed_pending_paths = store.fixed_pending_paths(session_id)
     persisted_cells = {str(row["cell_id"]): row for row in store.list_cells(session_id)}
     counts: dict[str, int] = {}
     for cell_id, current_cell in current_cells.items():
         persisted = persisted_cells.get(cell_id)
         if persisted is None:
             state = CellState.PENDING.value
-        elif (
-            persisted["content_digest"] != current_cell.content_digest
-            and current_cell.file_path not in fixed_pending_paths
-        ):
+        elif persisted["content_digest"] != current_cell.content_digest:
             state = CellState.STALE.value
         else:
             state = str(persisted["state"])

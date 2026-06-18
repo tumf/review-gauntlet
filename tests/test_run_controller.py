@@ -64,11 +64,11 @@ def _store(tmp_path: Path) -> SessionStore:
             "session_id": "RGS-test",
             "root": str(tmp_path),
             "target": {
+                "kind": "commit",
                 "base_ref": None,
                 "head_ref": None,
-                "worktree": True,
-                "commit": None,
-                "all_files": False,
+                "commit": "HEAD",
+                "head_mode": "fixed",
             },
         },
         (

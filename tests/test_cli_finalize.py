@@ -10,7 +10,7 @@ from review_gauntlet.cli import main
 
 def _init_and_review(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     (tmp_path / "README.md").write_text("# docs\n", encoding="utf-8")
-    main(["init", str(tmp_path), "--worktree", "--format", "json"])
+    main(["init", str(tmp_path), "--format", "json"])
     capsys.readouterr()
     fixture = tmp_path / "fixture.json"
     fixture.write_text("{}", encoding="utf-8")
@@ -22,7 +22,7 @@ def test_finalize_fails_with_pending_cells(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     (tmp_path / "README.md").write_text("# docs\n", encoding="utf-8")
-    main(["init", str(tmp_path), "--worktree", "--format", "json"])
+    main(["init", str(tmp_path), "--format", "json"])
     capsys.readouterr()
 
     with pytest.raises(SystemExit) as exc:
@@ -54,7 +54,7 @@ def test_finalize_fails_for_expired_accepted_risk(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     (tmp_path / "README.md").write_text("# docs\n", encoding="utf-8")
-    main(["init", str(tmp_path), "--worktree", "--format", "json"])
+    main(["init", str(tmp_path), "--format", "json"])
     capsys.readouterr()
     cell_id = _first_cell_id(tmp_path)
     fixture = tmp_path / "fixture.json"
@@ -174,7 +174,7 @@ def test_finalize_does_not_block_on_malformed_terminal_metadata(
 
 def _init_with_finding(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     (tmp_path / "README.md").write_text("# docs\n", encoding="utf-8")
-    main(["init", str(tmp_path), "--worktree", "--format", "json"])
+    main(["init", str(tmp_path), "--format", "json"])
     capsys.readouterr()
     cell_id = _first_cell_id(tmp_path)
     fixture = tmp_path / "fixture.json"
