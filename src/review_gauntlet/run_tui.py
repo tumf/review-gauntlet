@@ -183,7 +183,7 @@ def create_run_app(
                     )
                 with Horizontal(id="bottom_row"):
                     yield titled_panel(
-                        PANEL_TITLES["findings"],
+                        findings_panel_title(view),
                         Static(finding_projection_text(view), id="findings_panel"),
                         id="findings_panel_container",
                         classes="panel",
@@ -339,7 +339,7 @@ def create_run_app(
             rules_panel.update(_render_rules_panel(view, flashes))
             files_panel_container.border_title = _files_panel_title(view.active_view)
             files_panel.update(_render_files_panel(view, flashes))
-            findings_panel_container.border_title = _findings_panel_title(view.active_view)
+            findings_panel_container.border_title = findings_panel_title(view)
             if view.active_view == "agent":
                 findings_panel.update(agent_summary_text(view))
             else:
@@ -495,6 +495,12 @@ class ActionableFindingSummary:
 
 
 @dataclass(frozen=True)
+class FindingsProgress:
+    resolved: int
+    total: int
+
+
+@dataclass(frozen=True)
 class FinalizeGate:
     index: int
     title: str
@@ -545,6 +551,7 @@ class RunViewState:
     gates: tuple[FinalizeGate, ...]
     coverage: ProgressMetrics
     open_findings: int
+    findings_progress: FindingsProgress
     task: TaskDisplay
     command_label: str | None
     agent_summary: AgentSummary
@@ -553,6 +560,9 @@ class RunViewState:
     coverage_projection: CoverageProjection
     active_view: str
     activity: str
+    activity_frame: int
+    active_step_action: str | None
+    active_target_finding_ids: tuple[str, ...]
     liveness_detail: str
     artifact_path: str | None
     elapsed: str
@@ -592,6 +602,17 @@ def calculate_progress_metrics(
 def actionable_finding_summary(findings: dict[str, object]) -> ActionableFindingSummary:
     open_count = _count_value(findings.get("open", 0))
     return ActionableFindingSummary(open=open_count, triage=open_count, fix=0, verify=0)
+
+
+def findings_progress(snapshot: RunSnapshot) -> FindingsProgress:
+    projected_findings = snapshot.coverage_projection.findings
+    if projected_findings:
+        total = len(projected_findings)
+        resolved = sum(1 for finding in projected_findings if not finding.actionable)
+        return FindingsProgress(resolved=resolved, total=total)
+    total = sum(_count_value(value) for value in snapshot.findings.values())
+    open_count = _count_value(snapshot.findings.get("open", 0))
+    return FindingsProgress(resolved=max(0, total - open_count), total=total)
 
 
 def format_elapsed_time(seconds: float) -> str:
@@ -694,6 +715,7 @@ def dashboard_state(
         snapshot.coverage, cell_terminal_count=snapshot.cell_terminal_count
     )
     findings_summary = actionable_finding_summary(snapshot.findings)
+    findings_progress_summary = findings_progress(snapshot)
     task = format_task_title_from_action(
         snapshot.next_required_action,
         snapshot.coverage,
@@ -713,6 +735,7 @@ def dashboard_state(
         gates=gates,
         coverage=coverage,
         open_findings=findings_summary.open,
+        findings_progress=findings_progress_summary,
         task=task,
         command_label=command_label,
         agent_summary=build_agent_summary(snapshot, command_label, liveness_detail, artifact_path),
@@ -723,6 +746,9 @@ def dashboard_state(
         activity=agent_activity_text(
             _display_agent_status(snapshot), activity_frame=activity_frame
         ),
+        activity_frame=activity_frame,
+        active_step_action=snapshot.active_step_action,
+        active_target_finding_ids=snapshot.active_target_finding_ids,
         liveness_detail=liveness_detail,
         artifact_path=artifact_path,
         elapsed=elapsed,
@@ -1391,13 +1417,29 @@ def findings_tui_lines(view: RunViewState, *, limit: int = 5) -> tuple[TuiLine, 
     findings = tuple(finding for finding in view.coverage_projection.findings if finding.actionable)
     if not findings:
         return ()
+    active_target_ids = set(view.active_target_finding_ids)
+    show_resolve_indicators = (
+        view.status == "running"
+        and view.active_step_action == "resolve_findings"
+        and bool(active_target_ids)
+    )
+    spinner = _SPINNER_FRAMES[view.activity_frame % len(_SPINNER_FRAMES)]
     lines: list[TuiLine] = []
     for finding in findings[:limit]:
         prefix = f"finding.{finding.finding_id}"
         state_color = _FINDING_STATE_COLORS.get(finding.state, "")
+        indicator = (
+            spinner if show_resolve_indicators and finding.finding_id in active_target_ids else " "
+        )
+        indicator_fields = (
+            (_field(f"{prefix}.active", f"{indicator} ", compare=indicator),)
+            if show_resolve_indicators
+            else ()
+        )
         lines.append(
             TuiLine(
                 (
+                    *indicator_fields,
                     _colored_field(
                         f"{prefix}.id",
                         f"{finding.finding_id:<12}",
@@ -1557,7 +1599,7 @@ def compact_dashboard_text(snapshot: RunSnapshot, events: tuple[RunEvent, ...] =
         titled_section(PANEL_TITLES["queue"], queue_text(view)),
         titled_section(PANEL_TITLES["rules"], rule_coverage_text(view)),
         titled_section(PANEL_TITLES["files"], file_hotlist_text(view)),
-        titled_section(PANEL_TITLES["findings"], finding_projection_text(view)),
+        titled_section(findings_panel_title(view), finding_projection_text(view)),
         titled_section(PANEL_TITLES["activity"], activity_text(view)),
         footer_text(),
     ]
@@ -1878,15 +1920,15 @@ def _files_panel_title(active_view: str) -> str:
     }.get(active_view, PANEL_TITLES["files"])
 
 
-def _findings_panel_title(active_view: str) -> str:
-    return {
-        "overview": PANEL_TITLES["findings"],
-        "files": "",
-        "rules": "",
-        "cells": "",
-        "findings": PANEL_TITLES["findings"],
-        "agent": PANEL_TITLES["agent"],
-    }.get(active_view, PANEL_TITLES["findings"])
+def findings_panel_title(view: RunViewState) -> str:
+    if view.active_view == "agent":
+        return PANEL_TITLES["agent"]
+    if view.active_view not in {"overview", "findings"}:
+        return ""
+    if view.status == "running" and view.active_step_action == "run_review":
+        return "Finding" + "." * (view.activity_frame % 4)
+    progress = view.findings_progress
+    return f"Findings {progress.resolved}/{progress.total}"
 
 
 def _render_rules_panel(view: RunViewState, flashes: dict[str, TuiFlash]) -> Any:
@@ -1930,7 +1972,9 @@ def overview_text(view: RunViewState, *, width: int = 120) -> str:
         elif name == "files":
             rendered.append(titled_section(PANEL_TITLES["files"], file_hotlist_text(view)))
         elif name == "findings":
-            rendered.append(titled_section(PANEL_TITLES["findings"], finding_projection_text(view)))
+            rendered.append(
+                titled_section(findings_panel_title(view), finding_projection_text(view))
+            )
         elif name == "activity":
             rendered.append(titled_section(PANEL_TITLES["activity"], activity_text(view)))
     return "\n".join(part for part in rendered if part)
