@@ -323,34 +323,13 @@ def create_run_app(controller: RunController) -> object:
 
 COMPLETED_COVERAGE_STATES = frozenset({"covered", "reviewed", "done"})
 INCOMPLETE_COVERAGE_STATES = frozenset({"pending"})
-EXCLUDED_COVERAGE_STATES = frozenset({"superseded"})
-FINDING_STATES = (
-    "open",
-    "untriaged",
-    "confirmed",
-    "reopened",
-    "fixed_pending_verification",
-    "closed",
-)
-_FINDING_STATE_LABELS = (
-    "untriaged",
-    "reopened",
-    "confirmed",
-    "fixed_pending_verification",
-    "fixed_verified",
-    "false_positive",
-    "accepted_risk",
-    "waived",
-)
+EXCLUDED_COVERAGE_STATES = frozenset()
+FINDING_STATES = ("open", "confirmed", "dismissed")
+_FINDING_STATE_LABELS = ("open", "confirmed", "dismissed")
 _FINDING_STATE_ABBREV: dict[str, str] = {
-    "untriaged": "untri",
-    "reopened": "reopn",
+    "open": "open",
     "confirmed": "conf",
-    "fixed_pending_verification": "fix-pend",
-    "fixed_verified": "fix-ok",
-    "false_positive": "fp",
-    "accepted_risk": "risk",
-    "waived": "waived",
+    "dismissed": "dismiss",
 }
 _SPINNER_FRAMES = ("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
 _BAR_WIDTH = 24
@@ -391,11 +370,9 @@ _PRIORITY_COLORS: dict[str, str] = {
     "P3": "#6b7280",
 }
 _FINDING_STATE_COLORS: dict[str, str] = {
-    "untriaged": "#f59e0b",
-    "reopened": "#f59e0b",
+    "open": "#f59e0b",
     "confirmed": "bold #ef4444",
-    "fixed_pending_verification": "#60a5fa",
-    "closed": "#6b7280",
+    "dismissed": "#6b7280",
 }
 _ACTIVITY_LABEL_COLORS: dict[str, str] = {
     "stdout": "#34d399",
@@ -415,11 +392,9 @@ _FINDING_ID_COLOR = "#93c5fd"
 _FIND_COUNT_COLOR = "#c084fc"
 _NEXT_ACTION_GATE_INDEX = {
     "run_review": 1,
-    "triage_findings": 2,
-    "fix_confirmed_findings": 3,
-    "run_verify_fixes": 4,
-    "resolve_finalize_blockers": 5,
-    "finalize": 6,
+    "resolve_findings": 2,
+    "resolve_finalize_blockers": 3,
+    "finalize": 4,
 }
 
 
@@ -568,12 +543,8 @@ def calculate_progress_metrics(
 
 
 def actionable_finding_summary(findings: dict[str, object]) -> ActionableFindingSummary:
-    triage = _count_value(findings.get("reopened", 0)) + _count_value(findings.get("untriaged", 0))
-    fix = _count_value(findings.get("confirmed", 0))
-    verify = _count_value(findings.get("fixed_pending_verification", 0))
-    return ActionableFindingSummary(
-        open=triage + fix + verify, triage=triage, fix=fix, verify=verify
-    )
+    open_count = _count_value(findings.get("open", 0))
+    return ActionableFindingSummary(open=open_count, triage=open_count, fix=0, verify=0)
 
 
 def format_elapsed_time(seconds: float) -> str:
@@ -612,17 +583,13 @@ def format_event_time(timestamp: str) -> str:
 _ACTION_TASK_DESCRIPTIONS: dict[str, str] = {
     "REVIEW PENDING CELLS": "Review cells that have not received coverage yet.",
     "REVIEW CELLS": "Review cells need coverage.",
-    "TRIAGE FINDINGS": "Classify open findings that still need triage.",
-    "FIX CONFIRMED FINDING": "Address confirmed findings with code changes.",
-    "VERIFY FIXES": "Verify findings waiting for fix confirmation.",
+    "RESOLVE FINDINGS": "Resolve open findings with judgment and fixes.",
     "RESOLVE FINALIZE BLOCKERS": "Resolve blockers before finalizing the session.",
     "FINALIZE SESSION": "Finalize the review session when all required work is complete.",
     "READY TASK": "An actionable ready task is available.",
 }
 _ACTION_TASK_TITLES: dict[str, str] = {
-    "triage_findings": "TRIAGE FINDINGS",
-    "fix_confirmed_findings": "FIX CONFIRMED FINDING",
-    "run_verify_fixes": "VERIFY FIXES",
+    "resolve_findings": "RESOLVE FINDINGS",
     "resolve_finalize_blockers": "RESOLVE FINALIZE BLOCKERS",
     "finalize": "FINALIZE SESSION",
 }
@@ -693,7 +660,7 @@ def dashboard_state(
         session_short_id=short_session_id(snapshot.session_id),
         agent_name=command_label or "agent idle",
         step_label=f"agent step {snapshot.step}",
-        gate_label=f"gate {active_gate.index}/6",
+        gate_label=f"gate {active_gate.index}/{len(gates)}",
         active_gate=active_gate,
         gates=gates,
         coverage=coverage,
@@ -783,19 +750,9 @@ def classify_finalize_blockers(blockers: tuple[str, ...]) -> BlockerGroups:
     final_checks: list[str] = []
     for blocker in blockers:
         normalized = blocker.lower()
-        if "review cells are still pending" in normalized or "review cells are stale" in normalized:
+        if "review cells are still pending" in normalized:
             coverage.append(blocker)
-        elif any(
-            needle in normalized
-            for needle in (
-                "untriaged",
-                "reopened",
-                "confirmed",
-                "fixed-pending",
-                "fixed_pending",
-                "fixed findings require verification",
-            )
-        ):
+        elif "findings remain open" in normalized:
             findings.append(blocker)
         else:
             final_checks.append(blocker)
@@ -812,12 +769,7 @@ def _is_finalize_ready_timeout(snapshot: RunSnapshot) -> bool:
 
 def derive_finalize_gates(snapshot: RunSnapshot) -> tuple[FinalizeGate, ...]:
     coverage = calculate_progress_metrics(snapshot.coverage)
-    findings = snapshot.findings
-    triage_count = _count_value(findings.get("untriaged", 0)) + _count_value(
-        findings.get("reopened", 0)
-    )
-    fix_count = _count_value(findings.get("confirmed", 0))
-    verify_count = _count_value(findings.get("fixed_pending_verification", 0))
+    open_count = _count_value(snapshot.findings.get("open", 0))
     blockers = classify_finalize_blockers(snapshot.finalize_blockers)
     failed = snapshot.agent_status in _FAILED_AGENT_STATUSES
     finalized = snapshot.agent_status == "finalized" or snapshot.session_state == "finalized"
@@ -826,45 +778,20 @@ def derive_finalize_gates(snapshot: RunSnapshot) -> tuple[FinalizeGate, ...]:
     review_detail = (
         f"{coverage.completed} / {coverage.total} reviewed, {coverage.incomplete} pending"
     )
-    triage_state = "next" if review_state != "done" else ("running" if triage_count else "done")
-    triage_detail = (
-        "waits for coverage"
+    resolve_state = "next" if review_state != "done" else ("running" if open_count else "done")
+    resolve_detail = (
+        "waits for review"
         if review_state != "done"
         else _count_detail(
-            triage_count,
-            "finding needs triage",
-            "no findings need triage",
-            plural="findings need triage",
+            open_count,
+            "open finding needs resolution",
+            "no open findings",
+            plural="open findings need resolution",
         )
     )
-    fix_state = "next" if triage_state != "done" else ("running" if fix_count else "done")
-    fix_detail = (
-        "no confirmed findings yet"
-        if triage_state != "done"
-        else _count_detail(
-            fix_count,
-            "confirmed finding needs fix",
-            "no confirmed findings",
-            plural="confirmed findings need fix",
-        )
-    )
-    verify_state = "next" if fix_state != "done" else ("running" if verify_count else "done")
-    verify_detail = (
-        "no fixed-pending findings yet"
-        if fix_state != "done"
-        else _count_detail(
-            verify_count,
-            "fixed-pending finding needs verification",
-            "no fixes need verification",
-            plural="fixed-pending findings need verification",
-        )
-    )
-    prior_done = all(
-        state == "done" for state in (review_state, triage_state, fix_state, verify_state)
-    )
-    if not prior_done:
+    if resolve_state != "done":
         final_checks_state = "later"
-        final_checks_detail = "checked after review/findings"
+        final_checks_detail = "checked after review/resolve"
     elif blockers.final_checks:
         final_checks_state = "blocked"
         final_checks_detail = _summarize_text(blockers.final_checks[0], limit=64)
@@ -884,12 +811,10 @@ def derive_finalize_gates(snapshot: RunSnapshot) -> tuple[FinalizeGate, ...]:
         checkpoint_state = "later"
         checkpoint_detail = "waiting"
     gates = [
-        FinalizeGate(1, "Review coverage", review_state, review_detail),
-        FinalizeGate(2, "Triage findings", triage_state, triage_detail),
-        FinalizeGate(3, "Fix confirmed findings", fix_state, fix_detail),
-        FinalizeGate(4, "Verify fixes", verify_state, verify_detail),
-        FinalizeGate(5, "Final checks", final_checks_state, final_checks_detail),
-        FinalizeGate(6, "Finalize checkpoint", checkpoint_state, checkpoint_detail),
+        FinalizeGate(1, "Review phase", review_state, review_detail),
+        FinalizeGate(2, "Resolve phase", resolve_state, resolve_detail),
+        FinalizeGate(3, "Final checks", final_checks_state, final_checks_detail),
+        FinalizeGate(4, "Finalize checkpoint", checkpoint_state, checkpoint_detail),
     ]
     if finalized:
         return tuple(FinalizeGate(gate.index, gate.title, "done", "complete") for gate in gates)
@@ -1894,7 +1819,7 @@ def findings_text(snapshot: RunSnapshot) -> str:
     summary = actionable_finding_summary(snapshot.findings)
     parts: list[str] = []
     for state in FINDING_STATES:
-        label = state.replace("fixed_pending_verification", "fixed-pending")
+        label = state
         count = summary.open if state == "open" else _count_value(snapshot.findings.get(state, 0))
         parts.append(f"{label} {count}")
     return " | ".join(parts)

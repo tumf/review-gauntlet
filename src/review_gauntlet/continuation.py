@@ -9,6 +9,8 @@ from typing import Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from review_gauntlet.findings import FindingResolution
+
 TASK_KEY_ACTION_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
 TASK_KEY_HASH_CHARS = 12
 
@@ -20,11 +22,12 @@ class ContinuationVerdictError(ValueError):
 class ContinuationVerdict(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    schema_version: Literal[1] = 1
-    verdict: Literal["continue", "finish", "error"]
+    schema_version: Literal[2] = 2
+    verdict: Literal["continue", "finish", "abort"]
     summary: str
     completed_finding_ids: tuple[str, ...] = Field(default_factory=tuple)
     remaining_finding_ids: tuple[str, ...] = Field(default_factory=tuple)
+    resolutions: tuple[FindingResolution, ...] = Field(default_factory=tuple)
     next_turn_instructions: str | None = None
     error: str | None = None
 
@@ -66,8 +69,8 @@ class ContinuationVerdict(BaseModel):
 
     @model_validator(mode="after")
     def validate_error_contract(self) -> ContinuationVerdict:
-        if self.verdict == "error" and (self.error is None or not self.error.strip()):
-            raise ValueError("error verdicts require a non-empty error message")
+        if self.verdict == "abort" and (self.error is None or not self.error.strip()):
+            raise ValueError("abort verdicts require a non-empty error message")
         return self
 
 
@@ -162,12 +165,19 @@ def compact_previous_turn_context(verdict: ContinuationVerdict) -> tuple[str, ..
         f"summary: {verdict.summary}",
         "completed_finding_ids: " + _compact_tuple(verdict.completed_finding_ids),
         "remaining_finding_ids: " + _compact_tuple(verdict.remaining_finding_ids),
+        "resolutions: " + _compact_resolutions(verdict.resolutions),
         f"next_turn_instructions: {instructions}",
     )
 
 
 def _compact_tuple(values: tuple[str, ...]) -> str:
     return ", ".join(values) if values else "none"
+
+
+def _compact_resolutions(values: tuple[FindingResolution, ...]) -> str:
+    if not values:
+        return "none"
+    return ", ".join(f"{item.finding_id}:{item.state}" for item in values)
 
 
 def finite_positive(value: float, *, field_name: str) -> float:

@@ -554,7 +554,7 @@ def test_review_rejects_target_flags(
     assert exc.value.code == 64
 
 
-def test_review_still_advances_one_initialized_session(
+def test_review_phase_reviews_all_pending_cells_in_initialized_session(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _init_repo(tmp_path)
@@ -567,7 +567,8 @@ def test_review_still_advances_one_initialized_session(
     main(["review", str(tmp_path), "--fixture", str(fixture), "--budget", "1", "--format", "json"])
 
     data = json.loads(capsys.readouterr().out)
-    assert data["reviewed_cells"] == 1
+    assert data["reviewed_cells"] == 2
+    assert data["coverage"]["reviewed"] == 2
     assert data["run_count"] == 1
 
 

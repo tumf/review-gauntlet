@@ -15,9 +15,7 @@ from review_gauntlet.review_cells import cells_from_plan
 from review_gauntlet.session_store import SessionStore
 from review_gauntlet.targets import TargetSpec, changed_files_for_target, file_digests
 
-ACTIONABLE_FINDING_STATES = frozenset(
-    {"reopened", "untriaged", "confirmed", "fixed_pending_verification"}
-)
+ACTIONABLE_FINDING_STATES = frozenset({"open"})
 HIGH_RISK_RULE_WEIGHTS: dict[str, int] = {
     "secret-handling": 120,
     "path-safety": 110,
@@ -28,7 +26,7 @@ HIGH_RISK_RULE_WEIGHTS: dict[str, int] = {
     "test-evidence": 40,
     "docs-accuracy": 20,
 }
-TERMINAL_CELL_STATES = frozenset({"reviewed", "covered", "done", "superseded"})
+TERMINAL_CELL_STATES = frozenset({"reviewed", "covered", "done"})
 CoveragePriorityLabel = Literal["P0", "P1", "P2", "P3"]
 
 
@@ -138,12 +136,9 @@ def build_session_coverage_projection(
     changed_files: set[str] = set()
     for cell_id, current_cell in current_cells.items():
         row = persisted_cells.get(cell_id)
-        state = "pending"
-        if row is not None:
-            state = str(row["state"])
-            if row["content_digest"] != current_cell.content_digest:
-                state = "stale"
-                changed_files.add(current_cell.file_path)
+        state = "pending" if row is None else str(row["state"])
+        if row is not None and row["content_digest"] != current_cell.content_digest:
+            changed_files.add(current_cell.file_path)
         cells.append(
             CoverageCellInput(
                 cell_id=cell_id,
@@ -152,19 +147,6 @@ def build_session_coverage_projection(
                 slice_id=current_cell.slice_id,
                 state=state,
                 content_digest=current_cell.content_digest,
-            )
-        )
-    for cell_id, row in persisted_cells.items():
-        if cell_id in current_cells:
-            continue
-        cells.append(
-            CoverageCellInput(
-                cell_id=cell_id,
-                file_path=str(row["file_path"]),
-                rule_id=str(row["rule_id"]),
-                slice_id=str(row["slice_id"]),
-                state="superseded",
-                content_digest=str(row["content_digest"]),
             )
         )
     return build_coverage_projection(
@@ -188,7 +170,6 @@ def build_coverage_projection(
                     changed_since_review=cell.file_path in changed_files or cell.state == "stale",
                 )
                 for cell in cells
-                if cell.state != "superseded"
             ),
             key=lambda entry: (
                 -entry.priority_score,

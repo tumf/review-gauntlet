@@ -738,6 +738,7 @@ def _agent_status_from_failure_reason(reason: str) -> str:
         return "timed_out"
     verdict_statuses = {
         "step_verdict_error": "verdict_error",
+        "step_verdict_abort": "verdict_error",
         "invalid_step_verdict": "verdict_invalid",
         "missing_step_verdict": "verdict_missing",
         "no_progress": "no_progress",

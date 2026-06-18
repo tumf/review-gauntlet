@@ -17,7 +17,6 @@ from review_gauntlet.targets import HeadMode, TargetKind, TargetSpec, target_dig
 
 CHECKPOINT_SCHEMA_VERSION = 1
 STANDARD_CHECKPOINT_ARTIFACTS = ("status.json", "findings.json", "events.json", "summary.md")
-TERMINAL_DECISION_STATES = {FindingState.WAIVED.value, FindingState.ACCEPTED_RISK.value}
 
 
 @dataclass(frozen=True)

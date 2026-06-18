@@ -117,6 +117,75 @@ class PromptContext(BaseModel):
     verdict_output_file: str | None = None
 
 
+class ResolveFindingPromptItem(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    finding_id: str
+    state: str
+    rule_id: str
+    content: str
+
+
+def build_resolve_prompt(
+    *,
+    repository_root: str,
+    file_path: str,
+    findings: tuple[dict[str, object], ...],
+    continuation_path: str,
+) -> str:
+    finding_items = tuple(ResolveFindingPromptItem.model_validate(item) for item in findings)
+    contract = {
+        "schema_version": 2,
+        "verdict": "finish",
+        "summary": "Resolved all open findings for this file.",
+        "completed_finding_ids": [item.finding_id for item in finding_items],
+        "remaining_finding_ids": [],
+        "resolutions": [
+            {"finding_id": item.finding_id, "state": "confirmed", "dismiss_reason": None}
+            for item in finding_items
+        ],
+        "next_turn_instructions": None,
+        "error": None,
+    }
+    finding_lines = [
+        f"- finding_id: {item.finding_id}; state: {item.state}; rule_id: {item.rule_id}; "
+        f"content: {item.content}"
+        for item in finding_items
+    ]
+    return "\n".join(
+        [
+            "# review-gauntlet Resolve Prompt",
+            "",
+            "You are resolving already-recorded code review findings for one file.",
+            "Confirm and fix real issues, or dismiss non-issues with a concise reason.",
+            "Do not discover or report new findings in this phase.",
+            "",
+            "## Repository Context",
+            f"repository_root: {repository_root}",
+            f"file_path: {file_path}",
+            "Scope: modify only this file unless a finding cannot be resolved "
+            "without a directly related change.",
+            "",
+            "## Open findings",
+            *(finding_lines or ["- none"]),
+            "",
+            "## Required continuation verdict",
+            "Before ending this turn, write valid JSON to the following path:",
+            continuation_path,
+            "",
+            "Use verdict=finish only when every listed finding has a resolution.",
+            "Use verdict=continue when more work is needed for this same file.",
+            "Use verdict=abort only for an actionable blocker.",
+            "Each resolution.state must be either confirmed or dismissed.",
+            "Dismissed findings should include dismiss_reason.",
+            "",
+            "## Verdict JSON Contract",
+            json.dumps(contract, indent=2, sort_keys=True),
+            "",
+        ]
+    )
+
+
 def build_review_prompt(context: PromptContext) -> str:
     contract = {
         "comments": [
