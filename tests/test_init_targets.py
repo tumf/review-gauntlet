@@ -41,7 +41,7 @@ def _cell_paths(root: Path) -> set[str]:
     return {str(row["file_path"]) for row in SessionStore(root).list_cells()}
 
 
-def test_default_init_without_checkpoint_uses_committed_head_files(
+def test_default_init_without_checkpoint_uses_worktree_changes(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _init_repo(tmp_path)
@@ -56,10 +56,13 @@ def test_default_init_without_checkpoint_uses_committed_head_files(
 
     data = json.loads(capsys.readouterr().out)
     assert data["cell_count"] > 0
-    assert _cell_paths(tmp_path) == {"unchanged.py"}
+    assert _cell_paths(tmp_path) == {"staged.py", "unstaged.py", "untracked.py"}
+    metadata = SessionStore(tmp_path).session_metadata()
+    assert metadata["target"]["kind"] == "worktree"
+    assert "review_head_commit" not in metadata
 
 
-def test_default_init_reviews_head_commit_files(
+def test_default_init_reviews_worktree_files(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _init_repo(tmp_path)
@@ -77,10 +80,10 @@ def test_default_init_reviews_head_commit_files(
     main(["init", str(tmp_path), "--format", "json"])
 
     assert json.loads(capsys.readouterr().out)["cell_count"] > 0
-    assert _cell_paths(tmp_path) == {"unchanged.py"}
+    assert _cell_paths(tmp_path) == {"changed.py"}
 
 
-def test_package_only_worktree_changes_do_not_affect_committed_default_target(
+def test_package_only_worktree_changes_create_empty_default_target(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _init_repo(tmp_path)
@@ -91,14 +94,14 @@ def test_package_only_worktree_changes_do_not_affect_committed_default_target(
     main(["init", str(tmp_path), "--format", "json"])
 
     data = json.loads(capsys.readouterr().out)
-    assert data["cell_count"] > 0
+    assert data["cell_count"] == 0
     assert data["run_count"] == 0
     assert data["run_state"] == "none"
-    assert data["next_command"] == "review-gauntlet review"
-    assert _cell_paths(tmp_path) == {"unchanged.py"}
+    assert data["next_command"] is None
+    assert _cell_paths(tmp_path) == set()
 
 
-def test_package_only_worktree_changes_text_output_keeps_committed_default_target(
+def test_package_only_worktree_changes_text_output_has_empty_default_target(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _init_repo(tmp_path)
@@ -109,10 +112,10 @@ def test_package_only_worktree_changes_text_output_keeps_committed_default_targe
     main(["init", str(tmp_path)])
 
     output = capsys.readouterr().out
-    assert "cell_count: 2" in output
+    assert "cell_count: 0" in output
     assert "run_count: 0" in output
     assert "run_state: none" in output
-    assert "next_command: review-gauntlet review" in output
+    assert "next_command: None" in output
 
 
 def test_plain_init_does_not_emit_or_run_setup(
@@ -414,10 +417,10 @@ def test_default_init_ignores_unsafe_latest_checkpoint_pointer(
     main(["init", str(tmp_path), "--format", "json"])
 
     data = json.loads(capsys.readouterr().out)
-    assert data["cell_count"] > 0
+    assert data["cell_count"] == 0
     metadata = SessionStore(tmp_path).session_metadata()
-    assert metadata["target"]["kind"] == "commit"
-    assert metadata["review_head_commit"] == _git(tmp_path, "rev-parse", "HEAD")
+    assert metadata["target"]["kind"] == "worktree"
+    assert "review_head_commit" not in metadata
 
 
 def test_default_init_rejects_non_ancestor_checkpoint(
@@ -473,7 +476,7 @@ def test_init_then_all_init_allows_overlapping_review_cells(
 
     main(["init", str(tmp_path), "--all", "--format", "json"])
     second = json.loads(capsys.readouterr().out)
-    assert second["cell_count"] == first["cell_count"]
+    assert second["cell_count"] > first["cell_count"]
     assert second["session_id"] != first["session_id"]
 
     main(["status", str(tmp_path), "--format", "json"])
@@ -504,8 +507,7 @@ def test_all_init_uses_full_inventory_and_exclusions(
 
     assert json.loads(capsys.readouterr().out)["cell_count"] > 0
     paths = _cell_paths(tmp_path)
-    assert {"unchanged.py"}.issubset(paths)
-    assert "changed.py" not in paths
+    assert {"unchanged.py", "changed.py"}.issubset(paths)
     assert "docs/usage.md" not in paths
     assert "openspec/specs/spec.md" not in paths
     assert "foo_test.go" not in paths

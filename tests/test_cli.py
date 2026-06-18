@@ -17,6 +17,7 @@ from review_gauntlet.config import CommandAdapterConfig
 from review_gauntlet.models import MatrixRow, ReviewCheck, ReviewMatrix, ReviewPlan, ReviewSlice
 from review_gauntlet.report import render_markdown_report
 from review_gauntlet.review_adapter import VERDICT_OUTPUT_SIZE_LIMIT_BYTES
+from review_gauntlet.session_store import SessionStore
 
 
 def test_cli_version_flag_outputs_package_version(capsys: pytest.CaptureFixture[str]) -> None:
@@ -97,8 +98,24 @@ def _assert_usage_error(argv: list[str]) -> None:
     assert exc_info.value.code == 64
 
 
-def test_cli_init_worktree_flags_rejected() -> None:
-    _assert_usage_error(["init", ".", "--worktree"])
+def _metadata(root: Path) -> dict[str, object]:
+    store = SessionStore(root)
+    return store.session_metadata(store.active_session_id())
+
+
+def test_cli_init_worktree_accepted(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    (tmp_path / "README.md").write_text("# docs\n", encoding="utf-8")
+
+    main(["init", str(tmp_path), "--worktree", "--format", "json"])
+
+    data = json.loads(capsys.readouterr().out)
+    assert data["cell_count"] > 0
+    target = _metadata(tmp_path)["target"]
+    assert isinstance(target, dict)
+    assert target["kind"] == "worktree"
+
+
+def test_cli_init_git_worktree_flag_rejected() -> None:
     _assert_usage_error(["init", ".", "--git-worktree"])
 
 
@@ -512,8 +529,8 @@ def test_cli_finalize_help_omits_merge(capsys: pytest.CaptureFixture[str]) -> No
 def test_cli_init_help_shows_boolean_defaults(capsys: pytest.CaptureFixture[str]) -> None:
     output = _help_output(["init"], capsys)
 
-    assert "Review workspace/worktree changes as the target" not in output
-    assert "--worktree" not in output
+    assert "Review workspace/worktree changes as the target" in output
+    assert "--worktree" in output
     assert "Create an isolated Git linked worktree" not in output
     assert "--git-worktree" not in output
     assert "--no-setup" not in output
