@@ -783,7 +783,9 @@ def _validate_active_session_resolution_transitions(
             (session_id, *requested_ids),
         ).fetchall()
     states_by_id = {str(row["finding_id"]): FindingState(str(row["state"])) for row in rows}
-    missing_ids = sorted(finding_id for finding_id in requested_ids if finding_id not in states_by_id)
+    missing_ids = sorted(
+        finding_id for finding_id in requested_ids if finding_id not in states_by_id
+    )
     if missing_ids:
         raise LookupError(
             "turn verdict references unknown findings in active session "
@@ -797,7 +799,8 @@ def _validate_active_session_resolution_transitions(
         except ValueError as exc:
             raise ValueError(
                 "turn verdict contains invalid finding transition for active session "
-                f"{session_id}: finding_id={resolution.finding_id} {current.value} -> {desired.value}"
+                f"{session_id}: finding_id={resolution.finding_id} "
+                f"{current.value} -> {desired.value}"
             ) from exc
 
 

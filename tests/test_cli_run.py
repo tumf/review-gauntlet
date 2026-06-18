@@ -87,7 +87,9 @@ def test_run_treats_abort_verdict_as_failure(tmp_path: Path) -> None:
     assert result.failure["reason"] == "step_verdict_abort"
 
 
-def _turn_verdict_payload(*, state: str = "confirmed", finding_id: str = "RGF-0001") -> dict[str, object]:
+def _turn_verdict_payload(
+    *, state: str = "confirmed", finding_id: str = "RGF-0001"
+) -> dict[str, object]:
     return {
         "schema_version": 2,
         "verdict": "finish",
@@ -148,7 +150,12 @@ def test_validate_turn_verdict_cli_rejects_fixed_state(
 @pytest.mark.parametrize(
     "path_builder, error_fragment",
     [
-        (lambda root: root / ".review-gauntlet" / "turns" / "RGS-test" / "open__aaaaaaaaaaaa.json", "missing"),
+        (
+            lambda root: (
+                root / ".review-gauntlet" / "turns" / "RGS-test" / "open__aaaaaaaaaaaa.json"
+            ),
+            "missing",
+        ),
         (lambda root: root / "bad.json", "under .review-gauntlet/turns"),
     ],
 )
@@ -194,7 +201,9 @@ def test_validate_turn_verdict_cli_rejects_impossible_active_session_transition(
 ) -> None:
     store = SessionStore(tmp_path)
     cell = ReviewCell(id="RGC-1", file_path="src/example.py", rule_id="security", slice_id="src")
-    store.create_session({"session_id": "RGS-test", "target_digest": "digest", "target": {}}, (cell,))
+    store.create_session(
+        {"session_id": "RGS-test", "target_digest": "digest", "target": {}}, (cell,)
+    )
     run_id = store.create_run("RGS-test", "digest")
     finding = normalize_ocr_comment(
         OCRComment(path="src/example.py", content="Missing auth", existing_code="return secret"),
