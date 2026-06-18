@@ -13,6 +13,7 @@ from typing import IO, NoReturn, Protocol, cast
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from review_gauntlet.config import TEMPLATE_PATTERN, CommandAdapterConfig, OutputMode
+from review_gauntlet.findings import ALLOWED_TRANSITIONS, FindingState
 from review_gauntlet.ocr_rules import OCRComment, RuleDocument, Ruleset
 from review_gauntlet.review_cells import ReviewCell
 from review_gauntlet.subprocess_failures import subprocess_startup_failure_details
@@ -148,8 +149,9 @@ def build_resolve_prompt(
         "error": None,
     }
     finding_lines = [
-        f"- finding_id: {item.finding_id}; state: {item.state}; rule_id: {item.rule_id}; "
-        f"content: {item.content}"
+        f"- finding_id: {item.finding_id}; state: {item.state}; "
+        f"allowed_target_states: {', '.join(_allowed_resolution_states(item.state)) or 'none'}; "
+        f"rule_id: {item.rule_id}; content: {item.content}"
         for item in finding_items
     ]
     return "\n".join(
@@ -176,15 +178,22 @@ def build_resolve_prompt(
             "Use verdict=finish only when every listed finding has a resolution.",
             "Use verdict=continue when more work is needed for this same file.",
             "Use verdict=abort only for an actionable blocker.",
-            "Each resolution.state must be one of: confirmed, fixed_pending_verification, "
-            "fixed_verified, false_positive, accepted_risk, waived, dismissed.",
-            "Dismissed findings should include dismiss_reason.",
+            "Each resolution.state must be one of the allowed_target_states shown for that "
+            "finding.",
+            "For open findings, use confirmed for real issues or dismissed for false positives "
+            "and other non-issues.",
+            "Dismissed findings must include a durable dismiss_reason.",
             "",
             "## Verdict JSON Contract",
             json.dumps(contract, indent=2, sort_keys=True),
             "",
         ]
     )
+
+
+def _allowed_resolution_states(state: str) -> tuple[str, ...]:
+    current = FindingState(state)
+    return tuple(sorted(target.value for target in ALLOWED_TRANSITIONS[current]))
 
 
 def build_review_prompt(context: PromptContext) -> str:

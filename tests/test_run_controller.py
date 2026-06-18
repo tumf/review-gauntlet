@@ -1631,7 +1631,11 @@ Before ending this turn, write valid JSON to the following path:
             returncode=0,
             stdout="ok",
             stderr="",
+            stdout_artifact=".review-gauntlet/runs/1/agent-stdout.log",
+            stderr_artifact=".review-gauntlet/runs/1/agent-stderr.log",
+            activity_artifact=".review-gauntlet/runs/1/activity.jsonl",
             verdict_metadata={
+                "path": ".review-gauntlet/turns/RGS-test/untriaged__aaaaaaaaaaaa.json",
                 "task_key": "untriaged__aaaaaaaaaaaa.json",
                 "verdict": "continue",
             },
@@ -1655,5 +1659,13 @@ Before ending this turn, write valid JSON to the following path:
     assert result["reason"] == "no_progress"
     step = cast(dict[str, object], cast(list[object], result["steps"])[0])
     failure = cast(dict[str, object], step["failure"])
+    assert failure["reason"] == "no_progress"
     assert failure["task_key"] == "untriaged__aaaaaaaaaaaa.json"
     assert failure["target_ids"] == ["RGF-0001"]
+    assert failure["verdict_path"] == ".review-gauntlet/turns/RGS-test/untriaged__aaaaaaaaaaaa.json"
+    assert failure["verdict"] == "continue"
+    assert failure["artifact_context"] == {
+        "stdout_artifact": ".review-gauntlet/runs/1/agent-stdout.log",
+        "stderr_artifact": ".review-gauntlet/runs/1/agent-stderr.log",
+        "activity_artifact": ".review-gauntlet/runs/1/activity.jsonl",
+    }

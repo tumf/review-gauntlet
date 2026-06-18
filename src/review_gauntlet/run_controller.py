@@ -471,6 +471,7 @@ class RunController:
                 post_turn_state = _target_state_snapshot(self.store, session_id, progress_target)
                 if pre_turn_state == post_turn_state:
                     metadata = command_result.verdict_metadata or {}
+                    artifact_context = _command_artifact_context(command_result)
                     command_result = dataclasses.replace(
                         command_result,
                         failure={
@@ -480,6 +481,9 @@ class RunController:
                                 metadata.get("task_key", progress_target.task_key or "")
                             ),
                             "target_ids": list(progress_target.target_ids),
+                            "verdict_path": str(metadata.get("path") or ""),
+                            "verdict": metadata.get("verdict"),
+                            "artifact_context": artifact_context,
                         },
                     )
                     lifecycle_status = _lifecycle_status_from_result(command_result)
@@ -631,6 +635,18 @@ class RunController:
             return self.store.active_session_id()
         except LookupError:
             return None
+
+
+def _command_artifact_context(result: SessionCommandResult) -> dict[str, object]:
+    return {
+        key: value
+        for key, value in {
+            "stdout_artifact": result.stdout_artifact,
+            "stderr_artifact": result.stderr_artifact,
+            "activity_artifact": result.activity_artifact,
+        }.items()
+        if value is not None
+    }
 
 
 def _is_successful_progress_verdict(result: SessionCommandResult) -> bool:
