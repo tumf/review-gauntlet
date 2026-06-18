@@ -1,3 +1,4 @@
+import hashlib
 import subprocess
 from pathlib import Path
 
@@ -7,13 +8,16 @@ from review_gauntlet.targets import (
     HeadMode,
     TargetKind,
     file_digests,
+    file_digests_at_commit,
     resolve_target,
     target_digest,
 )
 
 
-def _git(root: Path, *args: str) -> None:
-    subprocess.run(["git", *args], cwd=root, check=True, capture_output=True, text=True)
+def _git(root: Path, *args: str) -> str:
+    return subprocess.run(
+        ["git", *args], cwd=root, check=True, capture_output=True, text=True
+    ).stdout.strip()
 
 
 def _init_repo(root: Path) -> None:
@@ -25,49 +29,41 @@ def _init_repo(root: Path) -> None:
     _git(root, "commit", "-m", "initial")
 
 
-def test_default_target_is_workspace_diff(tmp_path: Path) -> None:
-    target = resolve_target(
-        root=tmp_path, base_ref=None, head_ref=None, worktree=False, commit=None
-    )
-    assert target.kind == TargetKind.WORKTREE
-    assert target.head_mode == HeadMode.MOVING
+def test_default_target_is_head_commit(tmp_path: Path) -> None:
+    _init_repo(tmp_path)
+    head = _git(tmp_path, "rev-parse", "HEAD")
+
+    target = resolve_target(root=tmp_path, base_ref=None, head_ref=None, commit=None)
+
+    assert target.kind == TargetKind.COMMIT
+    assert target.commit == head
+    assert target.head_mode == HeadMode.FIXED
 
 
 def test_branch_target_has_moving_head(tmp_path: Path) -> None:
-    target = resolve_target(
-        root=tmp_path, base_ref="main", head_ref="HEAD", worktree=False, commit=None
-    )
+    target = resolve_target(root=tmp_path, base_ref="main", head_ref="HEAD", commit=None)
     assert target.kind == TargetKind.BRANCH
     assert target.head_mode == HeadMode.MOVING
 
 
-def test_worktree_target_has_moving_head(tmp_path: Path) -> None:
-    target = resolve_target(root=tmp_path, base_ref=None, head_ref=None, worktree=True, commit=None)
-    assert target.kind == TargetKind.WORKTREE
-    assert target.head_mode == HeadMode.MOVING
+def test_all_target_is_head_commit(tmp_path: Path) -> None:
+    _init_repo(tmp_path)
+    head = _git(tmp_path, "rev-parse", "HEAD")
 
-
-def test_all_target_has_moving_head(tmp_path: Path) -> None:
     target = resolve_target(
-        root=tmp_path, base_ref=None, head_ref=None, worktree=False, commit=None, all_files=True
+        root=tmp_path, base_ref=None, head_ref=None, commit=None, all_files=True
     )
-    assert target.kind == TargetKind.ALL
-    assert target.head_mode == HeadMode.MOVING
+
+    assert target.kind == TargetKind.COMMIT
+    assert target.commit == head
+    assert target.head_mode == HeadMode.FIXED
 
 
 def test_commit_target_has_fixed_head(tmp_path: Path) -> None:
     _init_repo(tmp_path)
-    commit = subprocess.run(
-        ["git", "rev-parse", "HEAD"],
-        cwd=tmp_path,
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
+    commit = _git(tmp_path, "rev-parse", "HEAD")
 
-    target = resolve_target(
-        root=tmp_path, base_ref=None, head_ref=None, worktree=False, commit=commit
-    )
+    target = resolve_target(root=tmp_path, base_ref=None, head_ref=None, commit=commit)
 
     assert target.kind == TargetKind.COMMIT
     assert target.commit == commit
@@ -75,18 +71,17 @@ def test_commit_target_has_fixed_head(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize(
-    ("base_ref", "head_ref", "worktree", "commit", "all_files"),
+    ("base_ref", "head_ref", "commit", "all_files"),
     [
-        ("main", "HEAD", True, None, False),
-        (None, None, True, None, True),
-        ("main", "HEAD", False, "HEAD", False),
+        ("main", "HEAD", "HEAD", False),
+        ("main", "HEAD", None, True),
+        (None, None, "HEAD", True),
     ],
 )
 def test_rejects_mixed_target_modes(
     tmp_path: Path,
     base_ref: str | None,
     head_ref: str | None,
-    worktree: bool,
     commit: str | None,
     all_files: bool,
 ) -> None:
@@ -95,7 +90,6 @@ def test_rejects_mixed_target_modes(
             root=tmp_path,
             base_ref=base_ref,
             head_ref=head_ref,
-            worktree=worktree,
             commit=commit,
             all_files=all_files,
         )
@@ -103,7 +97,28 @@ def test_rejects_mixed_target_modes(
 
 def test_rejects_partial_branch_options(tmp_path: Path) -> None:
     with pytest.raises(ValueError):
-        resolve_target(root=tmp_path, base_ref="main", head_ref=None, worktree=False, commit=None)
+        resolve_target(root=tmp_path, base_ref="main", head_ref=None, commit=None)
+
+
+def test_file_digests_at_commit_reads_committed_content(tmp_path: Path) -> None:
+    _init_repo(tmp_path)
+    (tmp_path / "src").mkdir()
+    source = tmp_path / "src" / "app.py"
+    source.write_text("print('committed')\n", encoding="utf-8")
+    _git(tmp_path, "add", "src/app.py")
+    _git(tmp_path, "commit", "-m", "add app")
+    commit = _git(tmp_path, "rev-parse", "HEAD")
+
+    source.write_text("print('working tree')\n", encoding="utf-8")
+
+    assert (
+        file_digests_at_commit(tmp_path, commit)["src/app.py"]
+        == hashlib.sha256(b"print('committed')\n").hexdigest()
+    )
+    assert (
+        file_digests(tmp_path)["src/app.py"]
+        == hashlib.sha256(b"print('working tree')\n").hexdigest()
+    )
 
 
 def test_target_digest_and_file_digests_skip_symlink_escape(tmp_path: Path) -> None:

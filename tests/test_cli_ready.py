@@ -32,7 +32,7 @@ def _init_git_repo(root: Path) -> None:
 
 def _init_session(root: Path, capsys: pytest.CaptureFixture[str]) -> str:
     (root / "README.md").write_text("# docs\n", encoding="utf-8")
-    main(["init", str(root), "--worktree", "--format", "json"])
+    main(["init", str(root), "--format", "json"])
     data = json.loads(capsys.readouterr().out)
     return str(data["session_id"])
 
@@ -396,6 +396,17 @@ def test_ready_prompts_commit_when_finalize_blocked_by_dirty_review_universe(
     _assert_skill_directed_short_prompt(prompt, "Commit intended git changes before finalizing")
 
 
+def test_ready_prompt_includes_review_commit_for_commit_session(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _init_commit_target_session(tmp_path, capsys)
+    commit = SessionStore(tmp_path).session_metadata()["review_head_commit"]
+
+    prompt = _ready_prompt(tmp_path, capsys)
+
+    assert f"review_commit: {commit}" in prompt
+
+
 def test_ready_outputs_no_ready_task_when_only_non_commit_blockers_remain(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -572,10 +583,10 @@ def test_run_snapshot_reuses_status_target_state_for_ready_prompt(
     snapshot = controller.snapshot()
 
     assert snapshot.session_id is not None
-    assert calls == {"file_digests": 1, "target_digest": 1}
+    assert calls == {"file_digests": 0, "target_digest": 1}
 
 
-def test_status_reports_reviewed_current_cell_as_stale_after_digest_change(
+def test_status_keeps_reviewed_cell_current_after_worktree_digest_change(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _init_commit_target_session(tmp_path, capsys)
@@ -586,9 +597,9 @@ def test_status_reports_reviewed_current_cell_as_stale_after_digest_change(
     main(["status", str(tmp_path), "--format", "json"])
 
     data = json.loads(capsys.readouterr().out)
-    assert data["coverage"] == {CellState.STALE.value: 1}
-    assert data["next_required_action"] == "run_review"
-    assert "review cells are stale after target changes" in data["finalize_blockers"]
+    assert data["coverage"] == {CellState.REVIEWED.value: 1}
+    assert data["next_required_action"] == "resolve_finalize_blockers"
+    assert "review cells are stale after target changes" not in data["finalize_blockers"]
     assert _ledger_snapshot(tmp_path) == before
     assert not (tmp_path / ".review-gauntlet" / "checkpoints" / "latest").exists()
 

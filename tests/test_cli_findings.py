@@ -378,7 +378,7 @@ def _create_session_with_numbered_findings(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], *, count: int
 ) -> None:
     (tmp_path / "README.md").write_text("# docs\n", encoding="utf-8")
-    main(["init", str(tmp_path), "--worktree", "--format", "json"])
+    main(["init", str(tmp_path), "--format", "json"])
     capsys.readouterr()
     for index in range(1, count + 1):
         _insert_numbered_finding(tmp_path, index=index, state="confirmed")
@@ -422,7 +422,7 @@ def _numbered_finding_location(index: int) -> tuple[str, int, int]:
 
 def _create_session_with_findings(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     (tmp_path / "README.md").write_text("# docs\n", encoding="utf-8")
-    main(["init", str(tmp_path), "--worktree", "--format", "json"])
+    main(["init", str(tmp_path), "--format", "json"])
     capsys.readouterr()
     session_id = json.loads((tmp_path / ".review-gauntlet" / "active-session.json").read_text())[
         "session_id"

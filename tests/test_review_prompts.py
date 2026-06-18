@@ -28,6 +28,7 @@ def test_review_prompt_contains_cell_rule_context_and_verdict_contract() -> None
             ),
             output_mode=OutputMode.FILE_JSON,
             verdict_output_file="/repo/.review-gauntlet/runs/1/cells/RGC-test/verdict.json",
+            review_commit="abc123def456",
         )
     )
 
@@ -36,6 +37,8 @@ def test_review_prompt_contains_cell_rule_context_and_verdict_contract() -> None
     assert "file_path: src/app.py" in prompt
     assert "rule_id: security" in prompt
     assert "content_digest: abc123" in prompt
+    assert "review_commit: abc123def456" in prompt
+    assert "git show abc123def456:src/app.py" in prompt
     assert f"file_size_bytes: {len(UNIQUE_FILE_BODY_TEXT.encode())}" in prompt
     assert f"line_count: {UNIQUE_FILE_BODY_TEXT.count(chr(10))}" in prompt
     assert "Source file contents are not embedded in this prompt" in prompt

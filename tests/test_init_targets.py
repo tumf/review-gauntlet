@@ -41,7 +41,7 @@ def _cell_paths(root: Path) -> set[str]:
     return {str(row["file_path"]) for row in SessionStore(root).list_cells()}
 
 
-def test_default_init_without_checkpoint_uses_all_files(
+def test_default_init_without_checkpoint_uses_committed_head_files(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _init_repo(tmp_path)
@@ -56,12 +56,10 @@ def test_default_init_without_checkpoint_uses_all_files(
 
     data = json.loads(capsys.readouterr().out)
     assert data["cell_count"] > 0
-    assert {"staged.py", "unstaged.py", "untracked.py", "unchanged.py"}.issubset(
-        _cell_paths(tmp_path)
-    )
+    assert _cell_paths(tmp_path) == {"unchanged.py"}
 
 
-def test_explicit_worktree_matches_default_workspace_diff(
+def test_default_init_reviews_head_commit_files(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _init_repo(tmp_path)
@@ -76,13 +74,13 @@ def test_explicit_worktree_matches_default_workspace_diff(
     (tmp_path / "package-lock.json").write_text("{}\n", encoding="utf-8")
     (tmp_path / "Cargo.lock").write_text("# lock\n", encoding="utf-8")
 
-    main(["init", str(tmp_path), "--worktree", "--format", "json"])
+    main(["init", str(tmp_path), "--format", "json"])
 
     assert json.loads(capsys.readouterr().out)["cell_count"] > 0
-    assert _cell_paths(tmp_path) == {"changed.py"}
+    assert _cell_paths(tmp_path) == {"unchanged.py"}
 
 
-def test_package_only_worktree_changes_create_no_review_cells(
+def test_package_only_worktree_changes_do_not_affect_committed_default_target(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _init_repo(tmp_path)
@@ -90,18 +88,17 @@ def test_package_only_worktree_changes_create_no_review_cells(
     (tmp_path / "package-lock.json").write_text("{}\n", encoding="utf-8")
     (tmp_path / "Cargo.lock").write_text("# lock\n", encoding="utf-8")
 
-    main(["init", str(tmp_path), "--worktree", "--format", "json"])
+    main(["init", str(tmp_path), "--format", "json"])
 
     data = json.loads(capsys.readouterr().out)
-    assert data["cell_count"] == 0
+    assert data["cell_count"] > 0
     assert data["run_count"] == 0
     assert data["run_state"] == "none"
-    assert data["next_command"] is None
-    assert data["next_command"] != "review-gauntlet review"
-    assert _cell_paths(tmp_path) == set()
+    assert data["next_command"] == "review-gauntlet review"
+    assert _cell_paths(tmp_path) == {"unchanged.py"}
 
 
-def test_zero_review_cell_init_text_output_omits_review_next_command(
+def test_package_only_worktree_changes_text_output_keeps_committed_default_target(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _init_repo(tmp_path)
@@ -109,13 +106,13 @@ def test_zero_review_cell_init_text_output_omits_review_next_command(
     (tmp_path / "package-lock.json").write_text("{}\n", encoding="utf-8")
     (tmp_path / "Cargo.lock").write_text("# lock\n", encoding="utf-8")
 
-    main(["init", str(tmp_path), "--worktree"])
+    main(["init", str(tmp_path)])
 
     output = capsys.readouterr().out
-    assert "cell_count: 0" in output
+    assert "cell_count: 2" in output
     assert "run_count: 0" in output
     assert "run_state: none" in output
-    assert "next_command: review-gauntlet review" not in output
+    assert "next_command: review-gauntlet review" in output
 
 
 def test_plain_init_does_not_emit_or_run_setup(
@@ -418,7 +415,9 @@ def test_default_init_ignores_unsafe_latest_checkpoint_pointer(
 
     data = json.loads(capsys.readouterr().out)
     assert data["cell_count"] > 0
-    assert SessionStore(tmp_path).session_metadata()["target"]["kind"] == "all"
+    metadata = SessionStore(tmp_path).session_metadata()
+    assert metadata["target"]["kind"] == "commit"
+    assert metadata["review_head_commit"] == _git(tmp_path, "rev-parse", "HEAD")
 
 
 def test_default_init_rejects_non_ancestor_checkpoint(
@@ -468,13 +467,13 @@ def test_init_then_all_init_allows_overlapping_review_cells(
     _init_repo(tmp_path)
     (tmp_path / "changed.py").write_text("print('changed')\n", encoding="utf-8")
 
-    main(["init", str(tmp_path), "--worktree", "--format", "json"])
+    main(["init", str(tmp_path), "--format", "json"])
     first = json.loads(capsys.readouterr().out)
     assert first["cell_count"] > 0
 
     main(["init", str(tmp_path), "--all", "--format", "json"])
     second = json.loads(capsys.readouterr().out)
-    assert second["cell_count"] > first["cell_count"]
+    assert second["cell_count"] == first["cell_count"]
     assert second["session_id"] != first["session_id"]
 
     main(["status", str(tmp_path), "--format", "json"])
@@ -505,7 +504,8 @@ def test_all_init_uses_full_inventory_and_exclusions(
 
     assert json.loads(capsys.readouterr().out)["cell_count"] > 0
     paths = _cell_paths(tmp_path)
-    assert {"changed.py", "unchanged.py"}.issubset(paths)
+    assert {"unchanged.py"}.issubset(paths)
+    assert "changed.py" not in paths
     assert "docs/usage.md" not in paths
     assert "openspec/specs/spec.md" not in paths
     assert "foo_test.go" not in paths
@@ -535,7 +535,7 @@ def test_review_universe_and_file_digests_omit_package_files(tmp_path: Path) -> 
     assert target_digest(tmp_path) == baseline_target_digest
 
 
-@pytest.mark.parametrize("flag", ["--from", "--to", "--commit", "--worktree", "--all"])
+@pytest.mark.parametrize("flag", ["--from", "--to", "--commit", "--all"])
 def test_review_rejects_target_flags(
     tmp_path: Path, flag: str, capsys: pytest.CaptureFixture[str]
 ) -> None:

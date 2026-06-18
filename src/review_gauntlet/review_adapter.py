@@ -114,9 +114,11 @@ class PromptContext(BaseModel):
     file_metadata: FileMetadata
     output_mode: OutputMode = OutputMode.STDOUT_JSON
     verdict_output_file: str | None = None
+    review_commit: str | None = None
 
 
 def build_review_prompt(context: PromptContext) -> str:
+    commit_lines = _review_commit_prompt_lines(context)
     contract = {
         "comments": [
             {
@@ -151,11 +153,13 @@ def build_review_prompt(context: PromptContext) -> str:
             f"slice_id: {context.cell.slice_id}",
             f"rule_id: {context.cell.rule_id}",
             f"content_digest: {context.cell.content_digest}",
+            *commit_lines,
             f"file_size_bytes: {context.file_metadata.file_size_bytes}",
             f"line_count: {context.file_metadata.line_count}",
             "",
             "Source file contents are not embedded in this prompt. When source inspection is "
-            "needed, read the target file from repository_root plus file_path.",
+            "needed, read the target file from repository_root plus file_path unless "
+            "review_commit is provided.",
             "",
             "## Review Scope Guardrails",
             "Only report issues whose JSON path exactly equals the Review Cell file_path above.",
@@ -179,6 +183,16 @@ def build_review_prompt(context: PromptContext) -> str:
             "",
         ]
     )
+
+
+def _review_commit_prompt_lines(context: PromptContext) -> list[str]:
+    if context.review_commit is None:
+        return []
+    return [
+        f"review_commit: {context.review_commit}",
+        "Read this file as it exists at commit "
+        f"{context.review_commit}: git show {context.review_commit}:{context.cell.file_path}",
+    ]
 
 
 def _prompt_output_instructions(context: PromptContext) -> list[str]:
@@ -212,6 +226,7 @@ class CommandReviewAdapter:
         state_dir: Path,
         run_id: int,
         ruleset: Ruleset,
+        review_commit: str | None = None,
     ) -> None:
         self._config = config
         self._root = root.resolve()
@@ -219,6 +234,7 @@ class CommandReviewAdapter:
         self._run_id = str(run_id)
         self._run_dir = (self._state_dir / "runs" / self._run_id).resolve()
         self._ruleset = ruleset
+        self._review_commit = review_commit
         self._process_lock = threading.Lock()
         self._active_processes: set[subprocess.Popen[str]] = set()
 
@@ -261,6 +277,7 @@ class CommandReviewAdapter:
                 file_metadata=file_metadata,
                 output_mode=self._config.output.mode,
                 verdict_output_file=str(output_path),
+                review_commit=self._review_commit,
             )
         )
         prompt_file.write_text(prompt, encoding="utf-8")
