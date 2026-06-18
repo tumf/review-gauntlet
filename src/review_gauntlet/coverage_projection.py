@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from review_gauntlet.findings import TERMINAL_FINDING_STATES
 from review_gauntlet.inventory import (
     build_inventory,
     build_inventory_for_paths,
@@ -16,6 +17,7 @@ from review_gauntlet.session_store import SessionStore
 from review_gauntlet.targets import TargetSpec, changed_files_for_target, file_digests
 
 ACTIONABLE_FINDING_STATES = frozenset({"open"})
+TERMINAL_FINDING_STATE_VALUES = frozenset(state.value for state in TERMINAL_FINDING_STATES)
 HIGH_RISK_RULE_WEIGHTS: dict[str, int] = {
     "secret-handling": 120,
     "path-safety": 110,
@@ -61,6 +63,7 @@ class QueueEntry:
     priority_score: int
     finding_count: int
     actionable_finding_count: int
+    resolved_finding_count: int
     stale_reason: str | None
     why: str
     changed_since_review: bool
@@ -321,6 +324,9 @@ def _queue_entry_for_cell(
     changed_since_review: bool,
 ) -> QueueEntry:
     actionable_count = sum(1 for finding in findings if finding.state in ACTIONABLE_FINDING_STATES)
+    resolved_count = sum(
+        1 for finding in findings if finding.state in TERMINAL_FINDING_STATE_VALUES
+    )
     finding_count = len(findings)
     risk_weight = HIGH_RISK_RULE_WEIGHTS.get(cell.rule_id, 0)
     priority_score = _priority_score(
@@ -362,6 +368,7 @@ def _queue_entry_for_cell(
         priority_score=priority_score,
         finding_count=finding_count,
         actionable_finding_count=actionable_count,
+        resolved_finding_count=resolved_count,
         stale_reason=stale_reason,
         why=", ".join(reasons),
         changed_since_review=changed_since_review,
