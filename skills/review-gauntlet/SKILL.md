@@ -159,7 +159,7 @@ Findings transition through these states:
 
 ## File exclusion behavior
 
-Review sessions exclude paths and suffixes by default: `openspec/`, `tests/`, `docs/`, common test files, and package manifests/lock files. These are omitted from review cells but remain in the broader inventory. This separation is intentional — inventory shows everything, review cells focus on source-level targets.
+Review sessions exclude paths and suffixes by default: top-level `openspec/`, `tests/`, and `docs/` directories (matched only when they are the first path component, so `src/tests/` is NOT excluded), common test files, and package manifests/lock files. These are omitted from review cells but remain in the broader inventory. This separation is intentional — inventory shows everything, review cells focus on source-level targets.
 
 ## Commands you should not use in normal review
 

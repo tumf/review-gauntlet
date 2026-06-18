@@ -336,7 +336,10 @@ def build_parser() -> argparse.ArgumentParser:
     mark.add_argument("--reason", default="", help="Decision reason (default: none)")
     mark.add_argument("--owner", default="", help="Decision owner (default: none)")
     mark.add_argument(
-        "--until", default="", help="Decision expiry date, YYYY-MM-DD (default: none)"
+        "--until",
+        default="",
+        type=_validate_date_arg,
+        help="Decision expiry date, YYYY-MM-DD (default: none)",
     )
     _output_format_arg(mark)
 
@@ -415,6 +418,12 @@ def _non_negative_int(value: str) -> int:
     if parsed < 0:
         raise argparse.ArgumentTypeError("must be a non-negative integer")
     return parsed
+
+
+def _validate_date_arg(value: str) -> str:
+    if value and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+        raise argparse.ArgumentTypeError("must be in YYYY-MM-DD format")
+    return value
 
 
 def _budget_arg(parser: argparse.ArgumentParser) -> None:
@@ -1468,7 +1477,7 @@ def _record_completed_review_future(
             f"review cell cancelled before producing a result: {cell.id}",
             failure={"error": "cancelled review result", "cell_id": cell.id},
         )
-        progress.cell_failure(cell, outcome)
+        progress.cell_cancelled(cell)
     except Exception as exc:
         outcome = _unexpected_adapter_error(cell, exc)
         progress.cell_failure(cell, outcome)
@@ -1516,6 +1525,8 @@ _FINALIZE_READY_PROMPT = (
     f"{READY_PROMPT_PREFIX} Commit intended git changes before finalizing, then finalize the "
     "review-gauntlet session; stop when the session is finalized or a blocker remains."
 )
+
+_CONTINUATION_PATH_SENTINEL = "Before ending this turn, write valid JSON to the following path:"
 
 _ACTIONABLE_FINDING_STATES = (FindingState.OPEN,)
 
@@ -1809,7 +1820,7 @@ def _continuation_prompt_sections(continuation_path: Path) -> list[str]:
         [
             "",
             "## Turn verdict / continuation file",
-            "Before ending this turn, write valid JSON to the following path:",
+            _CONTINUATION_PATH_SENTINEL,
             str(continuation_path),
             "",
             "Required schema:",
@@ -2385,7 +2396,7 @@ run_session_command_step_for_testing = _run_session_command_step
 def _continuation_path_from_prompt(prompt: str) -> Path | None:
     lines = prompt.splitlines()
     for index, line in enumerate(lines):
-        if line.strip() == "Before ending this turn, write valid JSON to the following path:":
+        if line.strip() == _CONTINUATION_PATH_SENTINEL:
             if index + 1 >= len(lines):
                 return None
             raw_path = lines[index + 1].strip()
@@ -2544,7 +2555,13 @@ def _emit_ready(prompt: str | None, output_format: str) -> None:
 def _cmd_mark(args: argparse.Namespace, store: SessionStore) -> None:
     store.active_session_id()
     state = FindingState(args.state)
-    metadata = {"dismiss_reason": args.reason} if args.state == "dismissed" and args.reason else {}
+    metadata: dict[str, str] = {}
+    if args.state == "dismissed" and args.reason:
+        metadata["dismiss_reason"] = args.reason
+    if args.owner:
+        metadata["owner"] = args.owner
+    if args.until:
+        metadata["until"] = args.until
     store.mark_finding(args.finding_id, state, args.reason, metadata)
     _emit({"finding_id": args.finding_id, "state": state.value}, args.format)
 
