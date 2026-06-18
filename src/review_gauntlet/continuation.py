@@ -25,16 +25,27 @@ class ContinuationVerdict(BaseModel):
     summary: str
     completed_finding_ids: tuple[str, ...] = Field(default_factory=tuple)
     remaining_finding_ids: tuple[str, ...] = Field(default_factory=tuple)
-    next_turn_instructions: str
+    next_turn_instructions: str | None = None
     error: str | None = None
 
-    @field_validator("summary", "next_turn_instructions")
+    @field_validator("summary")
     @classmethod
-    def validate_non_empty_text(cls, value: str) -> str:
+    def validate_summary_non_empty(cls, value: str) -> str:
         text = value.strip()
         if not text:
             raise ValueError("must be a non-empty string")
         return text
+
+    @field_validator("next_turn_instructions", mode="before")
+    @classmethod
+    def validate_next_turn_instructions(cls, value: object) -> str | None:
+        if value is None:
+            return None
+        if isinstance(value, str) and not value.strip():
+            raise ValueError("next_turn_instructions must be a non-empty string when provided")
+        if isinstance(value, str):
+            return value.strip()
+        raise ValueError("next_turn_instructions must be a string or null")
 
     @field_validator("completed_finding_ids", "remaining_finding_ids", mode="before")
     @classmethod
@@ -145,12 +156,13 @@ def continuation_metadata(path: Path, verdict: ContinuationVerdict) -> dict[str,
 
 
 def compact_previous_turn_context(verdict: ContinuationVerdict) -> tuple[str, ...]:
+    instructions = verdict.next_turn_instructions or "none"
     return (
         f"verdict: {verdict.verdict}",
         f"summary: {verdict.summary}",
         "completed_finding_ids: " + _compact_tuple(verdict.completed_finding_ids),
         "remaining_finding_ids: " + _compact_tuple(verdict.remaining_finding_ids),
-        f"next_turn_instructions: {verdict.next_turn_instructions}",
+        f"next_turn_instructions: {instructions}",
     )
 
 
