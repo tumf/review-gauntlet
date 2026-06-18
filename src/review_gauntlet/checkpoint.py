@@ -107,7 +107,10 @@ def target_from_latest_checkpoint(root: Path) -> TargetSpec | None:
     base = checkpoint["review_base_commit"]
     if not isinstance(base, str):
         raise ValueError("latest checkpoint review_base_commit must be a string")
-    head = _git(root, "rev-parse", "--verify", "HEAD^{commit}")
+    try:
+        head = _git(root, "rev-parse", "--verify", "HEAD^{commit}")
+    except subprocess.CalledProcessError as exc:
+        raise ValueError("HEAD does not resolve to a commit") from exc
     return TargetSpec(
         kind=TargetKind.BRANCH,
         base_ref=base,
