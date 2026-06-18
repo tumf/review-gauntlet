@@ -32,7 +32,7 @@
 
 - [x] 15. Update all affected test expectations. Remove `review_head_commit` assertions, restore `--worktree` acceptance tests, fix digest-based tests to use working tree digests. verification: `make test` — all tests pass.
 
-- [x] 16. Run full CI: `make check`. Covers format-check, lint, typecheck, and test. verification: manual — `make check` exits 0.
+- [x] 16. Run full CI: `make check`. Covers format-check, lint, typecheck, and test. (verification: manual — `make check` exits 0.)
 
 ## Future Work
 
