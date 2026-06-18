@@ -125,7 +125,13 @@ class RunSnapshot:
     coverage_projection: CoverageProjection = empty_coverage_projection()
 
 
-ReadyPrompt = Callable[[SessionStore, Path], str | None]
+@dataclass(frozen=True)
+class ReadyTask:
+    prompt: str
+    next_required_action: str
+
+
+ReadyPrompt = Callable[[SessionStore, Path], ReadyTask | None]
 StatusSnapshot = Callable[[SessionStore, Path], dict[str, object]]
 CommandRunner = Callable[[CommandAdapterConfig, Path, Path, str], SessionCommandResult]
 EventSink = Callable[[RunEvent], None]
@@ -250,7 +256,7 @@ class RunController:
                     ready = _string_or_none(status.get("_next_ready_prompt"))
                 else:
                     try:
-                        ready = self._ready_prompt(self.store, self.root)
+                        ready_task = self._ready_prompt(self.store, self.root)
                     except LookupError:
                         session_id = None
                         status = {"coverage": {}, "findings": {}}
@@ -258,6 +264,8 @@ class RunController:
                     except Exception as exc:
                         ready = None
                         status = _with_finalize_blocker(status, _readiness_unavailable_blocker(exc))
+                    else:
+                        ready = ready_task.prompt if ready_task is not None else None
         return RunSnapshot(
             session_id=session_id,
             coverage=_object_dict(status.get("coverage", {})),
@@ -351,7 +359,7 @@ class RunController:
                     session_id=None,
                 )
             try:
-                prompt = self._ready_prompt(self.store, self.root)
+                ready_task = self._ready_prompt(self.store, self.root)
             except LookupError:
                 self._emit("blocked", reason="session_disappeared")
                 return _run_result(
@@ -361,7 +369,7 @@ class RunController:
                     error="active session disappeared during run",
                     session_id=session_id,
                 )
-            if prompt is None:
+            if ready_task is None:
                 self._emit("blocked", reason="no_ready_task", session_id=session_id)
                 return _run_result(
                     completed=False,
@@ -370,9 +378,16 @@ class RunController:
                     error="active session remains but no ready task is actionable",
                     session_id=session_id,
                 )
+            prompt = ready_task.prompt
+            next_required_action = ready_task.next_required_action
             progress_target = _progress_target_from_prompt(prompt)
             pre_turn_state = _target_state_snapshot(self.store, session_id, progress_target)
-            self._emit("step_started", step=step_number, prompt=prompt)
+            self._emit(
+                "step_started",
+                step=step_number,
+                prompt=prompt,
+                next_required_action=next_required_action,
+            )
             self._agent_status = "running"
             self._agent_step_started_at = datetime.now(UTC)
             self._agent_timeout_seconds = effective_config.adapter.timeout_seconds

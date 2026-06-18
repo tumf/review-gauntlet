@@ -8,6 +8,7 @@ import pytest
 
 from review_gauntlet.__about__ import __version__
 from review_gauntlet.cli import (
+    RunSnapshotReadinessProvider,
     _finalize_reasons,  # pyright: ignore[reportPrivateUsage]
     _run_session_command_step,  # pyright: ignore[reportPrivateUsage]
     main,
@@ -714,6 +715,26 @@ def test_cli_status_json_after_init(tmp_path: Path, capsys: pytest.CaptureFixtur
     data = json.loads(capsys.readouterr().out)
     assert data["next_required_action"] == "run_review"
     assert data["can_finalize"] is False
+
+
+def test_run_snapshot_readiness_provider_returns_ready_task_with_next_action(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from review_gauntlet.session_store import SessionStore
+
+    (tmp_path / "README.md").write_text("# docs\n", encoding="utf-8")
+    main(["init", str(tmp_path), "--format", "json"])
+    capsys.readouterr()
+    store = SessionStore(tmp_path)
+    provider = RunSnapshotReadinessProvider()
+
+    provider.status_snapshot(store, tmp_path)
+    ready_task = provider.ready_prompt(store, tmp_path)
+
+    assert ready_task is not None
+    assert ready_task.next_required_action == "run_review"
+    assert "confirmed" in ready_task.prompt
+    assert "fix" in ready_task.prompt
 
 
 def _raise_emfile_git(_root: Path, *args: str) -> str:

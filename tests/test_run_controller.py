@@ -17,6 +17,7 @@ from review_gauntlet.config import CommandAdapterConfig
 from review_gauntlet.review_cells import CellState, ReviewCell
 from review_gauntlet.run_controller import (
     AgentOutputProgress,
+    ReadyTask,
     RunController,
     RunEvent,
     RunExecutionContext,
@@ -139,7 +140,9 @@ def test_run_controller_exposes_agent_output_progress_during_command(tmp_path: P
         store=store,
         config_path=None,
         max_steps=1,
-        ready_prompt=lambda _store, _root: "ready prompt",
+        ready_prompt=lambda _store, _root: ReadyTask(
+            prompt="ready prompt", next_required_action="run_review"
+        ),
         status_snapshot=_status,
         command_runner=command,
     )
@@ -197,7 +200,9 @@ def test_run_controller_lifecycle_uses_live_output_progress(
         store=store,
         config_path=None,
         max_steps=1,
-        ready_prompt=lambda _store, _root: "ready prompt",
+        ready_prompt=lambda _store, _root: ReadyTask(
+            prompt="ready prompt", next_required_action="run_review"
+        ),
         status_snapshot=_status,
         command_runner=command,
     )
@@ -282,7 +287,9 @@ def test_run_controller_passes_base_root_to_command_with_stale_git_metadata(
         store=store,
         config_path=None,
         max_steps=1,
-        ready_prompt=lambda _store, _root: "ready prompt",
+        ready_prompt=lambda _store, _root: ReadyTask(
+            prompt="ready prompt", next_required_action="run_review"
+        ),
         status_snapshot=_status,
         command_runner=command,
     )
@@ -314,7 +321,9 @@ def test_run_controller_completes_when_command_finalizes_session(tmp_path: Path)
         store=store,
         config_path=None,
         max_steps=3,
-        ready_prompt=lambda _store, _root: "ready prompt",
+        ready_prompt=lambda _store, _root: ReadyTask(
+            prompt="ready prompt", next_required_action="run_review"
+        ),
         status_snapshot=_status,
         command_runner=command,
     )
@@ -340,6 +349,37 @@ def test_run_controller_completes_when_command_finalizes_session(tmp_path: Path)
         "checkpoint_commit_finished",
         "finalized",
     ]
+
+
+def test_step_started_carries_next_required_action(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+
+    def command(
+        _config: CommandAdapterConfig, _root: Path, _state_dir: Path, _prompt: str
+    ) -> SessionCommandResult:
+        store.active_path.unlink()
+        return SessionCommandResult(
+            argv=["fake-agent"], cwd=None, returncode=0, stdout="ok", stderr=""
+        )
+
+    controller = RunController(
+        root=tmp_path,
+        store=store,
+        config_path=None,
+        max_steps=1,
+        ready_prompt=lambda _store, _root: ReadyTask(
+            prompt="review pending cells", next_required_action="run_review"
+        ),
+        status_snapshot=_status,
+        command_runner=command,
+    )
+
+    result = controller.run()
+    step_started = next(event for event in controller.events if event.type == "step_started")
+
+    assert result["completed"] is True
+    assert step_started.payload["prompt"] == "review pending cells"
+    assert step_started.payload["next_required_action"] == "run_review"
 
 
 def test_run_controller_attempts_checkpoint_commit_after_finalization(
@@ -382,7 +422,9 @@ def test_run_controller_attempts_checkpoint_commit_after_finalization(
         store=store,
         config_path=None,
         max_steps=1,
-        ready_prompt=lambda _store, _root: "ready prompt",
+        ready_prompt=lambda _store, _root: ReadyTask(
+            prompt="ready prompt", next_required_action="run_review"
+        ),
         status_snapshot=_status,
         command_runner=command,
     )
@@ -456,7 +498,9 @@ def test_run_controller_commits_checkpoint_when_finalizing_agent_stdout_is_non_j
         store=store,
         config_path=None,
         max_steps=1,
-        ready_prompt=lambda _store, _root: "finalize session",
+        ready_prompt=lambda _store, _root: ReadyTask(
+            prompt="finalize session", next_required_action="finalize"
+        ),
         status_snapshot=lambda _store, _root: {
             "coverage": {"reviewed": 1},
             "finding_state_counts": {},
@@ -558,7 +602,9 @@ def test_run_controller_honors_interrupt_requested_during_command(tmp_path: Path
         store=store,
         config_path=None,
         max_steps=1,
-        ready_prompt=lambda _store, _root: "ready prompt",
+        ready_prompt=lambda _store, _root: ReadyTask(
+            prompt="ready prompt", next_required_action="run_review"
+        ),
         status_snapshot=_status,
         command_runner=command,
     )
@@ -594,7 +640,9 @@ def test_run_controller_exposes_command_label_before_command_returns(tmp_path: P
         store=store,
         config_path=None,
         max_steps=1,
-        ready_prompt=lambda _store, _root: "ready prompt",
+        ready_prompt=lambda _store, _root: ReadyTask(
+            prompt="ready prompt", next_required_action="run_review"
+        ),
         status_snapshot=_status,
         command_runner=command,
     )
@@ -634,7 +682,9 @@ def test_run_controller_synthesizes_quiet_liveness_and_timeout_remaining(
         store=store,
         config_path=None,
         max_steps=1,
-        ready_prompt=lambda _store, _root: "ready prompt",
+        ready_prompt=lambda _store, _root: ReadyTask(
+            prompt="ready prompt", next_required_action="run_review"
+        ),
         status_snapshot=_status,
         command_runner=command,
     )
@@ -684,7 +734,9 @@ def test_run_controller_preserves_effective_timeout_after_command_timeout(
         store=store,
         config_path=None,
         max_steps=1,
-        ready_prompt=lambda _store, _root: "ready prompt",
+        ready_prompt=lambda _store, _root: ReadyTask(
+            prompt="ready prompt", next_required_action="run_review"
+        ),
         status_snapshot=lambda _store, _root: {
             "coverage": {"reviewed": 1},
             "findings": {},
@@ -740,7 +792,9 @@ def test_run_controller_preserves_specific_command_failure_statuses(
         store=store,
         config_path=None,
         max_steps=3,
-        ready_prompt=lambda _store, _root: "ready prompt",
+        ready_prompt=lambda _store, _root: ReadyTask(
+            prompt="ready prompt", next_required_action="run_review"
+        ),
         status_snapshot=_status,
         command_runner=command,
     )
@@ -772,7 +826,9 @@ def test_run_controller_reports_interrupted_command_and_keeps_active_session(
         store=store,
         config_path=None,
         max_steps=3,
-        ready_prompt=lambda _store, _root: "ready prompt",
+        ready_prompt=lambda _store, _root: ReadyTask(
+            prompt="ready prompt", next_required_action="run_review"
+        ),
         status_snapshot=_status,
         command_runner=command,
     )
@@ -821,7 +877,9 @@ def test_run_controller_reports_max_steps_exhausted(tmp_path: Path) -> None:
         store=store,
         config_path=None,
         max_steps=2,
-        ready_prompt=lambda _store, _root: "ready prompt",
+        ready_prompt=lambda _store, _root: ReadyTask(
+            prompt="ready prompt", next_required_action="run_review"
+        ),
         status_snapshot=_status,
         command_runner=lambda config, _root, _state_dir, prompt: SessionCommandResult(
             argv=[config.command, prompt], cwd=None, returncode=0, stdout="ok", stderr=""
@@ -859,7 +917,9 @@ def test_run_controller_stop_after_current_step_prevents_next_step(tmp_path: Pat
         store=store,
         config_path=None,
         max_steps=5,
-        ready_prompt=lambda _store, _root: "ready prompt",
+        ready_prompt=lambda _store, _root: ReadyTask(
+            prompt="ready prompt", next_required_action="run_review"
+        ),
         status_snapshot=_status,
         command_runner=command,
     )
@@ -879,7 +939,9 @@ def test_run_controller_refresh_snapshot_exposes_status(tmp_path: Path) -> None:
         store=store,
         config_path=None,
         max_steps=1,
-        ready_prompt=lambda _store, _root: "ready prompt",
+        ready_prompt=lambda _store, _root: ReadyTask(
+            prompt="ready prompt", next_required_action="run_review"
+        ),
         status_snapshot=_status,
         command_runner=lambda _config, _root, _state_dir, _prompt: SessionCommandResult(
             argv=[], cwd=None, returncode=0, stdout="", stderr=""
@@ -899,7 +961,7 @@ def test_run_controller_snapshot_blocks_readiness_operational_error_without_rais
 ) -> None:
     store = _store(tmp_path)
 
-    def raise_db_ready(_store: SessionStore, _root: Path) -> str | None:
+    def raise_db_ready(_store: SessionStore, _root: Path) -> ReadyTask | None:
         raise sqlite3.OperationalError("unable to open database file")
 
     controller = RunController(
@@ -946,7 +1008,9 @@ def test_run_controller_snapshot_status_operational_error_returns_blocked_snapsh
         store=store,
         config_path=None,
         max_steps=1,
-        ready_prompt=lambda _store, _root: "ready prompt",
+        ready_prompt=lambda _store, _root: ReadyTask(
+            prompt="ready prompt", next_required_action="run_review"
+        ),
         status_snapshot=raise_db_status,
         command_runner=lambda _config, _root, _state_dir, _prompt: SessionCommandResult(
             argv=[], cwd=None, returncode=0, stdout="", stderr=""
@@ -972,7 +1036,7 @@ def test_run_controller_snapshot_blocks_readiness_emfile_without_raising(
 ) -> None:
     store = _store(tmp_path)
 
-    def raise_emfile_ready(_store: SessionStore, _root: Path) -> str | None:
+    def raise_emfile_ready(_store: SessionStore, _root: Path) -> ReadyTask | None:
         raise OSError(errno.EMFILE, "Too many open files")
 
     controller = RunController(
@@ -1018,7 +1082,9 @@ def test_run_controller_snapshot_status_emfile_returns_blocked_snapshot(tmp_path
         store=store,
         config_path=None,
         max_steps=1,
-        ready_prompt=lambda _store, _root: "ready prompt",
+        ready_prompt=lambda _store, _root: ReadyTask(
+            prompt="ready prompt", next_required_action="run_review"
+        ),
         status_snapshot=raise_emfile_status,
         command_runner=lambda _config, _root, _state_dir, _prompt: SessionCommandResult(
             argv=[], cwd=None, returncode=0, stdout="", stderr=""
@@ -1052,7 +1118,9 @@ def test_run_controller_snapshot_status_sqlite_error_returns_blocked_snapshot(
         store=store,
         config_path=None,
         max_steps=1,
-        ready_prompt=lambda _store, _root: "ready prompt",
+        ready_prompt=lambda _store, _root: ReadyTask(
+            prompt="ready prompt", next_required_action="run_review"
+        ),
         status_snapshot=raise_sqlite_status,
         command_runner=lambda _config, _root, _state_dir, _prompt: SessionCommandResult(
             argv=[], cwd=None, returncode=0, stdout="", stderr=""
@@ -1078,7 +1146,7 @@ def test_run_controller_snapshot_ready_sqlite_error_returns_blocked_snapshot(
 ) -> None:
     store = _store(tmp_path)
 
-    def raise_sqlite_ready(_store: SessionStore, _root: Path) -> str | None:
+    def raise_sqlite_ready(_store: SessionStore, _root: Path) -> ReadyTask | None:
         raise sqlite3.OperationalError("database is locked")
 
     controller = RunController(
@@ -1120,7 +1188,9 @@ def test_run_controller_snapshot_uses_finding_state_counts_fallback(tmp_path: Pa
         store=store,
         config_path=None,
         max_steps=1,
-        ready_prompt=lambda _store, _root: "ready prompt",
+        ready_prompt=lambda _store, _root: ReadyTask(
+            prompt="ready prompt", next_required_action="run_review"
+        ),
         status_snapshot=lambda _store, _root: {
             "coverage": {"pending": 1},
             "finding_state_counts": {"untriaged": 2},
@@ -1142,7 +1212,9 @@ def test_run_controller_snapshot_prefers_legacy_findings_when_present(tmp_path: 
         store=store,
         config_path=None,
         max_steps=1,
-        ready_prompt=lambda _store, _root: "ready prompt",
+        ready_prompt=lambda _store, _root: ReadyTask(
+            prompt="ready prompt", next_required_action="run_review"
+        ),
         status_snapshot=lambda _store, _root: {
             "coverage": {"pending": 1},
             "findings": {"legacy": 1},
@@ -1194,7 +1266,9 @@ def test_run_controller_max_steps_zero_raises(tmp_path: Path) -> None:
             store=store,
             config_path=None,
             max_steps=0,
-            ready_prompt=lambda _store, _root: "ready prompt",
+            ready_prompt=lambda _store, _root: ReadyTask(
+                prompt="ready prompt", next_required_action="run_review"
+            ),
             status_snapshot=_status,
             command_runner=lambda _config, _root, _state_dir, _prompt: SessionCommandResult(
                 argv=[], cwd=None, returncode=0, stdout="", stderr=""
@@ -1210,7 +1284,9 @@ def test_run_controller_max_steps_negative_raises(tmp_path: Path) -> None:
             store=store,
             config_path=None,
             max_steps=-1,
-            ready_prompt=lambda _store, _root: "ready prompt",
+            ready_prompt=lambda _store, _root: ReadyTask(
+                prompt="ready prompt", next_required_action="run_review"
+            ),
             status_snapshot=_status,
             command_runner=lambda _config, _root, _state_dir, _prompt: SessionCommandResult(
                 argv=[], cwd=None, returncode=0, stdout="", stderr=""
@@ -1225,7 +1301,9 @@ def test_run_controller_session_disappeared_before_loop(tmp_path: Path) -> None:
         store=store,
         config_path=None,
         max_steps=3,
-        ready_prompt=lambda _store, _root: "ready prompt",
+        ready_prompt=lambda _store, _root: ReadyTask(
+            prompt="ready prompt", next_required_action="run_review"
+        ),
         status_snapshot=_status,
         command_runner=lambda _config, _root, _state_dir, _prompt: SessionCommandResult(
             argv=["fake-agent"], cwd=None, returncode=0, stdout="ok", stderr=""
@@ -1261,7 +1339,9 @@ def test_run_controller_post_loop_completion_session_disappears_on_final_step(
         store=store,
         config_path=None,
         max_steps=3,
-        ready_prompt=lambda _store, _root: "ready prompt",
+        ready_prompt=lambda _store, _root: ReadyTask(
+            prompt="ready prompt", next_required_action="run_review"
+        ),
         status_snapshot=_status,
         command_runner=command,
     )
@@ -1306,7 +1386,9 @@ def test_run_controller_maps_verdict_failure_statuses(
         store=store,
         config_path=None,
         max_steps=1,
-        ready_prompt=lambda _store, _root: "ready prompt",
+        ready_prompt=lambda _store, _root: ReadyTask(
+            prompt="ready prompt", next_required_action="run_review"
+        ),
         status_snapshot=_status,
         command_runner=command,
     )
@@ -1354,7 +1436,9 @@ def test_run_controller_includes_verdict_metadata_in_step_payload(tmp_path: Path
         store=store,
         config_path=None,
         max_steps=1,
-        ready_prompt=lambda _store, _root: "ready prompt",
+        ready_prompt=lambda _store, _root: ReadyTask(
+            prompt="ready prompt", next_required_action="run_review"
+        ),
         status_snapshot=_status,
         command_runner=command,
     )
@@ -1407,7 +1491,9 @@ Before ending this turn, write valid JSON to the following path:
         store=store,
         config_path=None,
         max_steps=1,
-        ready_prompt=lambda _store, _root: prompt,
+        ready_prompt=lambda _store, _root: ReadyTask(
+            prompt=prompt, next_required_action="triage_findings"
+        ),
         status_snapshot=_status,
         command_runner=command,
     )
