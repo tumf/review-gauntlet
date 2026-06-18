@@ -362,6 +362,7 @@ class RunController:
         _config_path, effective_config = loaded
         self._command_label = command_display_label(effective_config.adapter)
         steps: list[dict[str, object]] = []
+        pending_retry_task: ReadyTask | None = None
         initial_session_id = self._active_session_id_or_none()
         self._emit("run_started", session_id=initial_session_id, max_steps=self.max_steps)
         self.refresh()
@@ -382,26 +383,30 @@ class RunController:
                     error="active session disappeared during run",
                     session_id=None,
                 )
-            try:
-                ready_task = self._ready_prompt(self.store, self.root)
-            except LookupError:
-                self._emit("blocked", reason="session_disappeared")
-                return _run_result(
-                    completed=False,
-                    steps=steps,
-                    reason="session_disappeared",
-                    error="active session disappeared during run",
-                    session_id=session_id,
-                )
-            if ready_task is None:
-                self._emit("blocked", reason="no_ready_task", session_id=session_id)
-                return _run_result(
-                    completed=False,
-                    steps=steps,
-                    reason="no_ready_task",
-                    error="active session remains but no ready task is actionable",
-                    session_id=session_id,
-                )
+            if pending_retry_task is None:
+                try:
+                    ready_task = self._ready_prompt(self.store, self.root)
+                except LookupError:
+                    self._emit("blocked", reason="session_disappeared")
+                    return _run_result(
+                        completed=False,
+                        steps=steps,
+                        reason="session_disappeared",
+                        error="active session disappeared during run",
+                        session_id=session_id,
+                    )
+                if ready_task is None:
+                    self._emit("blocked", reason="no_ready_task", session_id=session_id)
+                    return _run_result(
+                        completed=False,
+                        steps=steps,
+                        reason="no_ready_task",
+                        error="active session remains but no ready task is actionable",
+                        session_id=session_id,
+                    )
+            else:
+                ready_task = pending_retry_task
+                pending_retry_task = None
             prompt = ready_task.prompt
             next_required_action = ready_task.next_required_action
             progress_target = _progress_target_from_prompt(prompt)
@@ -506,6 +511,24 @@ class RunController:
                 failed=command_result.failure is not None,
             )
             if command_result.failure is not None:
+                if (
+                    command_result.failure.get("reason") == "invalid_step_verdict"
+                    and step_number < self.max_steps
+                ):
+                    pending_retry_task = dataclasses.replace(
+                        ready_task,
+                        prompt=_prompt_with_invalid_verdict_diagnostic(
+                            ready_task.prompt, command_result.failure
+                        ),
+                    )
+                    self._emit(
+                        "retry_scheduled",
+                        reason="invalid_step_verdict",
+                        verdict_path=command_result.failure.get("verdict_path"),
+                        next_step=step_number + 1,
+                    )
+                    self.refresh()
+                    continue
                 self._emit("failed", reason=command_result.failure.get("reason", "command_failed"))
                 return _run_result(
                     completed=False,
@@ -614,6 +637,23 @@ def _is_successful_progress_verdict(result: SessionCommandResult) -> bool:
     if result.failure is not None or result.verdict_metadata is None:
         return False
     return result.verdict_metadata.get("verdict") in {"continue", "finish"}
+
+
+def _prompt_with_invalid_verdict_diagnostic(prompt: str, failure: Mapping[str, object]) -> str:
+    verdict_path = str(failure.get("verdict_path") or "unknown")
+    error = str(failure.get("error") or "continuation verdict was invalid")
+    return "\n".join(
+        [
+            prompt,
+            "",
+            "## Previous invalid turn verdict",
+            "The previous verdict file was invalid and must be corrected before doing other work.",
+            f"path: {verdict_path}",
+            f"error: {error}",
+            "Rewrite the same verdict file, run the validation command shown above, and only end",
+            "this turn after validation returns valid=true.",
+        ]
+    )
 
 
 def _progress_target_from_prompt(prompt: str) -> ProgressTarget:

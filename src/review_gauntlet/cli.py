@@ -47,7 +47,12 @@ from review_gauntlet.continuation import (
     validate_continuation_verdict,
 )
 from review_gauntlet.coverage_projection import build_session_coverage_projection
-from review_gauntlet.findings import FindingResolution, FindingState, normalize_ocr_comment
+from review_gauntlet.findings import (
+    FindingResolution,
+    FindingState,
+    assert_transition_allowed,
+    normalize_ocr_comment,
+)
 from review_gauntlet.hooks import create_hook_event_sink
 from review_gauntlet.inventory import (
     UnsafeRepositoryPathError,
@@ -349,6 +354,16 @@ def build_parser() -> argparse.ArgumentParser:
     validate_verdict.add_argument("--expected-path")
     _output_format_arg(validate_verdict)
 
+    validate_turn_verdict = subparsers.add_parser("validate-turn-verdict")
+    validate_turn_verdict.add_argument("path", type=Path)
+    validate_turn_verdict.add_argument(
+        "--root",
+        type=Path,
+        default=None,
+        help="Repository root for active-session transition validation (default: inferred)",
+    )
+    _output_format_arg(validate_turn_verdict)
+
     completion = subparsers.add_parser("completion")
     completion.add_argument("shell", choices=("bash", "zsh", "fish"))
     return parser
@@ -536,6 +551,9 @@ def main(argv: list[str] | None = None) -> None:
     if args.command == "validate-verdict":
         _cmd_validate_verdict(args)
         return
+    if args.command == "validate-turn-verdict":
+        _cmd_validate_turn_verdict(args)
+        return
     if args.command == "config":
         try:
             _cmd_config(args)
@@ -713,6 +731,83 @@ def _cmd_validate_verdict(args: argparse.Namespace) -> None:
         _emit(result, args.format)
         raise SystemExit(1) from exc
     _emit({"valid": True, "path": str(path), "comment_count": len(payload.comments)}, args.format)
+
+
+def _cmd_validate_turn_verdict(args: argparse.Namespace) -> None:
+    path = Path(args.path)
+    try:
+        verdict = validate_continuation_verdict(path)
+        root = _turn_verdict_validation_root(path, args.root)
+        if root is not None:
+            _validate_active_session_resolution_transitions(SessionStore(root), verdict)
+    except (ContinuationVerdictError, LookupError, ValueError) as exc:
+        _emit({"valid": False, "path": str(path), "error": str(exc)}, args.format)
+        raise SystemExit(1) from exc
+    _emit(
+        {
+            "valid": True,
+            "path": str(path),
+            "verdict": verdict.verdict,
+            "resolution_count": len(verdict.resolutions),
+        },
+        args.format,
+    )
+
+
+def _turn_verdict_validation_root(path: Path, explicit_root: Path | None) -> Path | None:
+    if explicit_root is not None:
+        return explicit_root
+    parts = path.parts
+    try:
+        state_index = parts.index(".review-gauntlet")
+    except ValueError:
+        return None
+    if state_index == 0:
+        return Path(".")
+    return Path(*parts[:state_index])
+
+
+def _validate_active_session_resolution_transitions(
+    store: SessionStore, verdict: ContinuationVerdict
+) -> None:
+    if not store.active_path.exists() or not verdict.resolutions:
+        return
+    session_id = store.active_session_id()
+    requested_ids = tuple(resolution.finding_id for resolution in verdict.resolutions)
+    with store.connect() as conn:
+        rows = conn.execute(
+            f"""
+            select finding_id, state from findings
+            where session_id = ? and finding_id in ({_sql_placeholders(len(requested_ids))})
+            """,
+            (session_id, *requested_ids),
+        ).fetchall()
+    states_by_id = {str(row["finding_id"]): FindingState(str(row["state"])) for row in rows}
+    missing_ids = sorted(
+        finding_id for finding_id in requested_ids if finding_id not in states_by_id
+    )
+    if missing_ids:
+        raise LookupError(
+            "turn verdict references unknown findings in active session "
+            f"{session_id}: {', '.join(missing_ids)}"
+        )
+    for resolution in verdict.resolutions:
+        current = states_by_id[resolution.finding_id]
+        desired = FindingState(resolution.state)
+        try:
+            assert_transition_allowed(current, desired)
+        except ValueError as exc:
+            raise ValueError(
+                "turn verdict contains invalid finding transition for active session "
+                f"{session_id}: finding_id={resolution.finding_id} "
+                f"{current.value} -> {desired.value}"
+            ) from exc
+
+
+def _sql_placeholders(count: int) -> str:
+    if count < 1:
+        raise ValueError("placeholder count must be positive")
+    return ", ".join("?" for _ in range(count))
 
 
 def _run_legacy_command(args: argparse.Namespace, root: Path) -> None:
@@ -1521,8 +1616,8 @@ def _ready_prompt_segments(reason: str) -> tuple[list[str], str, str]:
             "1. resolve: examine the open findings listed in 'Findings for this file' below.",
             "   Confirm and fix real issues or dismiss non-issues with a reason.",
             "   Do NOT discover new findings.",
-            "2. mark: record each finding as confirmed, fixed,"
-            " false_positive, accepted_risk, waived, or dismissed.",
+            "2. mark: record each finding as confirmed, fixed_pending_verification,"
+            " fixed_verified, false_positive, accepted_risk, waived, or dismissed.",
         ],
         "Stop when all findings listed below have been resolved.",
         "## Review cells for this file (context only, do NOT review for new findings)",
@@ -1572,6 +1667,11 @@ def _continuation_prompt_sections(continuation_path: Path) -> list[str]:
             "}",
             "Valid verdict values: continue, finish, abort.",
             "For verdict=abort, set error to a non-empty actionable message.",
+            "",
+            "After writing the turn verdict file, validate it before ending this turn:",
+            f"review-gauntlet validate-turn-verdict {continuation_path} --format json",
+            "If validation fails, rewrite the verdict file and run the command again.",
+            "Do not end this turn until validation returns valid=true.",
         ]
     )
     return sections
