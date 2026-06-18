@@ -76,7 +76,9 @@ class RuleCoverageSummary:
     reviewed: int
     pending: int
     stale: int
+    finding_count: int
     actionable_findings: int
+    resolved_findings: int
     priority_label: CoveragePriorityLabel
 
 
@@ -87,7 +89,9 @@ class FileCoverageSummary:
     reviewed: int
     pending: int
     stale: int
+    finding_count: int
     actionable_findings: int
+    resolved_findings: int
     highest_priority_label: CoveragePriorityLabel
     highest_priority_score: int
 
@@ -429,7 +433,9 @@ def _rule_summaries(entries: tuple[QueueEntry, ...]) -> tuple[RuleCoverageSummar
                 reviewed=sum(1 for entry in rule_entries if entry.state in TERMINAL_CELL_STATES),
                 pending=sum(1 for entry in rule_entries if entry.state == "pending"),
                 stale=0,  # stale is intentionally ignored
+                finding_count=sum(entry.finding_count for entry in rule_entries),
                 actionable_findings=sum(entry.actionable_finding_count for entry in rule_entries),
+                resolved_findings=sum(entry.resolved_finding_count for entry in rule_entries),
                 priority_label=min(
                     (entry.priority_label for entry in rule_entries),
                     key=lambda label: ("P0", "P1", "P2", "P3").index(label),
@@ -462,7 +468,9 @@ def _file_summaries(entries: tuple[QueueEntry, ...]) -> tuple[FileCoverageSummar
                 reviewed=sum(1 for entry in file_entries if entry.state in TERMINAL_CELL_STATES),
                 pending=sum(1 for entry in file_entries if entry.state == "pending"),
                 stale=0,  # stale is intentionally ignored
+                finding_count=sum(entry.finding_count for entry in file_entries),
                 actionable_findings=sum(entry.actionable_finding_count for entry in file_entries),
+                resolved_findings=sum(entry.resolved_finding_count for entry in file_entries),
                 highest_priority_label=highest.priority_label,
                 highest_priority_score=highest.priority_score,
             )

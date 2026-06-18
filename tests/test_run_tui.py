@@ -19,6 +19,7 @@ from review_gauntlet.run_tui import (
     actionable_finding_summary,
     calculate_progress_metrics,
     cells_text,
+    color_legend_tui_lines,
     compact_dashboard_text,
     create_run_app,
     dashboard_state,
@@ -249,9 +250,26 @@ def test_cells_view_renders_resolved_over_total_findings() -> None:
     assert entry.finding_count == 3
     assert entry.actionable_finding_count == 1
     assert entry.resolved_finding_count == 2
+    assert projection.rules[0].finding_count == 3
+    assert projection.rules[0].resolved_findings == 2
+    assert projection.files[0].finding_count == 3
+    assert projection.files[0].resolved_findings == 2
     assert entry.priority_label == "P0"
     assert entry.why.startswith("1 actionable finding(s)")
-    assert "findings 2/3 resolved" in cells_text(view, filters=CoverageCellFilter())
+    assert "findings 2/3" in cells_text(view, filters=CoverageCellFilter())
+    assert "2/3" in render_tui_lines(tui_render_sections(view)["rules"])
+    assert "2/3" in render_tui_lines(tui_render_sections(view)["files"])
+    assert "resolved" not in cells_text(view, filters=CoverageCellFilter())
+    assert "resolved" not in render_tui_lines(tui_render_sections(view)["rules"])
+    assert "resolved" not in render_tui_lines(tui_render_sections(view)["files"])
+
+
+def test_color_legend_matches_finding_progress_ratio() -> None:
+    legend = render_tui_lines(color_legend_tui_lines())
+
+    assert "done / find" in legend
+    assert "pend / find" not in legend
+    assert "resolved" not in legend
 
 
 def test_task_title_mapping_uses_resolve_findings() -> None:
@@ -492,7 +510,9 @@ def _finalized_snapshot(*, with_details: bool = True) -> RunSnapshot:
                     reviewed=1,
                     pending=0,
                     stale=0,
+                    finding_count=1,
                     actionable_findings=0,
+                    resolved_findings=1,
                     priority_label="P1",
                 ),
             ),
@@ -503,7 +523,9 @@ def _finalized_snapshot(*, with_details: bool = True) -> RunSnapshot:
                     reviewed=1,
                     pending=0,
                     stale=0,
+                    finding_count=1,
                     actionable_findings=0,
+                    resolved_findings=1,
                     highest_priority_label="P1",
                     highest_priority_score=100,
                 ),
@@ -618,7 +640,9 @@ def test_finalized_sections_hide_operational_panels_and_running_keeps_them() -> 
                 reviewed=0,
                 pending=1,
                 stale=0,
+                finding_count=0,
                 actionable_findings=0,
+                resolved_findings=0,
                 priority_label="P1",
             ),
         ),
@@ -629,7 +653,9 @@ def test_finalized_sections_hide_operational_panels_and_running_keeps_them() -> 
                 reviewed=0,
                 pending=1,
                 stale=0,
+                finding_count=0,
                 actionable_findings=0,
+                resolved_findings=0,
                 highest_priority_label="P1",
                 highest_priority_score=100,
             ),

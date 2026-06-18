@@ -348,7 +348,7 @@ def create_run_app(
                     render_tui_lines(findings_tui_lines(view, limit=f_limit), flashes, mode="rich")
                 )
             activity_timeline.update(render_tui_lines(sections["activity"], flashes, mode="rich"))
-            legend.update(render_tui_lines(_color_legend_tui_lines(), flashes, mode="rich"))
+            legend.update(render_tui_lines(color_legend_tui_lines(), flashes, mode="rich"))
 
     return RunApp(controller)
 
@@ -1782,7 +1782,6 @@ def rules_tui_lines(view: RunViewState, *, limit: int = 5) -> tuple[TuiLine, ...
     lines: list[TuiLine] = []
     for rule in rules:
         prefix = f"rule.{rule.rule_id}"
-        pend_color = _STATE_COLORS.get("pending", "")
         lines.append(
             TuiLine(
                 (
@@ -1806,17 +1805,16 @@ def rules_tui_lines(view: RunViewState, *, limit: int = 5) -> tuple[TuiLine, ...
                     ),
                     _literal(" · ", key=f"{prefix}.sep1"),
                     _colored_field(
-                        f"{prefix}.pend",
-                        str(rule.pending),
-                        pend_color,
-                        compare=rule.pending,
+                        f"{prefix}.resolved_findings",
+                        str(rule.resolved_findings),
+                        _FIND_COUNT_COLOR,
+                        compare=rule.resolved_findings,
                     ),
                     _literal("/", key=f"{prefix}.slash1"),
-                    _colored_field(
-                        f"{prefix}.findings",
-                        str(rule.actionable_findings),
-                        _FIND_COUNT_COLOR,
-                        compare=rule.actionable_findings,
+                    _field(
+                        f"{prefix}.finding_count",
+                        str(rule.finding_count),
+                        compare=rule.finding_count,
                     ),
                 )
             )
@@ -1838,7 +1836,6 @@ def files_tui_lines(view: RunViewState, *, limit: int = 5) -> tuple[TuiLine, ...
     for f_entry in files:
         prefix = f"file.{_activity_identity(TimelineEvent('', f_entry.file_path, ''))}"
         highest = f_entry.highest_priority_label
-        pend_color = _STATE_COLORS.get("pending", "")
         lines.append(
             TuiLine(
                 (
@@ -1861,17 +1858,16 @@ def files_tui_lines(view: RunViewState, *, limit: int = 5) -> tuple[TuiLine, ...
                     ),
                     _literal(" · ", key=f"{prefix}.sep1"),
                     _colored_field(
-                        f"{prefix}.pend",
-                        str(f_entry.pending),
-                        pend_color,
-                        compare=f_entry.pending,
+                        f"{prefix}.resolved_findings",
+                        str(f_entry.resolved_findings),
+                        _FIND_COUNT_COLOR,
+                        compare=f_entry.resolved_findings,
                     ),
                     _literal("/", key=f"{prefix}.slash1"),
-                    _colored_field(
-                        f"{prefix}.findings",
-                        str(f_entry.actionable_findings),
-                        _FIND_COUNT_COLOR,
-                        compare=f_entry.actionable_findings,
+                    _field(
+                        f"{prefix}.finding_count",
+                        str(f_entry.finding_count),
+                        compare=f_entry.finding_count,
                     ),
                 )
             )
@@ -2009,7 +2005,7 @@ def _entry_is_actionable(entry: QueueEntry) -> bool:
 
 
 def _format_cell_entry(entry: QueueEntry) -> str:
-    finding = f" findings {entry.resolved_finding_count}/{entry.finding_count} resolved"
+    finding = f" findings {entry.resolved_finding_count}/{entry.finding_count}"
     return (
         f"{entry.priority_label:<2} {entry.state:<8} {entry.rule_id:<18} "
         f"{_summarize_text(entry.file_path, limit=48)}{finding} · {entry.why}"
@@ -2019,15 +2015,15 @@ def _format_cell_entry(entry: QueueEntry) -> str:
 def _format_rule_summary(rule: RuleCoverageSummary) -> str:
     return (
         f"{rule.priority_label} {rule.rule_id:<18} {rule.reviewed}/{rule.total} reviewed · "
-        f"pending {rule.pending} findings {rule.actionable_findings}"
+        f"findings {rule.resolved_findings}/{rule.finding_count}"
     )
 
 
 def _format_file_summary(file: FileCoverageSummary) -> str:
     return (
         f"{file.highest_priority_label} {_summarize_text(file.file_path, limit=48):<48} "
-        f"{file.reviewed}/{file.total} reviewed · pending {file.pending} "
-        f"findings {file.actionable_findings}"
+        f"{file.reviewed}/{file.total} reviewed · "
+        f"findings {file.resolved_findings}/{file.finding_count}"
     )
 
 
@@ -2135,12 +2131,12 @@ def footer_text() -> str:
     return "q stop | r refresh | 1-5 views | Ctrl-C interrupt"
 
 
-def _color_legend_tui_lines() -> tuple[TuiLine, ...]:
+def color_legend_tui_lines() -> tuple[TuiLine, ...]:
     return (
         TuiLine(
             (
                 _literal("legend  ", key="legend.label"),
-                _colored_field("legend.pend", "pend", _STATE_COLORS.get("pending", "")),
+                _colored_field("legend.done", "done", _FIND_COUNT_COLOR),
                 _literal(" / ", key="legend.s"),
                 _colored_field("legend.find", "find", _FIND_COUNT_COLOR),
             )
