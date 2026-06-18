@@ -1,17 +1,22 @@
 from typing import Any, cast
 
 from review_gauntlet.coverage_projection import (
+    CoverageCellFilter,
+    CoverageCellInput,
+    CoverageFindingInput,
     CoverageProjection,
     FileCoverageSummary,
     FindingSummaryEntry,
     QueueEntry,
     RuleCoverageSummary,
+    build_coverage_projection,
 )
 from review_gauntlet.run_controller import AgentLifecycle, RunController, RunSnapshot
 from review_gauntlet.run_tui import (
     FINDING_STATES,
     actionable_finding_summary,
     calculate_progress_metrics,
+    cells_text,
     compact_dashboard_text,
     create_run_app,
     dashboard_state,
@@ -182,6 +187,69 @@ def test_actionable_finding_summary_counts_open_only() -> None:
     assert summary.verify == 0
 
 
+def test_cells_view_renders_resolved_over_total_findings() -> None:
+    projection = build_coverage_projection(
+        (
+            CoverageCellInput(
+                cell_id="RGC-1",
+                file_path="src/app.py",
+                rule_id="security",
+                slice_id="python",
+                state="reviewed",
+            ),
+        ),
+        (
+            CoverageFindingInput(
+                finding_id="RGF-0001",
+                file_path="src/app.py",
+                rule_id="security",
+                state="open",
+                content="still unresolved",
+                latest_cell_id="RGC-1",
+            ),
+            CoverageFindingInput(
+                finding_id="RGF-0002",
+                file_path="src/app.py",
+                rule_id="security",
+                state="confirmed",
+                content="confirmed issue",
+                latest_cell_id="RGC-1",
+            ),
+            CoverageFindingInput(
+                finding_id="RGF-0003",
+                file_path="src/app.py",
+                rule_id="security",
+                state="dismissed",
+                content="false alarm",
+                latest_cell_id="RGC-1",
+            ),
+        ),
+    )
+    entry = projection.queue[0]
+    view = dashboard_state(
+        RunSnapshot(
+            session_id="RGS-test",
+            coverage={"reviewed": 1},
+            findings={"open": 1, "confirmed": 1, "dismissed": 1},
+            next_ready_prompt="review",
+            step=1,
+            agent_status="idle",
+            command_argv=(),
+            elapsed_seconds=1,
+            coverage_projection=projection,
+        ),
+        (),
+        active_view="cells",
+    )
+
+    assert entry.finding_count == 3
+    assert entry.actionable_finding_count == 1
+    assert entry.resolved_finding_count == 2
+    assert entry.priority_label == "P0"
+    assert entry.why.startswith("1 actionable finding(s)")
+    assert "findings 2/3 resolved" in cells_text(view, filters=CoverageCellFilter())
+
+
 def test_task_title_mapping_uses_resolve_findings() -> None:
     task = format_task_title_from_action("resolve_findings", {}, {"open": 1})
     assert task.title == "RESOLVE FINDINGS"
@@ -247,6 +315,7 @@ def _finalized_snapshot(*, with_details: bool = True) -> RunSnapshot:
                     priority_score=100,
                     finding_count=1,
                     actionable_finding_count=0,
+                    resolved_finding_count=1,
                     stale_reason=None,
                     why="reviewed",
                     changed_since_review=False,
@@ -372,6 +441,7 @@ def test_finalized_sections_hide_operational_panels_and_running_keeps_them() -> 
                 priority_score=100,
                 finding_count=0,
                 actionable_finding_count=0,
+                resolved_finding_count=0,
                 stale_reason=None,
                 why="pending",
                 changed_since_review=False,

@@ -1965,7 +1965,7 @@ def _entry_is_actionable(entry: QueueEntry) -> bool:
 
 
 def _format_cell_entry(entry: QueueEntry) -> str:
-    finding = f" findings {entry.actionable_finding_count}/{entry.finding_count}"
+    finding = f" findings {entry.resolved_finding_count}/{entry.finding_count} resolved"
     return (
         f"{entry.priority_label:<2} {entry.state:<8} {entry.rule_id:<18} "
         f"{_summarize_text(entry.file_path, limit=48)}{finding} · {entry.why}"
