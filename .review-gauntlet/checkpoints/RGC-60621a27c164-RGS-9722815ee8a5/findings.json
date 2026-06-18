@@ -1,0 +1,69 @@
+{
+  "checkpoint_id": "RGC-60621a27c164-RGS-9722815ee8a5",
+  "findings": [
+    {
+      "checkpoint_id": "RGC-60621a27c164-RGS-9722815ee8a5",
+      "content": "_cmd_mark only maps 2 of 7 valid mark states. The argparse choices at lines 286-296 accept confirmed, fixed_pending_verification, fixed_verified, false_positive, accepted_risk, waived, dismissed, but the local mapping dict at line 2283 only contains confirmed and dismissed. Calling `review-gauntlet mark <id> waived` (or any of the other 5 states) raises an unhandled KeyError at line 2288 instead of running correctly. The complete mapping already exists in _FINDING_MARK_TO_STATE (line 110) but is not used here.",
+      "finding_id": "RGF-1014",
+      "fingerprint": "67620c3b4a503e1c8c6592711f5741ad46bb428c4e9242a5ef8c47d0784e16af",
+      "latest_occurrence": {
+        "cell_id": "RGC-98d51e4d6441e1d7",
+        "end_line": 2289,
+        "finding_id": "RGF-1014",
+        "imprecise": 0,
+        "occurrence_id": 1014,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 298,
+        "start_line": 2281
+      },
+      "metadata": "{\"fingerprint\":\"67620c3b4a503e1c8c6592711f5741ad46bb428c4e9242a5ef8c47d0784e16af\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"cli-contract\",\"content\":\"_cmd_mark only maps 2 of 7 valid mark states. The argparse choices at lines 286-296 accept confirmed, fixed_pending_verification, fixed_verified, false_positive, accepted_risk, waived, dismissed, but the local mapping dict at line 2283 only contains confirmed and dismissed. Calling `review-gauntlet mark <id> waived` (or any of the other 5 states) raises an unhandled KeyError at line 2288 instead of running correctly. The complete mapping already exists in _FINDING_MARK_TO_STATE (line 110) but is not used here.\",\"suggestion_code\":\"\",\"existing_code\":\"\",\"start_line\":2281,\"end_line\":2289,\"thinking\":null,\"imprecise\":false,\"dismiss_reason\":null}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "cli-contract",
+      "session_id": "RGS-9722815ee8a5",
+      "state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-60621a27c164-RGS-9722815ee8a5",
+      "content": "_cmd_mark accesses mapping[args.state] at line 2288 without first validating that args.state is a key in mapping. The argparse layer accepts 7 states but mapping only has 2 keys, so 5 valid CLI inputs bypass validation and crash with KeyError. The fix is to use _FINDING_MARK_TO_STATE (line 110) which has all states, or guard with an explicit membership check before the dict lookup.",
+      "finding_id": "RGF-1015",
+      "fingerprint": "7d26ab4bc5e825830d9d18cedff989f4bf9ccfc2276d6875f6975f7a336adb52",
+      "latest_occurrence": {
+        "cell_id": "RGC-6cefdd41be393570",
+        "end_line": 2289,
+        "finding_id": "RGF-1015",
+        "imprecise": 0,
+        "occurrence_id": 1015,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 298,
+        "start_line": 2283
+      },
+      "metadata": "{\"fingerprint\":\"7d26ab4bc5e825830d9d18cedff989f4bf9ccfc2276d6875f6975f7a336adb52\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"data-validation\",\"content\":\"_cmd_mark accesses mapping[args.state] at line 2288 without first validating that args.state is a key in mapping. The argparse layer accepts 7 states but mapping only has 2 keys, so 5 valid CLI inputs bypass validation and crash with KeyError. The fix is to use _FINDING_MARK_TO_STATE (line 110) which has all states, or guard with an explicit membership check before the dict lookup.\",\"suggestion_code\":\"\",\"existing_code\":\"\",\"start_line\":2283,\"end_line\":2289,\"thinking\":null,\"imprecise\":false,\"dismiss_reason\":null}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-9722815ee8a5",
+      "state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-60621a27c164-RGS-9722815ee8a5",
+      "content": "The _cmd_mark implementation (lines 2281-2289) has no test coverage for mark states other than confirmed and dismissed. The KeyError bug for waived, fixed_pending_verification, fixed_verified, false_positive, and accepted_risk went undetected because no test exercises review-gauntlet mark with these states. Each of the 7 accepted states should have a regression test to verify _cmd_mark correctly dispatches them.",
+      "finding_id": "RGF-1016",
+      "fingerprint": "6afb7a99d4b21ae69675bdca72efbc8f2dfb3a41648201272f363c655f8d9484",
+      "latest_occurrence": {
+        "cell_id": "RGC-7d47131d23a5f0ce",
+        "end_line": 2289,
+        "finding_id": "RGF-1016",
+        "imprecise": 0,
+        "occurrence_id": 1016,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 298,
+        "start_line": 2281
+      },
+      "metadata": "{\"fingerprint\":\"6afb7a99d4b21ae69675bdca72efbc8f2dfb3a41648201272f363c655f8d9484\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"test-evidence\",\"content\":\"The _cmd_mark implementation (lines 2281-2289) has no test coverage for mark states other than confirmed and dismissed. The KeyError bug for waived, fixed_pending_verification, fixed_verified, false_positive, and accepted_risk went undetected because no test exercises review-gauntlet mark with these states. Each of the 7 accepted states should have a regression test to verify _cmd_mark correctly dispatches them.\",\"suggestion_code\":\"\",\"existing_code\":\"\",\"start_line\":2281,\"end_line\":2289,\"thinking\":null,\"imprecise\":false,\"dismiss_reason\":null}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-9722815ee8a5",
+      "state": "confirmed"
+    }
+  ],
+  "schema_version": 1
+}

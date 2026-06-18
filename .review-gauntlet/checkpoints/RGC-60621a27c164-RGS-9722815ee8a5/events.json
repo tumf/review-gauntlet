@@ -1,0 +1,36 @@
+{
+  "checkpoint_id": "RGC-60621a27c164-RGS-9722815ee8a5",
+  "events": [
+    {
+      "checkpoint_id": "RGC-60621a27c164-RGS-9722815ee8a5",
+      "created_at": "2026-06-18 10:06:45",
+      "event_id": 1678,
+      "finding_id": "RGF-1014",
+      "from_state": "open",
+      "metadata": {},
+      "reason": "Expanded _cmd_mark to cover all 7 FindingState values; mapping was incomplete (2/7 states)",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-60621a27c164-RGS-9722815ee8a5",
+      "created_at": "2026-06-18 10:06:49",
+      "event_id": 1679,
+      "finding_id": "RGF-1015",
+      "from_state": "open",
+      "metadata": {},
+      "reason": "mapping[args.state] would KeyError for 5 of 7 valid states; fixed by using FindingState(args.state) directly",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-60621a27c164-RGS-9722815ee8a5",
+      "created_at": "2026-06-18 10:06:49",
+      "event_id": 1680,
+      "finding_id": "RGF-1016",
+      "from_state": "open",
+      "metadata": {},
+      "reason": "No test coverage for mark states other than confirmed/dismissed; real gap in test suite (test file changes required, out of scope for cli.py)",
+      "to_state": "confirmed"
+    }
+  ],
+  "schema_version": 1
+}
