@@ -320,11 +320,20 @@ class CommandReviewAdapter:
                 failure_file,
                 {"argv": argv, "returncode": completed.returncode},
             )
-        verdict_text = (
-            completed.stdout
-            if self._config.output.mode == OutputMode.STDOUT_JSON
-            else self._read_output_file(output_path, failure_file)
-        )
+        if self._config.output.mode == OutputMode.STDOUT_JSON:
+            stdout_size = len(completed.stdout.encode("utf-8"))
+            if stdout_size > VERDICT_OUTPUT_SIZE_LIMIT_BYTES:
+                self._fail(
+                    f"stdout verdict exceeds {VERDICT_OUTPUT_SIZE_LIMIT_BYTES} bytes",
+                    failure_file,
+                    {
+                        "output_size_bytes": stdout_size,
+                        "size_limit_bytes": VERDICT_OUTPUT_SIZE_LIMIT_BYTES,
+                    },
+                )
+            verdict_text = completed.stdout
+        else:
+            verdict_text = self._read_output_file(output_path, failure_file)
         raw_verdict_file = cell_dir / "verdict.raw.json"
         raw_verdict_file.write_text(verdict_text, encoding="utf-8")
         try:
@@ -451,7 +460,9 @@ class CommandReviewAdapter:
         start = time.monotonic()
         timeout_exc: subprocess.TimeoutExpired | _QuietTimeoutExpired | None = None
         while any(t.is_alive() for t in threads):
-            threads[0].join(timeout=0.05)
+            alive = next((t for t in threads if t.is_alive()), None)
+            if alive:
+                alive.join(timeout=0.05)
             now = time.monotonic()
             if now - start >= self._config.timeout_seconds:
                 timeout_exc = subprocess.TimeoutExpired(process.args, self._config.timeout_seconds)
@@ -492,9 +503,29 @@ class CommandReviewAdapter:
             raise ReviewAdapterError(
                 f"unsafe review cell path outside repository: {cell.file_path}"
             ) from exc
-        if not file_path.is_file():
-            raise ReviewAdapterError(f"review cell path is not a file: {cell.file_path}")
-        content = file_path.read_bytes()
+        if self._review_commit is not None:
+            try:
+                result = subprocess.run(
+                    ["git", "show", f"{self._review_commit}:{cell.file_path}"],
+                    cwd=self._root,
+                    capture_output=True,
+                    timeout=10,
+                    check=True,
+                )
+                content = result.stdout
+            except subprocess.TimeoutExpired as exc:
+                raise ReviewAdapterError(
+                    f"git show timed out reading {cell.file_path} at commit {self._review_commit}"
+                ) from exc
+            except subprocess.CalledProcessError as exc:
+                raise ReviewAdapterError(
+                    f"cannot read review cell path at commit {self._review_commit}: "
+                    f"{cell.file_path}"
+                ) from exc
+        else:
+            if not file_path.is_file():
+                raise ReviewAdapterError(f"review cell path is not a file: {cell.file_path}")
+            content = file_path.read_bytes()
         return FileMetadata(
             file_size_bytes=len(content),
             line_count=content.count(b"\n") + (0 if content.endswith(b"\n") or not content else 1),
@@ -572,14 +603,13 @@ class CommandReviewAdapter:
                 {"output_path": str(output_path)},
             )
         try:
-            content = output_path.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError) as exc:
+            output_size = output_path.stat().st_size
+        except OSError as exc:
             self._fail(
-                f"cannot read verdict output file: {exc}",
+                f"cannot stat verdict output file: {exc}",
                 failure_file,
                 {"output_path": str(output_path), "error": str(exc)},
             )
-        output_size = len(content.encode("utf-8"))
         if output_size > VERDICT_OUTPUT_SIZE_LIMIT_BYTES:
             self._fail(
                 "verdict output file exceeds "
@@ -590,6 +620,14 @@ class CommandReviewAdapter:
                     "output_size_bytes": output_size,
                     "size_limit_bytes": VERDICT_OUTPUT_SIZE_LIMIT_BYTES,
                 },
+            )
+        try:
+            content = output_path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            self._fail(
+                f"cannot read verdict output file: {exc}",
+                failure_file,
+                {"output_path": str(output_path), "error": str(exc)},
             )
         return content
 
