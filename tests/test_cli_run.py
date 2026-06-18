@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from review_gauntlet.cli import (  # pyright: ignore[reportPrivateUsage]
-    _continuation_prompt_sections,
+from review_gauntlet.cli import (
+    _continuation_prompt_sections,  # pyright: ignore[reportPrivateUsage]
     main,
     run_session_command_step_for_testing,
 )
@@ -109,6 +109,14 @@ def _write_turn_verdict(path: Path, payload: dict[str, object]) -> None:
     path.write_text(json.dumps(payload), encoding="utf-8")
 
 
+def _missing_turn_verdict_path(root: Path) -> Path:
+    return root / ".review-gauntlet" / "turns" / "RGS-test" / "open__aaaaaaaaaaaa.json"
+
+
+def _unsafe_turn_verdict_path(root: Path) -> Path:
+    return root / "bad.json"
+
+
 def test_validate_turn_verdict_cli_accepts_valid_json(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -150,13 +158,8 @@ def test_validate_turn_verdict_cli_rejects_fixed_state(
 @pytest.mark.parametrize(
     "path_builder, error_fragment",
     [
-        (
-            lambda root: (
-                root / ".review-gauntlet" / "turns" / "RGS-test" / "open__aaaaaaaaaaaa.json"
-            ),
-            "missing",
-        ),
-        (lambda root: root / "bad.json", "under .review-gauntlet/turns"),
+        (_missing_turn_verdict_path, "missing"),
+        (_unsafe_turn_verdict_path, "under .review-gauntlet/turns"),
     ],
 )
 def test_validate_turn_verdict_cli_reports_actionable_file_and_path_errors(

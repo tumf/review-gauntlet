@@ -18,3 +18,6 @@ Repository implementation verification SHALL include `make check` after code cha
 ## Future Work
 
 Consider whether a future compatibility layer should offer more actionable suggestions for common invalid aliases such as `"fixed"` without accepting them silently.
+
+## Acceptance #1 Failure Follow-up
+- [x] make check fails: pyright reports 6 errors in tests/test_cli_run.py — reportPrivateUsage on line 8 (ignore comment is on line 7 but pyright checks line 8), and 4 reportUnknownLambdaType/reportUnknownArgumentType errors on lines 152-159 from untyped lambdas in @pytest.mark.parametrize. Fixed by moving the pyright ignore to the private symbol import, replacing untyped parameterized lambdas with typed helper functions, and verifying with `uv run pyright tests/test_cli_run.py`, focused pytest, and `make check`. (verification: unit/typecheck/full-suite - run `uv run pyright tests/test_cli_run.py`, `uv run pytest tests/test_cli_run.py tests/test_continuation.py tests/test_finding_transitions.py tests/test_review_adapter.py`, and `make check`.)
