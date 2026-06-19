@@ -497,6 +497,49 @@ def test_dashboard_state_uses_dynamic_gate_count() -> None:
     assert view.gate_label == "gate 4/4"
 
 
+def _queue_entry(
+    cell_id: str,
+    file_path: str,
+    rule_id: str,
+    *,
+    changed_since_review: bool,
+) -> QueueEntry:
+    return QueueEntry(
+        cell_id=cell_id,
+        file_path=file_path,
+        rule_id=rule_id,
+        slice_id="python",
+        state="reviewed",
+        priority_label="P1" if changed_since_review else "P3",
+        priority_score=100 if changed_since_review else 10,
+        finding_count=1,
+        actionable_finding_count=0,
+        resolved_finding_count=1,
+        stale_reason=None,
+        why="changed file" if changed_since_review else "reviewed",
+        changed_since_review=changed_since_review,
+    )
+
+
+def _finding(
+    finding_id: str,
+    file_path: str,
+    rule_id: str,
+    state: str,
+    *,
+    actionable: bool = False,
+) -> FindingSummaryEntry:
+    return FindingSummaryEntry(
+        finding_id=finding_id,
+        file_path=file_path,
+        rule_id=rule_id,
+        state=state,
+        content=state,
+        latest_cell_id=f"RGC-{finding_id.removeprefix('RGF-')}",
+        actionable=actionable,
+    )
+
+
 def _finalized_snapshot(*, with_details: bool = True) -> RunSnapshot:
     projection = CoverageProjection(queue=(), rules=(), files=(), findings=())
     findings: dict[str, object] = {}
@@ -504,25 +547,24 @@ def _finalized_snapshot(*, with_details: bool = True) -> RunSnapshot:
     if with_details:
         projection = CoverageProjection(
             queue=(
-                QueueEntry(
-                    cell_id="RGC-1",
-                    file_path="src/app.py",
-                    rule_id="security",
-                    slice_id="python",
-                    state="reviewed",
-                    priority_label="P1",
-                    priority_score=100,
-                    finding_count=1,
-                    actionable_finding_count=0,
-                    resolved_finding_count=1,
-                    stale_reason=None,
-                    why="reviewed",
-                    changed_since_review=False,
-                ),
+                _queue_entry("RGC-1", "src/app.py", "security", changed_since_review=True),
+                _queue_entry("RGC-2", "src/app.py", "correctness", changed_since_review=True),
+                _queue_entry("RGC-3", "src/unchanged.py", "security", changed_since_review=False),
             ),
             rules=(
                 RuleCoverageSummary(
                     rule_id="security",
+                    total=2,
+                    reviewed=2,
+                    pending=0,
+                    stale=0,
+                    finding_count=2,
+                    actionable_findings=0,
+                    resolved_findings=2,
+                    priority_label="P1",
+                ),
+                RuleCoverageSummary(
+                    rule_id="correctness",
                     total=1,
                     reviewed=1,
                     pending=0,
@@ -536,6 +578,18 @@ def _finalized_snapshot(*, with_details: bool = True) -> RunSnapshot:
             files=(
                 FileCoverageSummary(
                     file_path="src/app.py",
+                    total=2,
+                    reviewed=2,
+                    pending=0,
+                    stale=0,
+                    finding_count=2,
+                    actionable_findings=0,
+                    resolved_findings=2,
+                    highest_priority_label="P1",
+                    highest_priority_score=100,
+                ),
+                FileCoverageSummary(
+                    file_path="src/unchanged.py",
                     total=1,
                     reviewed=1,
                     pending=0,
@@ -543,23 +597,34 @@ def _finalized_snapshot(*, with_details: bool = True) -> RunSnapshot:
                     finding_count=1,
                     actionable_findings=0,
                     resolved_findings=1,
-                    highest_priority_label="P1",
-                    highest_priority_score=100,
+                    highest_priority_label="P3",
+                    highest_priority_score=10,
                 ),
             ),
             findings=(
-                FindingSummaryEntry(
-                    finding_id="RGF-0001",
-                    file_path="src/app.py",
-                    rule_id="security",
-                    state="dismissed",
-                    content="not a bug",
-                    latest_cell_id="RGC-1",
-                    actionable=False,
-                ),
+                _finding("RGF-0001", "src/app.py", "security", "fixed_pending_verification"),
+                _finding("RGF-0002", "src/app.py", "correctness", "fixed_verified"),
+                _finding("RGF-0003", "src/app.py", "security", "confirmed"),
+                _finding("RGF-0004", "src/app.py", "security", "dismissed"),
+                _finding("RGF-0005", "src/app.py", "security", "false_positive"),
+                _finding("RGF-0006", "src/app.py", "security", "accepted_risk"),
+                _finding("RGF-0007", "src/app.py", "security", "waived"),
+                _finding("RGF-0008", "src/app.py", "security", "open", actionable=True),
+                _finding("RGF-0009", "src/app.py", "security", "untriaged"),
+                _finding("RGF-0010", "src/unchanged.py", "security", "fixed_verified"),
             ),
         )
-        findings = {"dismissed": 1}
+        findings = {
+            "fixed_pending_verification": 1,
+            "fixed_verified": 2,
+            "confirmed": 1,
+            "dismissed": 1,
+            "false_positive": 1,
+            "accepted_risk": 1,
+            "waived": 1,
+            "open": 1,
+            "untriaged": 1,
+        }
         checkpoint_commit = {
             "checkpoint_commit_attempted": True,
             "checkpoint_committed": True,
@@ -583,26 +648,28 @@ def _finalized_snapshot(*, with_details: bool = True) -> RunSnapshot:
     )
 
 
-def test_finalized_summary_derives_details_and_explicit_empty_wording() -> None:
+def test_finalized_summary_derives_changed_files_and_fixed_findings() -> None:
     detailed = dashboard_state(_finalized_snapshot(), ())
 
     assert detailed.finalized_summary is not None
     assert detailed.finalized_summary.coverage_percent == 75
     assert detailed.finalized_summary.terminal_cells == 3
     assert detailed.finalized_summary.total_cells == 4
-    assert detailed.finalized_summary.resolved_finding_count == 1
-    assert detailed.finalized_summary.resolved_files == ("src/app.py",)
-    assert detailed.finalized_summary.rule_ids == ("security",)
-    assert detailed.finalized_summary.finding_ids == ("RGF-0001",)
+    assert detailed.finalized_summary.fixed_finding_count == 2
+    assert detailed.finalized_summary.changed_files == ("src/app.py",)
+    assert detailed.finalized_summary.rule_ids == ("correctness", "security")
+    assert detailed.finalized_summary.finding_ids == ("RGF-0001", "RGF-0002")
     assert detailed.finalized_summary.elapsed == "01:15"
     assert detailed.finalized_summary.step_count == 2
     assert detailed.finalized_summary.checkpoint == "abc123456789"
 
+
+def test_finalized_summary_uses_explicit_empty_changed_file_wording() -> None:
     empty = dashboard_state(_finalized_snapshot(with_details=False), ())
     text = finalized_summary_text(empty)
 
-    assert "Resolved findings 0" in text
-    assert "Resolved files  none" in text
+    assert "Fixed findings  0" in text
+    assert "Changed files   none" in text
     assert "Rules           none" in text
     assert "Finding IDs     none" in text
     assert "Checkpoint      unavailable (no checkpoint metadata)" in text
@@ -618,9 +685,19 @@ def test_finalized_render_replaces_operational_sections_with_summary() -> None:
     assert "elapsed 01:15" in rendered
     assert "steps 2" in rendered
     assert "abc123456789" in rendered
-    assert "Resolved files  src/app.py" in rendered
-    assert "Rules           security" in rendered
-    assert "Finding IDs     RGF-0001" in rendered
+    assert "Fixed findings  2" in rendered
+    assert "Changed files   src/app.py" in rendered
+    assert "Rules           correctness, security" in rendered
+    assert "Finding IDs     RGF-0001, RGF-0002" in rendered
+    assert "src/unchanged.py" not in rendered
+    assert "RGF-0003" not in rendered
+    assert "RGF-0004" not in rendered
+    assert "RGF-0005" not in rendered
+    assert "RGF-0006" not in rendered
+    assert "RGF-0007" not in rendered
+    assert "RGF-0008" not in rendered
+    assert "RGF-0009" not in rendered
+    assert "RGF-0010" not in rendered
 
 
 def test_finalized_sections_hide_operational_panels_and_running_keeps_them() -> None:
@@ -741,6 +818,24 @@ def test_finalized_header_keeps_nonzero_progress_in_compact_render() -> None:
     assert "File hotlist" not in compact
     assert "Findings\n" not in compact
     assert "Activity" not in compact
+
+
+def test_compact_finalized_output_uses_filtered_summary_data() -> None:
+    compact = compact_dashboard_text(_finalized_snapshot())
+
+    assert "Changed files   src/app.py" in compact
+    assert "Fixed findings  2" in compact
+    assert "Rules           correctness, security" in compact
+    assert "Finding IDs     RGF-0001, RGF-0002" in compact
+    assert "src/unchanged.py" not in compact
+    assert "RGF-0003" not in compact
+    assert "RGF-0004" not in compact
+    assert "RGF-0005" not in compact
+    assert "RGF-0006" not in compact
+    assert "RGF-0007" not in compact
+    assert "RGF-0008" not in compact
+    assert "RGF-0009" not in compact
+    assert "RGF-0010" not in compact
 
 
 def test_sanitize_redacts_bearer_token() -> None:

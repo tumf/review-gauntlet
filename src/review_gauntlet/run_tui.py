@@ -477,8 +477,8 @@ class FinalizedSummary:
     coverage_percent: int
     terminal_cells: int
     total_cells: int
-    resolved_finding_count: int
-    resolved_files: tuple[str, ...]
+    fixed_finding_count: int
+    changed_files: tuple[str, ...]
     rule_ids: tuple[str, ...]
     finding_ids: tuple[str, ...]
     elapsed: str
@@ -762,32 +762,25 @@ def derive_finalized_summary(
     if snapshot.agent_status != "finalized" and snapshot.session_state != "finalized":
         return None
     projection = snapshot.coverage_projection
-    resolved_files = tuple(
-        file.file_path
-        for file in projection.files
-        if file.total > 0 and file.reviewed >= file.total
+    changed_files = tuple(
+        sorted({entry.file_path for entry in projection.queue if entry.changed_since_review})
     )
-    rule_ids = tuple(rule.rule_id for rule in projection.rules if rule.total > 0)
-    resolved_findings = tuple(
+    changed_file_set = frozenset(changed_files)
+    fixed_findings = tuple(
         finding
         for finding in projection.findings
-        if finding.state in {"confirmed", "dismissed", "fixed", "waived", "false_positive"}
-        or not finding.actionable
+        if finding.file_path in changed_file_set
+        and finding.state in {"fixed_pending_verification", "fixed_verified"}
     )
-    resolved_finding_count = sum(
-        _count_value(snapshot.findings.get(state, 0))
-        for state in ("confirmed", "dismissed", "fixed", "waived", "false_positive")
-    )
-    if resolved_finding_count == 0:
-        resolved_finding_count = len(resolved_findings)
+    rule_ids = tuple(sorted({finding.rule_id for finding in fixed_findings}))
     return FinalizedSummary(
         coverage_percent=coverage.percent,
         terminal_cells=coverage.terminal,
         total_cells=coverage.total,
-        resolved_finding_count=resolved_finding_count,
-        resolved_files=resolved_files,
+        fixed_finding_count=len(fixed_findings),
+        changed_files=changed_files,
         rule_ids=rule_ids,
-        finding_ids=tuple(finding.finding_id for finding in resolved_findings),
+        finding_ids=tuple(finding.finding_id for finding in fixed_findings),
         elapsed=elapsed,
         step_count=snapshot.run_count or snapshot.step,
         checkpoint=_checkpoint_summary(snapshot.checkpoint_commit),
@@ -1240,7 +1233,7 @@ def finalized_summary_tui_lines(view: RunViewState) -> tuple[TuiLine, ...]:
     summary = view.finalized_summary
     if summary is None:
         return ()
-    resolved_files = _none_or_join(summary.resolved_files)
+    changed_files = _none_or_join(summary.changed_files)
     rule_ids = _none_or_join(summary.rule_ids)
     finding_ids = _none_or_join(summary.finding_ids)
     return (
@@ -1277,11 +1270,11 @@ def finalized_summary_tui_lines(view: RunViewState) -> tuple[TuiLine, ...]:
         _label_value_line("finalized.checkpoint", "Checkpoint      ", summary.checkpoint),
         _label_value_line(
             "finalized.finding_count",
-            "Resolved findings ",
-            str(summary.resolved_finding_count),
-            compare=summary.resolved_finding_count,
+            "Fixed findings  ",
+            str(summary.fixed_finding_count),
+            compare=summary.fixed_finding_count,
         ),
-        _label_value_line("finalized.files", "Resolved files  ", resolved_files),
+        _label_value_line("finalized.files", "Changed files   ", changed_files),
         _label_value_line("finalized.rules", "Rules           ", rule_ids),
         _label_value_line("finalized.findings", "Finding IDs     ", finding_ids),
     )
