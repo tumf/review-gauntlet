@@ -18,6 +18,19 @@ from review_gauntlet.targets import TargetSpec, changed_files_for_target, file_d
 
 ACTIONABLE_FINDING_STATES = frozenset({"open"})
 TERMINAL_FINDING_STATE_VALUES = frozenset(state.value for state in TERMINAL_FINDING_STATES)
+_VALID_FINDING_STATES = frozenset(
+    {
+        "untriaged",
+        "open",
+        "confirmed",
+        "fixed_pending_verification",
+        "fixed_verified",
+        "false_positive",
+        "accepted_risk",
+        "waived",
+        "dismissed",
+    }
+)
 HIGH_RISK_RULE_WEIGHTS: dict[str, int] = {
     "secret-handling": 120,
     "path-safety": 110,
@@ -133,6 +146,8 @@ def build_session_coverage_projection(
     store: SessionStore, session_id: str, root: Path
 ) -> CoverageProjection:
     metadata = store.session_metadata(session_id)
+    if not metadata or "target" not in metadata:
+        raise ValueError(f"Session {session_id!r} metadata is missing the required 'target' key")
     target = TargetSpec.model_validate(metadata["target"])
     current_digests = file_digests(root)
     current_cells = {
@@ -174,7 +189,7 @@ def build_coverage_projection(
                 _queue_entry_for_cell(
                     cell,
                     findings_by_cell.get(cell.cell_id, ()),
-                    changed_since_review=cell.file_path in changed_files or cell.state == "stale",
+                    changed_since_review=cell.file_path in changed_files,
                 )
                 for cell in cells
             ),
@@ -258,6 +273,22 @@ def _review_inventory(inventory: Inventory) -> Inventory:
     )
 
 
+def _validated_finding_input(row: object) -> CoverageFindingInput:
+    state_val = str(row["state"])  # type: ignore[index]
+    if state_val not in _VALID_FINDING_STATES:
+        raise ValueError(
+            f"Unexpected finding state {state_val!r} for finding_id={row['finding_id']!r}"  # type: ignore[index]
+        )
+    return CoverageFindingInput(
+        finding_id=str(row["finding_id"]),  # type: ignore[index]
+        file_path=str(row["path"]),  # type: ignore[index]
+        rule_id=str(row["rule_id"]),  # type: ignore[index]
+        state=state_val,
+        content=str(row["content"]),  # type: ignore[index]
+        latest_cell_id=str(row["latest_cell_id"]) if row["latest_cell_id"] else None,  # type: ignore[index]
+    )
+
+
 def _session_findings(store: SessionStore, session_id: str) -> tuple[CoverageFindingInput, ...]:
     with store.connect() as conn:
         rows = conn.execute(
@@ -287,17 +318,7 @@ def _session_findings(store: SessionStore, session_id: str) -> tuple[CoverageFin
         ).fetchall()
     return tuple(
         sorted(
-            (
-                CoverageFindingInput(
-                    finding_id=str(row["finding_id"]),
-                    file_path=str(row["path"]),
-                    rule_id=str(row["rule_id"]),
-                    state=str(row["state"]),
-                    content=str(row["content"]),
-                    latest_cell_id=str(row["latest_cell_id"]) if row["latest_cell_id"] else None,
-                )
-                for row in rows
-            ),
+            (_validated_finding_input(row) for row in rows),
             key=lambda finding: (finding.file_path, finding.finding_id),
         )
     )
@@ -316,8 +337,8 @@ def _findings_by_cell(
             buckets[str(finding.latest_cell_id)].append(finding)
             continue
         candidate_cells = cells_by_file_rule.get((finding.file_path, finding.rule_id), [])
-        for cell in candidate_cells:
-            buckets[cell.cell_id].append(finding)
+        if candidate_cells:
+            buckets[candidate_cells[0].cell_id].append(finding)
     return {cell_id: tuple(bucket) for cell_id, bucket in buckets.items()}
 
 
@@ -432,7 +453,7 @@ def _rule_summaries(entries: tuple[QueueEntry, ...]) -> tuple[RuleCoverageSummar
                 total=len(rule_entries),
                 reviewed=sum(1 for entry in rule_entries if entry.state in TERMINAL_CELL_STATES),
                 pending=sum(1 for entry in rule_entries if entry.state == "pending"),
-                stale=0,  # stale is intentionally ignored
+                stale=sum(1 for entry in rule_entries if entry.state == "stale"),
                 finding_count=sum(entry.finding_count for entry in rule_entries),
                 actionable_findings=sum(entry.actionable_finding_count for entry in rule_entries),
                 resolved_findings=sum(entry.resolved_finding_count for entry in rule_entries),
@@ -467,7 +488,7 @@ def _file_summaries(entries: tuple[QueueEntry, ...]) -> tuple[FileCoverageSummar
                 total=len(file_entries),
                 reviewed=sum(1 for entry in file_entries if entry.state in TERMINAL_CELL_STATES),
                 pending=sum(1 for entry in file_entries if entry.state == "pending"),
-                stale=0,  # stale is intentionally ignored
+                stale=sum(1 for entry in file_entries if entry.state == "stale"),
                 finding_count=sum(entry.finding_count for entry in file_entries),
                 actionable_findings=sum(entry.actionable_finding_count for entry in file_entries),
                 resolved_findings=sum(entry.resolved_finding_count for entry in file_entries),

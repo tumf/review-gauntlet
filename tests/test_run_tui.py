@@ -31,6 +31,7 @@ from review_gauntlet.run_tui import (
     header_agent_text,
     header_status_tui_lines,
     render_tui_lines,
+    sanitize_agent_output_line,
     tui_render_sections,
 )
 
@@ -724,3 +725,27 @@ def test_finalized_header_keeps_nonzero_progress_in_compact_render() -> None:
     assert "File hotlist" not in compact
     assert "Findings\n" not in compact
     assert "Activity" not in compact
+
+
+def test_sanitize_redacts_bearer_token() -> None:
+    result = sanitize_agent_output_line("Authorization: Bearer abc123XYZ")
+    assert "<redacted>" in result
+    assert "abc123XYZ" not in result
+
+
+def test_sanitize_redacts_env_var_form() -> None:
+    result = sanitize_agent_output_line("MY_API_KEY=s3cr3t running command")
+    assert "<redacted>" in result
+    assert "s3cr3t" not in result
+
+
+def test_sanitize_strips_ansi_before_redacting() -> None:
+    result = sanitize_agent_output_line("\x1b[32mBearer\x1b[0m tok123")
+    assert "<redacted>" in result
+    assert "tok123" not in result
+
+
+def test_sanitize_preserves_nonsecret_output() -> None:
+    result = sanitize_agent_output_line("reviewing src/app.py")
+    assert "reviewing" in result
+    assert "src/app.py" in result

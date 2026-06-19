@@ -643,8 +643,8 @@ def short_artifact_path(path: str) -> str:
 
 def format_event_time(timestamp: str) -> str:
     try:
-        return datetime.fromisoformat(timestamp.replace("Z", "+00:00")).strftime("%H:%M:%S")
-    except ValueError:
+        return datetime.fromisoformat(str(timestamp).replace("Z", "+00:00")).strftime("%H:%M:%S")
+    except (ValueError, AttributeError):
         return "--:--:--"
 
 
@@ -1031,6 +1031,7 @@ def header_status_text(view: RunViewState) -> str:
     parts = [f"Finalize {cov.percent}% {bar} {cov.terminal}/{cov.total}"]
     if cov.pending:
         parts.append(f"pend {cov.pending}")
+    # cov.stale is always 0 (stale cells count as completed in calculate_progress_metrics)
     if cov.stale:
         parts.append(f"stale {cov.stale}")
     coverage = "   ".join(parts)
@@ -1145,6 +1146,7 @@ def header_status_tui_lines(view: RunViewState) -> tuple[TuiLine, ...]:
     coverage_parts = [f"{cov.percent}% {bar} {cov.terminal}/{cov.total}"]
     if cov.pending:
         coverage_parts.append(f"pend {cov.pending}")
+    # cov.stale is always 0 (stale cells count as completed in calculate_progress_metrics)
     if cov.stale:
         coverage_parts.append(f"stale {cov.stale}")
     coverage_text = "   ".join(coverage_parts)
