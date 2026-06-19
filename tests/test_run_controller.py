@@ -1800,3 +1800,73 @@ def test_run_controller_bounds_repeated_no_progress_retries(tmp_path: Path) -> N
     final_failure = cast(dict[str, object], final_step["failure"])
     assert final_failure["reason"] == "no_progress"
     assert final_failure["target_ids"] == ["RGF-0001"]
+
+
+def test_run_controller_stale_only_verdict_halts_with_no_progress_context(
+    tmp_path: Path,
+) -> None:
+    store = _store(tmp_path)
+    prompt = _no_progress_prompt()
+    _insert_no_progress_finding(store)
+    with store.connect() as conn:
+        conn.execute(
+            """
+            update findings
+            set state = 'dismissed'
+            where session_id = 'RGS-test' and finding_id = 'RGF-0001'
+            """
+        )
+    ignored = [
+        {
+            "finding_id": "RGF-0001",
+            "current_state": "dismissed",
+            "requested_state": "dismissed",
+            "reason": "idempotent_terminal_noop",
+        }
+    ]
+
+    def command(
+        _config: CommandAdapterConfig, _root: Path, _state_dir: Path, _prompt: str
+    ) -> SessionCommandResult:
+        return SessionCommandResult(
+            argv=["fake-agent"],
+            cwd=None,
+            returncode=0,
+            stdout="ok",
+            stderr="",
+            stdout_artifact=".review-gauntlet/runs/1/agent-stdout.log",
+            verdict_metadata={
+                "path": ".review-gauntlet/turns/RGS-test/untriaged__aaaaaaaaaaaa.json",
+                "task_key": "untriaged__aaaaaaaaaaaa.json",
+                "verdict": "finish",
+                "valid_resolution_count": 0,
+                "ignored_resolution_count": 1,
+                "ignored_resolutions": ignored,
+            },
+        )
+
+    controller = RunController(
+        root=tmp_path,
+        store=store,
+        config_path=None,
+        max_steps=1,
+        ready_prompt=lambda _store, _root: ReadyTask(
+            prompt=prompt, next_required_action="triage_findings"
+        ),
+        status_snapshot=_status,
+        command_runner=command,
+    )
+
+    result = controller.run()
+
+    assert result["completed"] is False
+    assert result["reason"] == "no_progress"
+    steps = cast(list[object], result["steps"])
+    assert len(steps) == 1
+    failure = cast(dict[str, object], cast(dict[str, object], steps[0])["failure"])
+    assert failure["reason"] == "no_progress"
+    assert failure["target_ids"] == ["RGF-0001"]
+    assert failure["verdict_path"] == ".review-gauntlet/turns/RGS-test/untriaged__aaaaaaaaaaaa.json"
+    assert failure["ignored_resolution_count"] == 1
+    assert failure["ignored_resolutions"] == ignored
+    assert controller.events[-1].type == "failed"

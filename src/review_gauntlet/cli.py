@@ -199,6 +199,59 @@ class InterruptedReviewOutcome:
         }
 
 
+@dataclass(frozen=True)
+class IgnoredResolution:
+    finding_id: str
+    current_state: str
+    requested_state: str
+    reason: str = "idempotent_terminal_noop"
+
+    def to_output(self) -> dict[str, object]:
+        return {
+            "finding_id": self.finding_id,
+            "current_state": self.current_state,
+            "requested_state": self.requested_state,
+            "reason": self.reason,
+        }
+
+
+@dataclass(frozen=True)
+class ResolutionTransitionReport:
+    active_session_id: str
+    verdict_session_id: str | None
+    valid_resolutions: tuple[FindingResolution, ...]
+    ignored_resolutions: tuple[IgnoredResolution, ...]
+
+    @property
+    def session_mismatch(self) -> bool:
+        return (
+            self.verdict_session_id is not None
+            and self.verdict_session_id != self.active_session_id
+        )
+
+    def to_output(self) -> dict[str, object]:
+        return {
+            "active_session_id": self.active_session_id,
+            "verdict_session_id": self.verdict_session_id,
+            "session_mismatch": self.session_mismatch,
+            "valid_resolution_count": len(self.valid_resolutions),
+            "ignored_resolution_count": len(self.ignored_resolutions),
+            "ignored_resolutions": [item.to_output() for item in self.ignored_resolutions],
+        }
+
+
+class ResolutionTransitionError(ValueError):
+    def __init__(self, message: str, diagnostics: dict[str, object]) -> None:
+        super().__init__(message)
+        self.diagnostics = diagnostics
+
+
+class UnknownResolutionIdsError(LookupError):
+    def __init__(self, message: str, diagnostics: dict[str, object]) -> None:
+        super().__init__(message)
+        self.diagnostics = diagnostics
+
+
 class ReviewInterrupted(RuntimeError):
     def __init__(self, outcome: InterruptedReviewOutcome) -> None:
         super().__init__("review interrupted")
@@ -778,23 +831,34 @@ def _cmd_validate_verdict(args: argparse.Namespace) -> None:
 
 def _cmd_validate_turn_verdict(args: argparse.Namespace) -> None:
     path = Path(args.path)
+    transition_report: ResolutionTransitionReport | None = None
     try:
         verdict = validate_continuation_verdict(path)
         root = _turn_verdict_validation_root(path, args.root)
         if root is not None:
-            _validate_active_session_resolution_transitions(SessionStore(root), verdict)
-    except (ContinuationVerdictError, LookupError, ValueError) as exc:
+            transition_report = _classify_active_session_resolution_transitions(
+                SessionStore(root), verdict, verdict_path=path
+            )
+    except ContinuationVerdictError as exc:
         _emit({"valid": False, "path": str(path), "error": str(exc)}, args.format)
         raise SystemExit(1) from exc
-    _emit(
-        {
-            "valid": True,
-            "path": str(path),
-            "verdict": verdict.verdict,
-            "resolution_count": len(verdict.resolutions),
-        },
-        args.format,
-    )
+    except (UnknownResolutionIdsError, ResolutionTransitionError) as exc:
+        _emit(
+            {"valid": False, "path": str(path), "error": str(exc), **exc.diagnostics}, args.format
+        )
+        raise SystemExit(1) from exc
+    except (LookupError, ValueError) as exc:
+        _emit({"valid": False, "path": str(path), "error": str(exc)}, args.format)
+        raise SystemExit(1) from exc
+    output: dict[str, object] = {
+        "valid": True,
+        "path": str(path),
+        "verdict": verdict.verdict,
+        "resolution_count": len(verdict.resolutions),
+    }
+    if transition_report is not None:
+        output.update(transition_report.to_output())
+    _emit(output, args.format)
 
 
 def _turn_verdict_validation_root(path: Path, explicit_root: Path | None) -> Path | None:
@@ -810,12 +874,13 @@ def _turn_verdict_validation_root(path: Path, explicit_root: Path | None) -> Pat
     return Path(*parts[:state_index])
 
 
-def _validate_active_session_resolution_transitions(
-    store: SessionStore, verdict: ContinuationVerdict
-) -> None:
+def _classify_active_session_resolution_transitions(
+    store: SessionStore, verdict: ContinuationVerdict, *, verdict_path: Path | None = None
+) -> ResolutionTransitionReport | None:
     if not store.active_path.exists() or not verdict.resolutions:
-        return
+        return None
     session_id = store.active_session_id()
+    verdict_session_id = _session_id_from_turn_verdict_path(verdict_path) if verdict_path else None
     requested_ids = tuple(resolution.finding_id for resolution in verdict.resolutions)
     with store.connect() as conn:
         rows = conn.execute(
@@ -829,29 +894,118 @@ def _validate_active_session_resolution_transitions(
     missing_ids = sorted(
         finding_id for finding_id in requested_ids if finding_id not in states_by_id
     )
+    context = _turn_verdict_session_context(
+        active_session_id=session_id,
+        verdict_session_id=verdict_session_id,
+        verdict_path=verdict_path,
+    )
     if missing_ids:
-        raise LookupError(
+        raise UnknownResolutionIdsError(
             "turn verdict references unknown findings in active session "
-            f"{session_id}: {', '.join(missing_ids)}"
+            f"{session_id}: {', '.join(missing_ids)}; {context}",
+            {
+                "active_session_id": session_id,
+                "verdict_session_id": verdict_session_id,
+                "session_mismatch": verdict_session_id is not None
+                and verdict_session_id != session_id,
+                "unknown_finding_ids": missing_ids,
+            },
         )
+    valid_resolutions: list[FindingResolution] = []
+    ignored_resolutions: list[IgnoredResolution] = []
     for resolution in verdict.resolutions:
         current = states_by_id[resolution.finding_id]
         desired = FindingState(resolution.state)
+        if current == desired and current in _terminal_finding_states():
+            ignored_resolutions.append(
+                IgnoredResolution(
+                    finding_id=resolution.finding_id,
+                    current_state=current.value,
+                    requested_state=desired.value,
+                )
+            )
+            continue
         try:
             assert_transition_allowed(current, desired)
         except ValueError as exc:
-            allowed = _allowed_transition_values(current)
-            hint = (
-                f"allowed target states for current state {current.value}: {', '.join(allowed)}"
-                if allowed
-                else f"current state {current.value} is terminal; no transitions are allowed"
-            )
-            raise ValueError(
-                "turn verdict contains invalid finding transition for active session "
-                f"{session_id}: finding_id={resolution.finding_id} "
-                f"current_state={current.value} requested_state={desired.value}; "
-                f"attempted transition {current.value} -> {desired.value}; {hint}"
+            raise ResolutionTransitionError(
+                _invalid_transition_message(
+                    session_id=session_id,
+                    finding_id=resolution.finding_id,
+                    current=current,
+                    desired=desired,
+                    context=context,
+                ),
+                {
+                    "active_session_id": session_id,
+                    "verdict_session_id": verdict_session_id,
+                    "session_mismatch": verdict_session_id is not None
+                    and verdict_session_id != session_id,
+                    "finding_id": resolution.finding_id,
+                    "current_state": current.value,
+                    "requested_state": desired.value,
+                    "allowed_target_states": list(_allowed_transition_values(current)),
+                    "terminal_current_state": current in _terminal_finding_states(),
+                },
             ) from exc
+        valid_resolutions.append(resolution)
+    return ResolutionTransitionReport(
+        active_session_id=session_id,
+        verdict_session_id=verdict_session_id,
+        valid_resolutions=tuple(valid_resolutions),
+        ignored_resolutions=tuple(ignored_resolutions),
+    )
+
+
+def _invalid_transition_message(
+    *,
+    session_id: str,
+    finding_id: str,
+    current: FindingState,
+    desired: FindingState,
+    context: str,
+) -> str:
+    allowed = _allowed_transition_values(current)
+    hint = (
+        f"allowed target states for current state {current.value}: {', '.join(allowed)}"
+        if allowed
+        else f"current state {current.value} is terminal; no transitions are allowed"
+    )
+    return (
+        "turn verdict contains invalid finding transition for active session "
+        f"{session_id}: finding_id={finding_id} "
+        f"current_state={current.value} requested_state={desired.value}; "
+        f"attempted transition {current.value} -> {desired.value}; {hint}; {context}"
+    )
+
+
+def _turn_verdict_session_context(
+    *, active_session_id: str, verdict_session_id: str | None, verdict_path: Path | None
+) -> str:
+    path_context = (
+        f"verdict_path={verdict_path}" if verdict_path is not None else "verdict_path=unknown"
+    )
+    if verdict_session_id is None:
+        return f"active_session_id={active_session_id}; verdict_session_id=unknown; {path_context}"
+    mismatch = "yes" if verdict_session_id != active_session_id else "no"
+    return (
+        f"active_session_id={active_session_id}; verdict_session_id={verdict_session_id}; "
+        f"session_mismatch={mismatch}; {path_context}"
+    )
+
+
+def _session_id_from_turn_verdict_path(path: Path | None) -> str | None:
+    if path is None:
+        return None
+    parts = path.parts
+    try:
+        state_index = parts.index(".review-gauntlet")
+    except ValueError:
+        return None
+    session_index = state_index + 2
+    if len(parts) <= session_index or parts[state_index + 1] != "turns":
+        return None
+    return parts[session_index]
 
 
 def _allowed_transition_values(state: FindingState) -> tuple[str, ...]:
@@ -1311,8 +1465,13 @@ def _verdict_from_command_result(result: SessionCommandResult) -> ContinuationVe
 def _apply_resolutions(
     store: SessionStore, resolutions: tuple[FindingResolution, ...]
 ) -> list[str]:
+    report = _classify_active_session_resolution_transitions(
+        store,
+        ContinuationVerdict(verdict="finish", summary="apply resolutions", resolutions=resolutions),
+    )
+    applicable = resolutions if report is None else report.valid_resolutions
     resolved: list[str] = []
-    for resolution in resolutions:
+    for resolution in applicable:
         metadata: dict[str, str] = {}
         if resolution.dismiss_reason:
             metadata["dismiss_reason"] = resolution.dismiss_reason
@@ -2289,7 +2448,7 @@ def _run_session_command_step(
                 break
             now = time.monotonic()
             if continuation_path is not None:
-                detected = _detect_continuation_verdict(continuation_path)
+                detected = _detect_continuation_verdict(continuation_path, root=root)
                 if detected is not None:
                     verdict_metadata = detected
                     if verdict_detected_at is None:
@@ -2361,7 +2520,17 @@ def _run_session_command_step(
                     "verdict_path": str(continuation_path),
                 }
             else:
-                verdict_metadata = continuation_metadata(continuation_path, verdict)
+                try:
+                    verdict_metadata = _continuation_metadata_for_active_session(
+                        continuation_path, verdict, root=root
+                    )
+                except (UnknownResolutionIdsError, ResolutionTransitionError) as exc:
+                    failure = {
+                        "reason": "invalid_step_verdict",
+                        "error": str(exc),
+                        "verdict_path": str(continuation_path),
+                        **exc.diagnostics,
+                    }
         elif session_still_active:
             failure = {
                 "reason": "missing_step_verdict",
@@ -2406,14 +2575,26 @@ def _continuation_path_from_prompt(prompt: str) -> Path | None:
     return None
 
 
-def _detect_continuation_verdict(path: Path) -> dict[str, object] | None:
+def _detect_continuation_verdict(path: Path, *, root: Path) -> dict[str, object] | None:
     if not path.exists():
         return None
     try:
         verdict = validate_continuation_verdict(path)
-    except ContinuationVerdictError:
+        return _continuation_metadata_for_active_session(path, verdict, root=root)
+    except (ContinuationVerdictError, UnknownResolutionIdsError, ResolutionTransitionError):
         return None
-    return continuation_metadata(path, verdict)
+
+
+def _continuation_metadata_for_active_session(
+    path: Path, verdict: ContinuationVerdict, *, root: Path
+) -> dict[str, object]:
+    metadata = continuation_metadata(path, verdict)
+    report = _classify_active_session_resolution_transitions(
+        SessionStore(root), verdict, verdict_path=path
+    )
+    if report is not None:
+        metadata.update(report.to_output())
+    return metadata
 
 
 def _persist_session_command_artifacts(

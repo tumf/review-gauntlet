@@ -498,6 +498,9 @@ class RunController:
                             "verdict_path": str(metadata.get("path") or ""),
                             "verdict": metadata.get("verdict"),
                             "artifact_context": artifact_context,
+                            "ignored_resolutions": metadata.get("ignored_resolutions", []),
+                            "ignored_resolution_count": metadata.get("ignored_resolution_count", 0),
+                            "valid_resolution_count": metadata.get("valid_resolution_count", 0),
                         },
                     )
                     lifecycle_status = _lifecycle_status_from_result(command_result)
@@ -709,6 +712,7 @@ def _prompt_with_no_progress_diagnostic(prompt: str, failure: Mapping[str, objec
     target_ids = _diagnostic_string_sequence(failure.get("target_ids"))
     verdict = str(failure.get("verdict") or "unknown")
     artifact_context = _diagnostic_artifact_context(failure.get("artifact_context"))
+    ignored_resolutions = _diagnostic_ignored_resolutions(failure.get("ignored_resolutions"))
     return "\n".join(
         [
             prompt,
@@ -723,6 +727,7 @@ def _prompt_with_no_progress_diagnostic(prompt: str, failure: Mapping[str, objec
             f"task_key: {task_key}",
             f"target_ids: {', '.join(target_ids) if target_ids else 'unknown'}",
             f"previous_verdict: {verdict}",
+            f"ignored_resolutions: {ignored_resolutions}",
             f"artifacts: {artifact_context}",
             "After the required state change is complete, write the verdict for the same ready",
             "task and include the validation evidence.",
@@ -745,6 +750,23 @@ def _diagnostic_artifact_context(value: object) -> str:
     typed_value = cast(Mapping[object, object], value)
     parts = [f"{key}={item}" for key, item in typed_value.items() if item is not None]
     return "; ".join(parts) if parts else "none"
+
+
+def _diagnostic_ignored_resolutions(value: object) -> str:
+    if not isinstance(value, list | tuple):
+        return "none"
+    parts: list[str] = []
+    for item in cast(list[object] | tuple[object, ...], value):
+        if not isinstance(item, Mapping):
+            continue
+        typed_item = cast(Mapping[object, object], item)
+        finding_id = str(typed_item.get("finding_id") or "")
+        current = str(typed_item.get("current_state") or "")
+        requested = str(typed_item.get("requested_state") or "")
+        reason = str(typed_item.get("reason") or "")
+        if finding_id:
+            parts.append(f"{finding_id}:{current}->{requested}:{reason}")
+    return ", ".join(parts) if parts else "none"
 
 
 def _progress_target_from_prompt(prompt: str) -> ProgressTarget:
