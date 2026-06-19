@@ -303,6 +303,13 @@ def build_parser() -> argparse.ArgumentParser:
     _parallel_arg(review)
     review.add_argument("--fixture", type=Path)
     review.add_argument("--config", type=Path)
+    review.add_argument(
+        "--cell",
+        dest="cell_ids",
+        action="append",
+        default=[],
+        help="Review only the requested review cell ID; repeat for multiple cells",
+    )
     _output_format_arg(review)
     _audience_arg(review)
 
@@ -1185,6 +1192,14 @@ def _cmd_review(args: argparse.Namespace, root: Path, store: SessionStore) -> No
     digest = target_digest(root)
     target = TargetSpec.model_validate(metadata["target"])
     _reconcile_cells(store, root, target)
+    current_cells = tuple(_current_target_cells(store, session_id, root).values())
+    requested_cell_ids = tuple(args.cell_ids)
+    selected_cells = _select_review_cells(
+        store=store,
+        session_id=session_id,
+        current_cells=current_cells,
+        requested_cell_ids=requested_cell_ids,
+    )
     if args.budget == 0:
         status = _status(store, root)
         _emit(
@@ -1193,10 +1208,6 @@ def _cmd_review(args: argparse.Namespace, root: Path, store: SessionStore) -> No
         )
         return
     adapter_config = load_config(root, args.config) if args.fixture is None else None
-    current_cells = tuple(_current_target_cells(store, session_id, root).values())
-    selected_cells = _select_review_cells(
-        store=store, session_id=session_id, current_cells=current_cells
-    )
     if not selected_cells:
         last_digest = store.last_run_target_digest(session_id)
         if last_digest != digest:
@@ -1486,19 +1497,41 @@ def _apply_resolutions(
 
 
 def _select_review_cells(
-    *, store: SessionStore, session_id: str, current_cells: tuple[ReviewCell, ...]
+    *,
+    store: SessionStore,
+    session_id: str,
+    current_cells: tuple[ReviewCell, ...],
+    requested_cell_ids: tuple[str, ...] = (),
 ) -> list[ReviewCell]:
+    current_cell_ids = {cell.id for cell in current_cells}
+    requested = _deduplicate_review_cell_ids(requested_cell_ids)
+    unknown = tuple(cell_id for cell_id in requested if cell_id not in current_cell_ids)
+    if unknown:
+        raise ValueError(
+            f"unknown review cell IDs for active session {session_id}: {', '.join(unknown)}"
+        )
+    requested_set = set(requested)
     persisted_states = {
         str(row["cell_id"]): str(row["state"]) for row in store.list_cells(session_id)
     }
-    return sorted(
-        (
-            cell
-            for cell in current_cells
-            if persisted_states.get(cell.id, CellState.PENDING.value) == CellState.PENDING.value
-        ),
-        key=lambda cell: (cell.file_path, cell.rule_id, cell.id),
+    eligible = (
+        cell
+        for cell in current_cells
+        if persisted_states.get(cell.id, CellState.PENDING.value) == CellState.PENDING.value
+        and (not requested_set or cell.id in requested_set)
     )
+    return sorted(eligible, key=lambda cell: (cell.file_path, cell.rule_id, cell.id))
+
+
+def _deduplicate_review_cell_ids(cell_ids: tuple[str, ...]) -> tuple[str, ...]:
+    seen: set[str] = set()
+    unique: list[str] = []
+    for cell_id in cell_ids:
+        if cell_id in seen:
+            continue
+        seen.add(cell_id)
+        unique.append(cell_id)
+    return tuple(unique)
 
 
 def _pending_review_cell_ids(store: SessionStore, session_id: str) -> tuple[str, ...]:

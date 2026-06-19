@@ -88,11 +88,165 @@ def test_review_budget_zero_reports_pending_without_run(
 ReviewCallback = Callable[[ReviewCell, ReviewAdapterResult | ReviewAdapterError], None]
 
 
+def _review_cell_rows_by_selection_order(root: Path) -> list[sqlite3.Row]:
+    store = SessionStore(root)
+    session_id = store.active_session_id()
+    return sorted(
+        store.list_cells(session_id),
+        key=lambda row: (str(row["file_path"]), str(row["rule_id"]), str(row["cell_id"])),
+    )
+
+
+def _run_count(root: Path) -> int:
+    with sqlite3.connect(root / ".review-gauntlet" / "ledger.sqlite") as conn:
+        value = conn.execute("select count(*) from runs").fetchone()[0]
+    return int(value)
+
+
 def _write_two_file_review_session(root: Path, capsys: pytest.CaptureFixture[str]) -> None:
     (root / "README.md").write_text("# docs\n", encoding="utf-8")
     (root / "app.py").write_text("print('hello')\n", encoding="utf-8")
     main(["init", str(root), "--all", "--format", "json"])
     capsys.readouterr()
+
+
+def test_review_rejects_unknown_cell_selector(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _write_two_file_review_session(tmp_path, capsys)
+    fixture = tmp_path / "fixture.json"
+    fixture.write_text("{}", encoding="utf-8")
+
+    with pytest.raises(SystemExit) as exc:
+        main(
+            [
+                "review",
+                str(tmp_path),
+                "--cell",
+                "RGC-missing",
+                "--fixture",
+                str(fixture),
+                "--format",
+                "json",
+            ]
+        )
+
+    captured = capsys.readouterr()
+    assert exc.value.code == 64
+    assert "RGC-missing" in captured.err
+    assert captured.out == ""
+    assert _run_count(tmp_path) == 0
+    assert not (tmp_path / ".review-gauntlet" / "runs").exists()
+
+
+def test_review_cell_selector_reviews_unique_pending_subset(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _write_two_file_review_session(tmp_path, capsys)
+    fixture = tmp_path / "fixture.json"
+    fixture.write_text("{}", encoding="utf-8")
+    selected_ids = [
+        str(row["cell_id"]) for row in _review_cell_rows_by_selection_order(tmp_path)[:2]
+    ]
+
+    main(
+        [
+            "review",
+            str(tmp_path),
+            "--cell",
+            selected_ids[0],
+            "--cell",
+            selected_ids[0],
+            "--cell",
+            selected_ids[1],
+            "--fixture",
+            str(fixture),
+            "--budget",
+            "1",
+            "--parallel",
+            "1",
+            "--format",
+            "json",
+        ]
+    )
+
+    data = json.loads(capsys.readouterr().out)
+    assert data["reviewed_cells"] == 2
+    rows_by_id = {
+        str(row["cell_id"]): row for row in SessionStore(tmp_path).list_cells(data["session_id"])
+    }
+    assert {str(rows_by_id[cell_id]["state"]) for cell_id in selected_ids} == {"reviewed"}
+    assert {
+        str(row["state"]) for cell_id, row in rows_by_id.items() if cell_id not in selected_ids
+    } <= {"pending"}
+
+
+def test_review_cell_selector_skips_already_reviewed_cell(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _write_two_file_review_session(tmp_path, capsys)
+    fixture = tmp_path / "fixture.json"
+    fixture.write_text("{}", encoding="utf-8")
+    cell_id = str(_review_cell_rows_by_selection_order(tmp_path)[0]["cell_id"])
+
+    main(
+        [
+            "review",
+            str(tmp_path),
+            "--cell",
+            cell_id,
+            "--fixture",
+            str(fixture),
+            "--format",
+            "json",
+        ]
+    )
+    first = json.loads(capsys.readouterr().out)
+    assert first["reviewed_cells"] == 1
+    run_count_after_first_review = _run_count(tmp_path)
+    rows_after_first_review = {
+        str(row["cell_id"]): str(row["state"])
+        for row in SessionStore(tmp_path).list_cells(first["session_id"])
+    }
+
+    main(
+        [
+            "review",
+            str(tmp_path),
+            "--cell",
+            cell_id,
+            "--fixture",
+            str(fixture),
+            "--format",
+            "json",
+        ]
+    )
+
+    second = json.loads(capsys.readouterr().out)
+    assert second["reviewed_cells"] == 0
+    assert second["run_id"] is None
+    assert _run_count(tmp_path) == run_count_after_first_review
+    rows_after_second_review = {
+        str(row["cell_id"]): str(row["state"])
+        for row in SessionStore(tmp_path).list_cells(first["session_id"])
+    }
+    assert rows_after_second_review == rows_after_first_review
+    assert rows_after_second_review[cell_id] == "reviewed"
+
+
+def test_review_cell_selector_budget_zero_reports_without_run(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _write_two_file_review_session(tmp_path, capsys)
+    cell_id = str(_review_cell_rows_by_selection_order(tmp_path)[0]["cell_id"])
+
+    main(["review", str(tmp_path), "--cell", cell_id, "--budget", "0", "--format", "json"])
+
+    data = json.loads(capsys.readouterr().out)
+    assert data["reviewed_cells"] == 0
+    assert data["run_id"] is None
+    assert data["coverage"].get("pending", 0) > 0
+    assert _run_count(tmp_path) == 0
 
 
 def test_interrupted_review_persists_successful_cells_and_resume_skips_them(
