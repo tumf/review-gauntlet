@@ -89,7 +89,9 @@ When `RunController.run()` detects that the active session file no longer exists
 
 The run TUI SHALL render the Findings panel title as `Findings {resolved}/{total}` outside active review execution, where `total` is the current number of findings and `resolved` is the number that are no longer actionable. While Phase 1 review execution is actively running, the Findings panel title SHALL animate through `Finding`, `Finding.`, `Finding..`, and `Finding...` using the TUI activity frame. While Phase 2 resolution execution is actively running, the TUI SHALL keep the `Findings {resolved}/{total}` title and SHALL display a running indicator on each finding row targeted by the active resolve process.
 
-<!-- Expected canonical result after archive: the canonical run-controller spec will require run TUI Findings progress titles and active resolve row indicators in addition to current phase display. -->
+The run TUI SHALL render a compact color legend that uses the same style sources as the body content for priority labels, finding-state labels, and finding-progress labels. The legend SHALL include samples for `P0`, `P1`, `P2`, `P3`, `open`, `confirmed`, `dismissed`, `done`, and `find`. Plain-text rendering of the legend SHALL remain readable and deterministic.
+
+<!-- Expected canonical result after archive: the canonical run-controller spec will require the run TUI to expose the primary body color semantics in the legend, covering priority, finding-state, and finding-progress labels without changing run-controller behavior. -->
 
 #### Scenario: Run executes Phase 1 then Phase 2
 
@@ -156,6 +158,15 @@ The run TUI SHALL render the Findings panel title as `Findings {resolved}/{total
 **Given**: a prior running snapshot showed active target finding ID `RGF-0001`
 **When**: the agent step finishes and the TUI renders a refreshed snapshot
 **Then**: no finding row displays the active running indicator
+
+#### Scenario: Color legend matches body semantics
+
+**Given**: the run TUI uses colored body text for priorities, finding states, and finding progress
+**When**: the TUI renders the color legend
+**Then**: the legend includes `P0`, `P1`, `P2`, and `P3` with the same styles used by priority labels in queue, rules, and files body rows
+**And**: the legend includes `open`, `confirmed`, and `dismissed` with the same styles used by finding-state body rows
+**And**: the legend includes `done` and `find` with the same style used by finding-progress counts
+**And**: plain-text legend rendering remains readable without Rich styling
 
 ### Requirement: Resolve command SHALL require an active session before startup
 

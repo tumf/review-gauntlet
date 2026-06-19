@@ -15,6 +15,9 @@ from review_gauntlet.coverage_projection import (
 )
 from review_gauntlet.run_controller import AgentLifecycle, RunController, RunSnapshot
 from review_gauntlet.run_tui import (
+    _FIND_COUNT_COLOR,  # pyright: ignore[reportPrivateUsage]
+    _FINDING_STATE_COLORS,  # pyright: ignore[reportPrivateUsage]
+    _PRIORITY_COLORS,  # pyright: ignore[reportPrivateUsage]
     FINDING_STATES,
     actionable_finding_summary,
     calculate_progress_metrics,
@@ -268,9 +271,22 @@ def test_cells_view_renders_resolved_over_total_findings() -> None:
 def test_color_legend_matches_finding_progress_ratio() -> None:
     legend = render_tui_lines(color_legend_tui_lines())
 
-    assert "done / find" in legend
+    assert "priority P0 P1 P2 P3" in legend
+    assert "findings open confirmed dismissed" in legend
+    assert "progress done / find" in legend
     assert "pend / find" not in legend
     assert "resolved" not in legend
+
+
+def test_color_legend_reuses_body_color_sources() -> None:
+    legend_fields = {field.key: field for line in color_legend_tui_lines() for field in line.fields}
+
+    for priority, color in _PRIORITY_COLORS.items():
+        assert legend_fields[f"legend.priority.{priority}"].color == color
+    for state, color in _FINDING_STATE_COLORS.items():
+        assert legend_fields[f"legend.finding_state.{state}"].color == color
+    assert legend_fields["legend.progress.done"].color == _FIND_COUNT_COLOR
+    assert legend_fields["legend.progress.find"].color == _FIND_COUNT_COLOR
 
 
 def test_task_title_mapping_uses_resolve_findings() -> None:
