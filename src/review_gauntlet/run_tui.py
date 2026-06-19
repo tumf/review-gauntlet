@@ -1527,6 +1527,17 @@ def _literal(display: str, *, key: str) -> TuiField:
     return TuiField(key=key, display=display, compare=display)
 
 
+def _join_fields(
+    fields: tuple[TuiField, ...], separator: str, *, key_prefix: str
+) -> tuple[TuiField, ...]:
+    joined: list[TuiField] = []
+    for index, field in enumerate(fields):
+        if index:
+            joined.append(_literal(separator, key=f"{key_prefix}.{index}"))
+        joined.append(field)
+    return tuple(joined)
+
+
 def _label_value_line(
     key: str, label: str, value: str, *, compare: object | None = None
 ) -> TuiLine:
@@ -2134,13 +2145,28 @@ def footer_text() -> str:
 
 
 def color_legend_tui_lines() -> tuple[TuiLine, ...]:
+    priority_fields = tuple(
+        _colored_field(f"legend.priority.{label}", label, _PRIORITY_COLORS[label])
+        for label in ("P0", "P1", "P2", "P3")
+    )
+    finding_state_fields = tuple(
+        _colored_field(f"legend.finding_state.{state}", state, _FINDING_STATE_COLORS[state])
+        for state in ("open", "confirmed", "dismissed")
+    )
+    progress_fields = (
+        _colored_field("legend.progress.done", "done", _FIND_COUNT_COLOR),
+        _literal(" / ", key="legend.progress.separator"),
+        _colored_field("legend.progress.find", "find", _FIND_COUNT_COLOR),
+    )
     return (
         TuiLine(
             (
-                _literal("legend  ", key="legend.label"),
-                _colored_field("legend.done", "done", _FIND_COUNT_COLOR),
-                _literal(" / ", key="legend.s"),
-                _colored_field("legend.find", "find", _FIND_COUNT_COLOR),
+                _literal("legend  priority ", key="legend.label.priority"),
+                *_join_fields(priority_fields, " ", key_prefix="legend.priority.sep"),
+                _literal(" | findings ", key="legend.label.findings"),
+                *_join_fields(finding_state_fields, " ", key_prefix="legend.finding_state.sep"),
+                _literal(" | progress ", key="legend.label.progress"),
+                *progress_fields,
             )
         ),
     )
