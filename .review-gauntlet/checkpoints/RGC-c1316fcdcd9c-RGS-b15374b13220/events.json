@@ -1,0 +1,120 @@
+{
+  "checkpoint_id": "RGC-c1316fcdcd9c-RGS-b15374b13220",
+  "events": [
+    {
+      "checkpoint_id": "RGC-c1316fcdcd9c-RGS-b15374b13220",
+      "created_at": "2026-06-18 23:55:43",
+      "event_id": 1701,
+      "finding_id": "RGF-1037",
+      "from_state": "open",
+      "metadata": {},
+      "reason": "session_metadata \u306f dict \u3092\u4fdd\u8a3c\u3059\u308b\u304c 'target' \u30ad\u30fc\u306e\u5b58\u5728\u306f\u4fdd\u8a3c\u3057\u306a\u3044\u3002checkpoint.py:294 \u3067\u306f metadata.get('target') \u3092\u4f7f\u3046\u305f\u3081 None \u304c\u30bb\u30c3\u30c8\u3055\u308c\u308b\u53ef\u80fd\u6027\u304c\u3042\u308a\u3001\u305d\u306e\u5834\u5408 TargetSpec.model_validate(None) \u304cPydantic ValidationError \u3067\u5931\u6557\u3059\u308b\u3002KeyError \u3082 'target' \u30ad\u30fc\u6b20\u5982\u6642\u306b\u767a\u751f\u3057\u3046\u308b\u3002",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-c1316fcdcd9c-RGS-b15374b13220",
+      "created_at": "2026-06-18 23:55:48",
+      "event_id": 1702,
+      "finding_id": "RGF-1038",
+      "from_state": "open",
+      "metadata": {},
+      "reason": "DB\u304b\u3089\u53d6\u5f97\u3057\u305f row['state'] \u3092 str() \u306e\u307f\u3067\u30ad\u30e3\u30b9\u30c8\u3002\u671f\u5f85\u3055\u308c\u308b\u72b6\u614b\u5024\uff08open/pending/reviewed\u7b49\uff09\u306e\u691c\u8a3c\u304c\u306a\u304f\u3001DB\u7834\u640d\u3084\u5916\u90e8\u304b\u3089\u306e\u4e0d\u6b63\u30c7\u30fc\u30bf\u304c\u6df7\u5165\u3057\u305f\u5834\u5408\u3001\u4e0d\u6b63\u306astate\u304c\u4e0b\u6d41\u51e6\u7406\u306b\u4f1d\u64ad\u3059\u308b\u3002",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-c1316fcdcd9c-RGS-b15374b13220",
+      "created_at": "2026-06-18 23:55:53",
+      "event_id": 1703,
+      "finding_id": "RGF-1039",
+      "from_state": "open",
+      "metadata": {
+        "dismiss_reason": "priority_label \u306f\u5e38\u306b _priority_label() \u304c\u8fd4\u3059\u5024\u3067\u3042\u308a\u3001\u305d\u306e\u623b\u308a\u5024\u306f CoveragePriorityLabel = Literal['P0','P1','P2','P3'] \u306e4\u5024\u306e\u3044\u305a\u308c\u304b\u3002\u30b3\u30fc\u30c9\u4e0a\u306e\u5168\u3066\u306e\u547c\u3073\u51fa\u3057\u30d1\u30b9\u3067\u4e0d\u6b63\u5024\u306e\u6df7\u5165\u7d4c\u8def\u304c\u306a\u304f\u3001ValueError\u306f\u5b9f\u969b\u306b\u306f\u767a\u751f\u3057\u306a\u3044\u3002"
+      },
+      "reason": "priority_label \u306f\u5e38\u306b _priority_label() \u304c\u8fd4\u3059\u5024\u3067\u3042\u308a\u3001\u305d\u306e\u623b\u308a\u5024\u306f CoveragePriorityLabel = Literal['P0','P1','P2','P3'] \u306e4\u5024\u306e\u3044\u305a\u308c\u304b\u3002\u30b3\u30fc\u30c9\u4e0a\u306e\u5168\u3066\u306e\u547c\u3073\u51fa\u3057\u30d1\u30b9\u3067\u4e0d\u6b63\u5024\u306e\u6df7\u5165\u7d4c\u8def\u304c\u306a\u304f\u3001ValueError\u306f\u5b9f\u969b\u306b\u306f\u767a\u751f\u3057\u306a\u3044\u3002",
+      "to_state": "dismissed"
+    },
+    {
+      "checkpoint_id": "RGC-c1316fcdcd9c-RGS-b15374b13220",
+      "created_at": "2026-06-18 23:55:57",
+      "event_id": 1704,
+      "finding_id": "RGF-1042",
+      "from_state": "open",
+      "metadata": {},
+      "reason": "stale=0 \u304c\u30cf\u30fc\u30c9\u30b3\u30fc\u30c9\u3055\u308c\u30b3\u30e1\u30f3\u30c8 '# stale is intentionally ignored' \u304c\u3042\u308b\u4e00\u65b9\u3001\u30bd\u30fc\u30c8\u30ad\u30fc\uff08line 450\uff09\u3067 -(summary.pending + summary.stale + summary.actionable_findings) \u3068\u3057\u3066 summary.stale \u3092\u53c2\u7167\u3002\u5e38\u306b0\u306e\u305f\u3081\u30c7\u30c3\u30c9\u30b3\u30fc\u30c9\u3068\u306a\u308a\u3001stale\u30bb\u30eb\u304crule\u512a\u5148\u5ea6\u30bd\u30fc\u30c8\u306b\u5f71\u97ff\u3059\u308b\u3053\u3068\u3092\u793a\u3059\u30c6\u30b9\u30c8\u304c\u4e0d\u53ef\u80fd\u306a\u8a2d\u8a08\u306b\u306a\u3063\u3066\u3044\u308b\u3002",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-c1316fcdcd9c-RGS-b15374b13220",
+      "created_at": "2026-06-18 23:56:02",
+      "event_id": 1705,
+      "finding_id": "RGF-1043",
+      "from_state": "open",
+      "metadata": {},
+      "reason": "RGF-1042\u3068\u540c\u69d8\u3001_file_summaries \u3067\u3082 stale=0 \u30cf\u30fc\u30c9\u30b3\u30fc\u30c9\uff08# stale is intentionally ignored\uff09\u3060\u304c\u30bd\u30fc\u30c8\u30ad\u30fc\uff08line 484\uff09\u3067 -(summary.pending + summary.stale) \u3068\u3057\u3066\u53c2\u7167\u3002summary.stale \u306f\u5e38\u306b0\u3067\u30bd\u30fc\u30c8\u3078\u306e\u5f71\u97ff\u306a\u3057\u3001\u30c7\u30c3\u30c9\u30b3\u30fc\u30c9\u72b6\u614b\u3002",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-c1316fcdcd9c-RGS-b15374b13220",
+      "created_at": "2026-06-18 23:56:07",
+      "event_id": 1706,
+      "finding_id": "RGF-1044",
+      "from_state": "open",
+      "metadata": {},
+      "reason": "latest_cell_id \u304c\u73fe\u5728\u306e\u30bb\u30eb\u306b\u4e00\u81f4\u3057\u306a\u3044\u5834\u5408\uff08line 318-320\uff09\u3001\u540c\u3058 (file_path, rule_id) \u3092\u6301\u3064\u5168\u5019\u88dc\u30bb\u30eb\u306b finding \u3092\u914d\u5e03\u3059\u308b\u3002\u3053\u308c\u306b\u3088\u308a finding_count / actionable_finding_count / resolved_finding_count \u304c\u4e8c\u91cd\u8a08\u4e0a\uff08\u307e\u305f\u306fN\u91cd\u8a08\u4e0a\uff09\u3055\u308c\u308b\u3002",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-c1316fcdcd9c-RGS-b15374b13220",
+      "created_at": "2026-06-18 23:56:12",
+      "event_id": 1707,
+      "finding_id": "RGF-1045",
+      "from_state": "open",
+      "metadata": {},
+      "reason": "cell.state == 'stale' \u306e\u3068\u304d changed_since_review=True \u304c\u30bb\u30c3\u30c8\u3055\u308c\u308b\u304c\uff08line 177\uff09\u3001\u30b3\u30f3\u30c6\u30f3\u30c4\u304crevert\u3055\u308c\u305f\u5834\u5408\u3001changed_files \u30bb\u30c3\u30c8\u306b\u542b\u307e\u308c\u306a\u304f\u3066\u3082 stale \u72b6\u614b\u306e\u307e\u307e\u6b8b\u308b\u53ef\u80fd\u6027\u304c\u3042\u308b\u3002\u305d\u306e\u5834\u5408\u3001\u5b9f\u969b\u306b\u306f\u5909\u66f4\u304c\u306a\u3044\u306e\u306b changed_since_review=True \u3068\u306a\u308a\u3001\u512a\u5148\u5ea6\u30b9\u30b3\u30a2\u304c\u8aa4\u3063\u3066\u4e0a\u6607\u3059\u308b\u3002",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-c1316fcdcd9c-RGS-b15374b13220",
+      "created_at": "2026-06-18 23:58:56",
+      "event_id": 1708,
+      "finding_id": "RGF-1040",
+      "from_state": "open",
+      "metadata": {},
+      "reason": "format_event_time catches only ValueError but None.replace() raises AttributeError that escapes the handler. Type hints are unenforced at runtime; the function's defensive intent (try/except with fallback) is incomplete.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-c1316fcdcd9c-RGS-b15374b13220",
+      "created_at": "2026-06-18 23:58:59",
+      "event_id": 1709,
+      "finding_id": "RGF-1041",
+      "from_state": "open",
+      "metadata": {
+        "dismiss_reason": "gates[-1] and gates[mapped_index-1] are safe in practice: the sole caller passes the result of derive_finalize_gates, which always returns a tuple of 4-5 gates; _NEXT_ACTION_GATE_INDEX values 1-4 stay within that range. No exploitable code path produces an empty or shorter tuple."
+      },
+      "reason": "gates[-1] and gates[mapped_index-1] are safe in practice: the sole caller passes the result of derive_finalize_gates, which always returns a tuple of 4-5 gates; _NEXT_ACTION_GATE_INDEX values 1-4 stay within that range. No exploitable code path produces an empty or shorter tuple.",
+      "to_state": "dismissed"
+    },
+    {
+      "checkpoint_id": "RGC-c1316fcdcd9c-RGS-b15374b13220",
+      "created_at": "2026-06-18 23:59:04",
+      "event_id": 1710,
+      "finding_id": "RGF-1046",
+      "from_state": "open",
+      "metadata": {},
+      "reason": "sanitize_agent_output_line redacts credentials (tokens, API keys, passwords) from agent output but has zero test coverage. Security-sensitive redaction logic must have tests to catch regressions in the regex patterns.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-c1316fcdcd9c-RGS-b15374b13220",
+      "created_at": "2026-06-18 23:59:07",
+      "event_id": 1711,
+      "finding_id": "RGF-1047",
+      "from_state": "open",
+      "metadata": {},
+      "reason": "All existing tests pass stale=0, so the 'if cov.stale:' branch in header_status_text (line 1034) and header_status_tui_lines (line 1148) has no test coverage. A stale-count regression would go undetected.",
+      "to_state": "confirmed"
+    }
+  ],
+  "schema_version": 1
+}

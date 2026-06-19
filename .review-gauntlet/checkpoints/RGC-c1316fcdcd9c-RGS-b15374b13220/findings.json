@@ -1,0 +1,237 @@
+{
+  "checkpoint_id": "RGC-c1316fcdcd9c-RGS-b15374b13220",
+  "findings": [
+    {
+      "checkpoint_id": "RGC-c1316fcdcd9c-RGS-b15374b13220",
+      "content": "`store.session_metadata(session_id)` \u306e\u623b\u308a\u5024\u306b\u5bfe\u3057\u3066 `metadata[\"target\"]` \u3092\u76f4\u63a5\u30a2\u30af\u30bb\u30b9\u3057\u3066\u3044\u308b\u305f\u3081\u3001\u30ad\u30fc\u304c\u5b58\u5728\u3057\u306a\u3044\u5834\u5408\u3084 `None` \u304c\u8fd4\u3063\u305f\u5834\u5408\u306b\u6587\u8108\u306e\u306a\u3044 `KeyError`/`TypeError` \u304c\u767a\u751f\u3057\u307e\u3059\u3002\u30c7\u30fc\u30bf\u53d6\u5f97\u5f8c\u306b\u5fc5\u9808\u30ad\u30fc\u306e\u5b58\u5728\u3092\u78ba\u8a8d\u3059\u308b\u30ac\u30fc\u30c9\u7bc0\u3092\u8ffd\u52a0\u3057\u3066\u304f\u3060\u3055\u3044\u3002",
+      "finding_id": "RGF-1037",
+      "fingerprint": "03813269f5a31285d61efaaf950779f88b45cb53b2b11983f409a750d71620fb",
+      "latest_occurrence": {
+        "cell_id": "RGC-dfe9afa72c34f89c",
+        "end_line": 136,
+        "finding_id": "RGF-1037",
+        "imprecise": 0,
+        "occurrence_id": 1037,
+        "path": "src/review_gauntlet/coverage_projection.py",
+        "run_id": 310,
+        "start_line": 135
+      },
+      "metadata": "{\"fingerprint\":\"03813269f5a31285d61efaaf950779f88b45cb53b2b11983f409a750d71620fb\",\"path\":\"src/review_gauntlet/coverage_projection.py\",\"rule_id\":\"data-validation\",\"content\":\"`store.session_metadata(session_id)` \u306e\u623b\u308a\u5024\u306b\u5bfe\u3057\u3066 `metadata[\\\"target\\\"]` \u3092\u76f4\u63a5\u30a2\u30af\u30bb\u30b9\u3057\u3066\u3044\u308b\u305f\u3081\u3001\u30ad\u30fc\u304c\u5b58\u5728\u3057\u306a\u3044\u5834\u5408\u3084 `None` \u304c\u8fd4\u3063\u305f\u5834\u5408\u306b\u6587\u8108\u306e\u306a\u3044 `KeyError`/`TypeError` \u304c\u767a\u751f\u3057\u307e\u3059\u3002\u30c7\u30fc\u30bf\u53d6\u5f97\u5f8c\u306b\u5fc5\u9808\u30ad\u30fc\u306e\u5b58\u5728\u3092\u78ba\u8a8d\u3059\u308b\u30ac\u30fc\u30c9\u7bc0\u3092\u8ffd\u52a0\u3057\u3066\u304f\u3060\u3055\u3044\u3002\",\"suggestion_code\":\"    metadata = store.session_metadata(session_id)\\n    if not metadata or \\\"target\\\" not in metadata:\\n        raise ValueError(\\n            f\\\"Session {session_id!r} metadata is missing the required 'target' key\\\"\\n        )\\n    target = TargetSpec.model_validate(metadata[\\\"target\\\"])\",\"existing_code\":\"    metadata = store.session_metadata(session_id)\\n    target = TargetSpec.model_validate(metadata[\\\"target\\\"])\",\"start_line\":135,\"end_line\":136,\"thinking\":\"session_metadata() \u304c\u30b9\u30ad\u30fc\u30de\u4e0d\u4e00\u81f4\u30fb\u30b9\u30c8\u30ec\u30fc\u30b8\u7834\u640d\u30fb\u672a\u79fb\u884c\u30bb\u30c3\u30b7\u30e7\u30f3\u306a\u3069\u3092\u7406\u7531\u306b 'target' \u30ad\u30fc\u306e\u306a\u3044 dict \u3092\u8fd4\u3059\u3068\u3001\u751f\u306e KeyError \u304c\u6295\u3052\u3089\u308c\u30c7\u30d0\u30c3\u30b0\u304c\u56f0\u96e3\u306b\u306a\u308b\u3002\u547c\u3073\u51fa\u3057\u5143\u3067\u306e\u660e\u793a\u7684\u30d0\u30ea\u30c7\u30fc\u30b7\u30e7\u30f3\u304c\u5fc5\u8981\u3002\",\"imprecise\":false,\"dismiss_reason\":null}",
+      "path": "src/review_gauntlet/coverage_projection.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-b15374b13220",
+      "state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-c1316fcdcd9c-RGS-b15374b13220",
+      "content": "DB\u304b\u3089\u53d6\u5f97\u3057\u305f `row[\"state\"]` \u3092\u305d\u306e\u307e\u307e `str()` \u3067\u30ad\u30e3\u30b9\u30c8\u3059\u308b\u3060\u3051\u3067\u3001\u671f\u5f85\u3055\u308c\u308b\u72b6\u614b\u5024\uff08`\"open\"`, `\"pending\"`, `\"reviewed\"` \u306a\u3069\uff09\u3067\u3042\u308b\u304b\u306e\u691c\u8a3c\u304c\u884c\u308f\u308c\u3066\u3044\u307e\u305b\u3093\u3002\u4e88\u671f\u3057\u306a\u3044\u72b6\u614b\u5024\u306f\u512a\u5148\u5ea6\u8a08\u7b97\u3092\u7d4c\u3066\u30b5\u30a4\u30ec\u30f3\u30c8\u306b\u8aa4\u3063\u305f\u7d50\u679c\u3092\u751f\u307f\u51fa\u3057\u307e\u3059\u3002\u8a31\u5bb9\u3055\u308c\u308b\u72b6\u614b\u306e\u96c6\u5408\u3092\u5b9a\u7fa9\u3057\u3001\u4e0d\u6b63\u5024\u306f\u65e9\u671f\u306b\u30a8\u30e9\u30fc\u306b\u3059\u308b\u304b\u8b66\u544a\u3092\u8a18\u9332\u3057\u3066\u304f\u3060\u3055\u3044\u3002",
+      "finding_id": "RGF-1038",
+      "fingerprint": "d182da8fec2e96a485f92fd4f4548ae2797126488e84d1189ef8c14f98567bb6",
+      "latest_occurrence": {
+        "cell_id": "RGC-dfe9afa72c34f89c",
+        "end_line": 296,
+        "finding_id": "RGF-1038",
+        "imprecise": 0,
+        "occurrence_id": 1038,
+        "path": "src/review_gauntlet/coverage_projection.py",
+        "run_id": 310,
+        "start_line": 291
+      },
+      "metadata": "{\"fingerprint\":\"d182da8fec2e96a485f92fd4f4548ae2797126488e84d1189ef8c14f98567bb6\",\"path\":\"src/review_gauntlet/coverage_projection.py\",\"rule_id\":\"data-validation\",\"content\":\"DB\u304b\u3089\u53d6\u5f97\u3057\u305f `row[\\\"state\\\"]` \u3092\u305d\u306e\u307e\u307e `str()` \u3067\u30ad\u30e3\u30b9\u30c8\u3059\u308b\u3060\u3051\u3067\u3001\u671f\u5f85\u3055\u308c\u308b\u72b6\u614b\u5024\uff08`\\\"open\\\"`, `\\\"pending\\\"`, `\\\"reviewed\\\"` \u306a\u3069\uff09\u3067\u3042\u308b\u304b\u306e\u691c\u8a3c\u304c\u884c\u308f\u308c\u3066\u3044\u307e\u305b\u3093\u3002\u4e88\u671f\u3057\u306a\u3044\u72b6\u614b\u5024\u306f\u512a\u5148\u5ea6\u8a08\u7b97\u3092\u7d4c\u3066\u30b5\u30a4\u30ec\u30f3\u30c8\u306b\u8aa4\u3063\u305f\u7d50\u679c\u3092\u751f\u307f\u51fa\u3057\u307e\u3059\u3002\u8a31\u5bb9\u3055\u308c\u308b\u72b6\u614b\u306e\u96c6\u5408\u3092\u5b9a\u7fa9\u3057\u3001\u4e0d\u6b63\u5024\u306f\u65e9\u671f\u306b\u30a8\u30e9\u30fc\u306b\u3059\u308b\u304b\u8b66\u544a\u3092\u8a18\u9332\u3057\u3066\u304f\u3060\u3055\u3044\u3002\",\"suggestion_code\":\"_VALID_FINDING_STATES = frozenset({\\\"open\\\", \\\"resolved\\\", \\\"dismissed\\\", \\\"wont_fix\\\"})\\n\\n# ... in _session_findings:\\n                state_val = str(row[\\\"state\\\"])\\n                if state_val not in _VALID_FINDING_STATES:\\n                    raise ValueError(\\n                        f\\\"Unexpected finding state {state_val!r} for finding_id={row['finding_id']!r}\\\"\\n                    )\\n                CoverageFindingInput(\\n                    finding_id=str(row[\\\"finding_id\\\"]),\\n                    file_path=str(row[\\\"path\\\"]),\\n                    rule_id=str(row[\\\"rule_id\\\"]),\\n                    state=state_val,\\n                    content=str(row[\\\"content\\\"]),\",\"existing_code\":\"                CoverageFindingInput(\\n                    finding_id=str(row[\\\"finding_id\\\"]),\\n                    file_path=str(row[\\\"path\\\"]),\\n                    rule_id=str(row[\\\"rule_id\\\"]),\\n                    state=str(row[\\\"state\\\"]),\\n                    content=str(row[\\\"content\\\"]),\",\"start_line\":291,\"end_line\":296,\"thinking\":\"DB\u304b\u3089\u53d6\u5f97\u3057\u305f state \u6587\u5b57\u5217\u306f\u4fe1\u983c\u3067\u304d\u306a\u3044\u5916\u90e8\u30c7\u30fc\u30bf\u5883\u754c\u3002ACTIONABLE_FINDING_STATES \u306a\u3069\u306e\u96c6\u5408\u3068\u306e\u6bd4\u8f03\u3067\u8aa4\u3063\u305f\u512a\u5148\u5ea6\u8a08\u7b97\u304c\u9759\u304b\u306b\u9032\u3080\u3002\u30d0\u30a6\u30f3\u30c0\u30ea\u76f4\u5f8c\u306b\u30d0\u30ea\u30c7\u30fc\u30b7\u30e7\u30f3\u3059\u308b\u306e\u304c\u6b63\u3057\u3044\u8a2d\u8a08\u3002\",\"imprecise\":false,\"dismiss_reason\":null}",
+      "path": "src/review_gauntlet/coverage_projection.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-b15374b13220",
+      "state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-c1316fcdcd9c-RGS-b15374b13220",
+      "content": "`min()` \u306e `key` \u306b `(\"P0\",\"P1\",\"P2\",\"P3\").index(label)` \u3092\u4f7f\u7528\u3057\u3066\u3044\u307e\u3059\u304c\u3001`priority_label` \u304c\u578b\u30c1\u30a7\u30c3\u30af\u4e0a\u306f `Literal` \u3067\u3042\u3063\u3066\u3082\u30e9\u30f3\u30bf\u30a4\u30e0\u3067\u306f\u5358\u306a\u308b `str` \u3067\u3059\u3002`_priority_label` \u306e\u30ed\u30b8\u30c3\u30af\u30d0\u30b0\u3084\u5c06\u6765\u306e\u5909\u66f4\u3067\u4e88\u671f\u3057\u306a\u3044\u30e9\u30d9\u30eb\u304c\u751f\u6210\u3055\u308c\u305f\u5834\u5408\u3001`list.index()` \u304c `ValueError` \u3092\u9001\u51fa\u3057\u30a2\u30d7\u30ea\u5168\u4f53\u304c\u30af\u30e9\u30c3\u30b7\u30e5\u3057\u307e\u3059\u3002\u5b89\u5168\u306a\u6bd4\u8f03\u306e\u305f\u3081\u306b\u8f9e\u66f8\u30eb\u30c3\u30af\u30a2\u30c3\u30d7\u304b\u30c7\u30d5\u30a9\u30eb\u30c8\u4ed8\u304d\u306e\u65b9\u6cd5\u3092\u4f7f\u7528\u3057\u3066\u304f\u3060\u3055\u3044\u3002",
+      "finding_id": "RGF-1039",
+      "fingerprint": "17d580f124d9cc482a172ce50b87b5efabd1a1a1da3922abd25708407061a3cb",
+      "latest_occurrence": {
+        "cell_id": "RGC-dfe9afa72c34f89c",
+        "end_line": 442,
+        "finding_id": "RGF-1039",
+        "imprecise": 0,
+        "occurrence_id": 1039,
+        "path": "src/review_gauntlet/coverage_projection.py",
+        "run_id": 310,
+        "start_line": 439
+      },
+      "metadata": "{\"fingerprint\":\"17d580f124d9cc482a172ce50b87b5efabd1a1a1da3922abd25708407061a3cb\",\"path\":\"src/review_gauntlet/coverage_projection.py\",\"rule_id\":\"data-validation\",\"content\":\"`min()` \u306e `key` \u306b `(\\\"P0\\\",\\\"P1\\\",\\\"P2\\\",\\\"P3\\\").index(label)` \u3092\u4f7f\u7528\u3057\u3066\u3044\u307e\u3059\u304c\u3001`priority_label` \u304c\u578b\u30c1\u30a7\u30c3\u30af\u4e0a\u306f `Literal` \u3067\u3042\u3063\u3066\u3082\u30e9\u30f3\u30bf\u30a4\u30e0\u3067\u306f\u5358\u306a\u308b `str` \u3067\u3059\u3002`_priority_label` \u306e\u30ed\u30b8\u30c3\u30af\u30d0\u30b0\u3084\u5c06\u6765\u306e\u5909\u66f4\u3067\u4e88\u671f\u3057\u306a\u3044\u30e9\u30d9\u30eb\u304c\u751f\u6210\u3055\u308c\u305f\u5834\u5408\u3001`list.index()` \u304c `ValueError` \u3092\u9001\u51fa\u3057\u30a2\u30d7\u30ea\u5168\u4f53\u304c\u30af\u30e9\u30c3\u30b7\u30e5\u3057\u307e\u3059\u3002\u5b89\u5168\u306a\u6bd4\u8f03\u306e\u305f\u3081\u306b\u8f9e\u66f8\u30eb\u30c3\u30af\u30a2\u30c3\u30d7\u304b\u30c7\u30d5\u30a9\u30eb\u30c8\u4ed8\u304d\u306e\u65b9\u6cd5\u3092\u4f7f\u7528\u3057\u3066\u304f\u3060\u3055\u3044\u3002\",\"suggestion_code\":\"_LABEL_ORDER = {\\\"P0\\\": 0, \\\"P1\\\": 1, \\\"P2\\\": 2, \\\"P3\\\": 3}\\n\\n# ... in _rule_summaries:\\n                priority_label=min(\\n                    (entry.priority_label for entry in rule_entries),\\n                    key=lambda label: _LABEL_ORDER.get(label, 99),\\n                ),\",\"existing_code\":\"                priority_label=min(\\n                    (entry.priority_label for entry in rule_entries),\\n                    key=lambda label: (\\\"P0\\\", \\\"P1\\\", \\\"P2\\\", \\\"P3\\\").index(label),\\n                ),\",\"start_line\":439,\"end_line\":442,\"thinking\":\"list.index() \u306f\u5024\u304c\u898b\u3064\u304b\u3089\u306a\u3044\u5834\u5408\u306b ValueError \u3092\u9001\u51fa\u3059\u308b\u3002\u30e9\u30f3\u30bf\u30a4\u30e0\u3067\u306f Literal \u5236\u7d04\u306f\u5f37\u5236\u3055\u308c\u306a\u3044\u305f\u3081\u3001\u4e88\u671f\u3057\u306a\u3044\u6587\u5b57\u5217\u304c\u6e21\u308b\u3068\u30af\u30e9\u30c3\u30b7\u30e5\u3059\u308b\u3002dict.get() \u3067\u30c7\u30d5\u30a9\u30eb\u30c8\u5024\u3092\u8fd4\u3059\u307b\u3046\u304c\u9632\u5fa1\u7684\u3067\u5b89\u5168\u3002\",\"imprecise\":false,\"dismiss_reason\":null}",
+      "path": "src/review_gauntlet/coverage_projection.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-b15374b13220",
+      "state": "dismissed"
+    },
+    {
+      "checkpoint_id": "RGC-c1316fcdcd9c-RGS-b15374b13220",
+      "content": "`format_event_time` only catches `ValueError`, but if `timestamp` is not a string (e.g., `None` from a missing JSON field), `timestamp.replace(...)` raises `AttributeError` which propagates uncaught and would crash the TUI. Since `event.timestamp` comes from external data, non-string values are plausible.",
+      "finding_id": "RGF-1040",
+      "fingerprint": "92513e7921563550c4857f54252b0b0e8f6f14ba40a899acab6c24a135cb14aa",
+      "latest_occurrence": {
+        "cell_id": "RGC-8610c7a6f661b70a",
+        "end_line": 648,
+        "finding_id": "RGF-1040",
+        "imprecise": 0,
+        "occurrence_id": 1040,
+        "path": "src/review_gauntlet/run_tui.py",
+        "run_id": 310,
+        "start_line": 644
+      },
+      "metadata": "{\"fingerprint\":\"92513e7921563550c4857f54252b0b0e8f6f14ba40a899acab6c24a135cb14aa\",\"path\":\"src/review_gauntlet/run_tui.py\",\"rule_id\":\"data-validation\",\"content\":\"`format_event_time` only catches `ValueError`, but if `timestamp` is not a string (e.g., `None` from a missing JSON field), `timestamp.replace(...)` raises `AttributeError` which propagates uncaught and would crash the TUI. Since `event.timestamp` comes from external data, non-string values are plausible.\",\"suggestion_code\":\"def format_event_time(timestamp: str) -> str:\\n    try:\\n        return datetime.fromisoformat(str(timestamp).replace(\\\"Z\\\", \\\"+00:00\\\")).strftime(\\\"%H:%M:%S\\\")\\n    except (ValueError, AttributeError):\\n        return \\\"--:--:--\\\"\",\"existing_code\":\"def format_event_time(timestamp: str) -> str:\\n    try:\\n        return datetime.fromisoformat(timestamp.replace(\\\"Z\\\", \\\"+00:00\\\")).strftime(\\\"%H:%M:%S\\\")\\n    except ValueError:\\n        return \\\"--:--:--\\\"\",\"start_line\":644,\"end_line\":648,\"thinking\":\"The function type-annotates `timestamp` as `str`, but the caller passes `event.timestamp` which comes from parsed external JSON. JSON payloads can have null/non-string values for timestamp fields. `None.replace(...)` raises AttributeError, not ValueError, so the current except clause doesn't guard against it. The safe fix is either to also catch AttributeError, or to coerce with str() first.\",\"imprecise\":false,\"dismiss_reason\":null}",
+      "path": "src/review_gauntlet/run_tui.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-b15374b13220",
+      "state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-c1316fcdcd9c-RGS-b15374b13220",
+      "content": "`select_active_gate` accesses `gates[-1]` as a default without checking that `gates` is non-empty. It also accesses `gates[mapped_index - 1]` where `mapped_index` comes from `_NEXT_ACTION_GATE_INDEX` (values 1\u20134) without validating that the tuple has enough elements. If `gates` were ever empty or shorter than expected (e.g., from a future refactor), this raises `IndexError`.",
+      "finding_id": "RGF-1041",
+      "fingerprint": "02c0e97ba85684e9386ca0e94d71d3bbbef54939f90dde123e4ecd6180ca294e",
+      "latest_occurrence": {
+        "cell_id": "RGC-8610c7a6f661b70a",
+        "end_line": 816,
+        "finding_id": "RGF-1041",
+        "imprecise": 0,
+        "occurrence_id": 1041,
+        "path": "src/review_gauntlet/run_tui.py",
+        "run_id": 310,
+        "start_line": 809
+      },
+      "metadata": "{\"fingerprint\":\"02c0e97ba85684e9386ca0e94d71d3bbbef54939f90dde123e4ecd6180ca294e\",\"path\":\"src/review_gauntlet/run_tui.py\",\"rule_id\":\"data-validation\",\"content\":\"`select_active_gate` accesses `gates[-1]` as a default without checking that `gates` is non-empty. It also accesses `gates[mapped_index - 1]` where `mapped_index` comes from `_NEXT_ACTION_GATE_INDEX` (values 1\u20134) without validating that the tuple has enough elements. If `gates` were ever empty or shorter than expected (e.g., from a future refactor), this raises `IndexError`.\",\"suggestion_code\":\"def select_active_gate(snapshot: RunSnapshot, gates: tuple[FinalizeGate, ...]) -> FinalizeGate:\\n    if not gates:\\n        raise ValueError(\\\"gates must be non-empty\\\")\\n    mapped_index = _NEXT_ACTION_GATE_INDEX.get(snapshot.next_required_action or \\\"\\\")\\n    if mapped_index is not None and 1 <= mapped_index <= len(gates):\\n        return gates[mapped_index - 1]\\n    return next(\\n        (gate for gate in gates if gate.state in {\\\"running\\\", \\\"blocked\\\", \\\"failed\\\", \\\"next\\\"}),\\n        gates[-1],\\n    )\",\"existing_code\":\"def select_active_gate(snapshot: RunSnapshot, gates: tuple[FinalizeGate, ...]) -> FinalizeGate:\\n    mapped_index = _NEXT_ACTION_GATE_INDEX.get(snapshot.next_required_action or \\\"\\\")\\n    if mapped_index is not None:\\n        return gates[mapped_index - 1]\\n    return next(\\n        (gate for gate in gates if gate.state in {\\\"running\\\", \\\"blocked\\\", \\\"failed\\\", \\\"next\\\"}),\\n        gates[-1],\\n    )\",\"start_line\":809,\"end_line\":816,\"thinking\":\"Both accesses\u2014`gates[mapped_index - 1]` and the default `gates[-1]`\u2014assume `gates` is non-empty and that `mapped_index` is within bounds. The current code works because `derive_finalize_gates` always returns a 4-element tuple, but `select_active_gate` has no local validation of this invariant. Adding a guard makes the assumption explicit and prevents a silent IndexError if the invariant is ever violated.\",\"imprecise\":false,\"dismiss_reason\":null}",
+      "path": "src/review_gauntlet/run_tui.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-b15374b13220",
+      "state": "dismissed"
+    },
+    {
+      "checkpoint_id": "RGC-c1316fcdcd9c-RGS-b15374b13220",
+      "content": "The `stale` field is hardcoded to 0 in `_rule_summaries`, but the sorting key on line 450 includes `summary.stale`. This makes that sort term permanently dead code and the `RuleCoverageSummary.stale` field always misleadingly reports 0 regardless of how many stale cells exist. The same bug appears in `_file_summaries` at line 470. Callers that display or test stale counts will see incorrect data.",
+      "finding_id": "RGF-1042",
+      "fingerprint": "37dcdcbeb4403a9186aad09b181a1dacaca8258428c99b6aee40eb4908f3cfca",
+      "latest_occurrence": {
+        "cell_id": "RGC-71fae651f803d68a",
+        "end_line": 435,
+        "finding_id": "RGF-1042",
+        "imprecise": 0,
+        "occurrence_id": 1042,
+        "path": "src/review_gauntlet/coverage_projection.py",
+        "run_id": 310,
+        "start_line": 435
+      },
+      "metadata": "{\"fingerprint\":\"37dcdcbeb4403a9186aad09b181a1dacaca8258428c99b6aee40eb4908f3cfca\",\"path\":\"src/review_gauntlet/coverage_projection.py\",\"rule_id\":\"test-evidence\",\"content\":\"The `stale` field is hardcoded to 0 in `_rule_summaries`, but the sorting key on line 450 includes `summary.stale`. This makes that sort term permanently dead code and the `RuleCoverageSummary.stale` field always misleadingly reports 0 regardless of how many stale cells exist. The same bug appears in `_file_summaries` at line 470. Callers that display or test stale counts will see incorrect data.\",\"suggestion_code\":\"                stale=sum(1 for entry in rule_entries if entry.state == \\\"stale\\\"),\",\"existing_code\":\"                stale=0,  # stale is intentionally ignored\",\"start_line\":435,\"end_line\":435,\"thinking\":\"Both _rule_summaries and _file_summaries set stale=0 with a comment claiming it is intentional, yet the sort keys in both functions reference summary.stale. If stale is always 0 the sort term is dead code and the exported summary fields are wrong. No test would catch this unless stale counts are explicitly asserted.\",\"imprecise\":false,\"dismiss_reason\":null}",
+      "path": "src/review_gauntlet/coverage_projection.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-b15374b13220",
+      "state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-c1316fcdcd9c-RGS-b15374b13220",
+      "content": "Same hardcoded `stale=0` bug in `_file_summaries`. The sorting key at line 484 references `summary.stale`, making that term permanently dead code. Fix by counting entries whose state equals \"stale\".",
+      "finding_id": "RGF-1043",
+      "fingerprint": "397b80a3a82f6d5d7c250aec16851667ef31bb048d2f60398e92b7f2e7774504",
+      "latest_occurrence": {
+        "cell_id": "RGC-71fae651f803d68a",
+        "end_line": 470,
+        "finding_id": "RGF-1043",
+        "imprecise": 0,
+        "occurrence_id": 1043,
+        "path": "src/review_gauntlet/coverage_projection.py",
+        "run_id": 310,
+        "start_line": 470
+      },
+      "metadata": "{\"fingerprint\":\"397b80a3a82f6d5d7c250aec16851667ef31bb048d2f60398e92b7f2e7774504\",\"path\":\"src/review_gauntlet/coverage_projection.py\",\"rule_id\":\"test-evidence\",\"content\":\"Same hardcoded `stale=0` bug in `_file_summaries`. The sorting key at line 484 references `summary.stale`, making that term permanently dead code. Fix by counting entries whose state equals \\\"stale\\\".\",\"suggestion_code\":\"                stale=sum(1 for entry in file_entries if entry.state == \\\"stale\\\"),\",\"existing_code\":\"                stale=0,  # stale is intentionally ignored\",\"start_line\":470,\"end_line\":470,\"thinking\":\"Mirror of the bug at line 435, occurring in _file_summaries.\",\"imprecise\":false,\"dismiss_reason\":null}",
+      "path": "src/review_gauntlet/coverage_projection.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-b15374b13220",
+      "state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-c1316fcdcd9c-RGS-b15374b13220",
+      "content": "When a finding's `latest_cell_id` does not match any current cell, `_findings_by_cell` fans the finding out to **every** cell that shares the same `(file_path, rule_id)`. If a file is covered by multiple slices, the finding is appended to all of their buckets, inflating `finding_count` and `actionable_finding_count` in each resulting `QueueEntry`. Priority scores and labels computed in `_queue_entry_for_cell` are therefore overcounted for multi-slice files. A test pairing two slices on the same file with a single orphaned finding would expose this.",
+      "finding_id": "RGF-1044",
+      "fingerprint": "8f957f827cacfdbe94a1d1313a64acf22272ca2e1adc08e178e6c8bb45aa1441",
+      "latest_occurrence": {
+        "cell_id": "RGC-71fae651f803d68a",
+        "end_line": 321,
+        "finding_id": "RGF-1044",
+        "imprecise": 0,
+        "occurrence_id": 1044,
+        "path": "src/review_gauntlet/coverage_projection.py",
+        "run_id": 310,
+        "start_line": 314
+      },
+      "metadata": "{\"fingerprint\":\"8f957f827cacfdbe94a1d1313a64acf22272ca2e1adc08e178e6c8bb45aa1441\",\"path\":\"src/review_gauntlet/coverage_projection.py\",\"rule_id\":\"test-evidence\",\"content\":\"When a finding's `latest_cell_id` does not match any current cell, `_findings_by_cell` fans the finding out to **every** cell that shares the same `(file_path, rule_id)`. If a file is covered by multiple slices, the finding is appended to all of their buckets, inflating `finding_count` and `actionable_finding_count` in each resulting `QueueEntry`. Priority scores and labels computed in `_queue_entry_for_cell` are therefore overcounted for multi-slice files. A test pairing two slices on the same file with a single orphaned finding would expose this.\",\"suggestion_code\":\"        candidate_cells = cells_by_file_rule.get((finding.file_path, finding.rule_id), [])\\n        if candidate_cells:\\n            # Assign to exactly one representative cell to avoid double-counting.\\n            buckets[candidate_cells[0].cell_id].append(finding)\",\"existing_code\":\"        candidate_cells = cells_by_file_rule.get((finding.file_path, finding.rule_id), [])\\n        for cell in candidate_cells:\\n            buckets[cell.cell_id].append(finding)\",\"start_line\":314,\"end_line\":321,\"thinking\":\"The fan-out to all candidate cells was probably intended to ensure orphaned findings are not silently dropped, but it causes each matching cell to count the same finding independently. Using a single representative cell (e.g., the first) prevents inflation while still surfacing the finding.\",\"imprecise\":false,\"dismiss_reason\":null}",
+      "path": "src/review_gauntlet/coverage_projection.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-b15374b13220",
+      "state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-c1316fcdcd9c-RGS-b15374b13220",
+      "content": "`changed_since_review` is set to `True` whenever `cell.state == \"stale\"`, even if the file content has not actually changed. This propagates an incorrect `changed_since_review=True` value into every `QueueEntry` for stale cells, misleading consumers that inspect the field directly. Line 360 only suppresses the \"changed file\" human-readable reason for stale cells; the boolean field itself still says the file changed. Consider separating the two signals.",
+      "finding_id": "RGF-1045",
+      "fingerprint": "89918608abe1ba60e93f614fda3ce4be1b6d8ef7efcb7bd52ffedcf8154ba8cb",
+      "latest_occurrence": {
+        "cell_id": "RGC-71fae651f803d68a",
+        "end_line": 177,
+        "finding_id": "RGF-1045",
+        "imprecise": 0,
+        "occurrence_id": 1045,
+        "path": "src/review_gauntlet/coverage_projection.py",
+        "run_id": 310,
+        "start_line": 177
+      },
+      "metadata": "{\"fingerprint\":\"89918608abe1ba60e93f614fda3ce4be1b6d8ef7efcb7bd52ffedcf8154ba8cb\",\"path\":\"src/review_gauntlet/coverage_projection.py\",\"rule_id\":\"test-evidence\",\"content\":\"`changed_since_review` is set to `True` whenever `cell.state == \\\"stale\\\"`, even if the file content has not actually changed. This propagates an incorrect `changed_since_review=True` value into every `QueueEntry` for stale cells, misleading consumers that inspect the field directly. Line 360 only suppresses the \\\"changed file\\\" human-readable reason for stale cells; the boolean field itself still says the file changed. Consider separating the two signals.\",\"suggestion_code\":\"                changed_since_review=cell.file_path in changed_files,\",\"existing_code\":\"                changed_since_review=cell.file_path in changed_files or cell.state == \\\"stale\\\",\",\"start_line\":177,\"end_line\":177,\"thinking\":\"Stale state and file-content change are orthogonal concepts. Conflating them in the changed_since_review boolean makes the QueueEntry field unreliable for callers who need to distinguish 'file changed' from 'review is stale for other reasons'. The _queue_entry_for_cell function already handles stale state explicitly, so removing the stale shortcut here does not lose any priority logic.\",\"imprecise\":false,\"dismiss_reason\":null}",
+      "path": "src/review_gauntlet/coverage_projection.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-b15374b13220",
+      "state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-c1316fcdcd9c-RGS-b15374b13220",
+      "content": "sanitize_agent_output_line is a security-critical function that redacts credentials (tokens, secrets, API keys, passwords) from agent stdout/stderr before they are rendered in the TUI. It has zero test coverage: no test in tests/test_run_tui.py or any other test file imports or exercises it. Without tests, silent regressions to the redaction logic (e.g. a pattern silently failing to match, ANSI-stripping interacting badly with a secret pattern, or a new credential format being missed) would reach the TUI undetected. The function should have at minimum: a test that a Bearer token is redacted, a test that KEY=value env-var form is redacted, and a test that ANSI escape sequences are stripped before redaction so a credential split across CSI codes cannot bypass the patterns.",
+      "finding_id": "RGF-1046",
+      "fingerprint": "2abb0284107ddf369deb3d67f1267e6fb8f91e8f1bb9a610aa61d49de89ff2fe",
+      "latest_occurrence": {
+        "cell_id": "RGC-c1ad423b70f325a0",
+        "end_line": 2108,
+        "finding_id": "RGF-1046",
+        "imprecise": 0,
+        "occurrence_id": 1046,
+        "path": "src/review_gauntlet/run_tui.py",
+        "run_id": 310,
+        "start_line": 2093
+      },
+      "metadata": "{\"fingerprint\":\"2abb0284107ddf369deb3d67f1267e6fb8f91e8f1bb9a610aa61d49de89ff2fe\",\"path\":\"src/review_gauntlet/run_tui.py\",\"rule_id\":\"test-evidence\",\"content\":\"sanitize_agent_output_line is a security-critical function that redacts credentials (tokens, secrets, API keys, passwords) from agent stdout/stderr before they are rendered in the TUI. It has zero test coverage: no test in tests/test_run_tui.py or any other test file imports or exercises it. Without tests, silent regressions to the redaction logic (e.g. a pattern silently failing to match, ANSI-stripping interacting badly with a secret pattern, or a new credential format being missed) would reach the TUI undetected. The function should have at minimum: a test that a Bearer token is redacted, a test that KEY=value env-var form is redacted, and a test that ANSI escape sequences are stripped before redaction so a credential split across CSI codes cannot bypass the patterns.\",\"suggestion_code\":\"def sanitize_agent_output_line(value: object, *, limit: int = 120) -> str:\\n    text = re.sub(r\\\"\\\\x1b\\\\[[0-?]*[ -/]*[@-~]\\\", \\\"\\\", str(value))  # CSI sequences\\n    text = re.sub(\\n        r\\\"\\\\x1b\\\\][^\\\\x07\\\\n\\\\r]*(?:\\\\x07|\\\\x1b\\\\\\\\)\\\", \\\"\\\", text\\n    )  # OSC sequences (e.g. terminal hyperlinks)\\n    text = text.replace(\\\"\\\\r\\\", \\\"\\\\n\\\")\\n    text = \\\" \\\".join(_plain_text(text).split())\\n    secret_patterns = (\\n        r\\\"\\\\b[A-Z0-9_]*(?:TOKEN|SECRET|KEY|PASSWORD)=\\\\S+\\\",\\n        r\\\"\\\\b(?:authorization|x-api-key)\\\\s*:\\\\s*\\\\S+(?:\\\\s+\\\\S+)?\\\",\\n        r\\\"[\\\\\\\"']?\\\\b(?:api[_-]?key|token|secret|password)\\\\b[\\\\\\\"']?\\\\s*[:=]\\\\s*[\\\\\\\"']?\\\\S+[\\\\\\\"']?\\\",\\n        r\\\"\\\\bBearer\\\\s+[A-Za-z0-9+/=_\\\\-.]+\\\",\\n    )\\n    for pattern in secret_patterns:\\n        text = re.sub(pattern, \\\"<redacted>\\\", text, flags=re.IGNORECASE)\\n    return _summarize_text(text, limit=limit)\\n\\n# Tests to add in tests/test_run_tui.py:\\n# from review_gauntlet.run_tui import sanitize_agent_output_line\\n#\\n# def test_sanitize_redacts_bearer_token() -> None:\\n#     assert sanitize_agent_output_line(\\\"Authorization: Bearer abc123XYZ\\\") == \\\"Authorization: <redacted>\\\"\\n#\\n# def test_sanitize_redacts_env_var_form() -> None:\\n#     assert sanitize_agent_output_line(\\\"MY_API_KEY=s3cr3t running command\\\") == \\\"<redacted> running command\\\"\\n#\\n# def test_sanitize_strips_ansi_before_redacting() -> None:\\n#     # ANSI codes should be removed before pattern matching so they cannot split a secret\\n#     result = sanitize_agent_output_line(\\\"\\\\x1b[32mBearer\\\\x1b[0m tok123\\\")\\n#     assert \\\"<redacted>\\\" in result\\n#\\n# def test_sanitize_preserves_nonsecret_output() -> None:\\n#     assert sanitize_agent_output_line(\\\"reviewing src/app.py\\\") == \\\"reviewing src/app.py\\\"\",\"existing_code\":\"def sanitize_agent_output_line(value: object, *, limit: int = 120) -> str:\\n    text = re.sub(r\\\"\\\\x1b\\\\[[0-?]*[ -/]*[@-~]\\\", \\\"\\\", str(value))  # CSI sequences\\n    text = re.sub(\\n        r\\\"\\\\x1b\\\\][^\\\\x07\\\\n\\\\r]*(?:\\\\x07|\\\\x1b\\\\\\\\)\\\", \\\"\\\", text\\n    )  # OSC sequences (e.g. terminal hyperlinks)\\n    text = text.replace(\\\"\\\\r\\\", \\\"\\\\n\\\")\\n    text = \\\" \\\".join(_plain_text(text).split())\\n    secret_patterns = (\\n        r\\\"\\\\b[A-Z0-9_]*(?:TOKEN|SECRET|KEY|PASSWORD)=\\\\S+\\\",\\n        r\\\"\\\\b(?:authorization|x-api-key)\\\\s*:\\\\s*\\\\S+(?:\\\\s+\\\\S+)?\\\",\\n        r\\\"[\\\\\\\"']?\\\\b(?:api[_-]?key|token|secret|password)\\\\b[\\\\\\\"']?\\\\s*[:=]\\\\s*[\\\\\\\"']?\\\\S+[\\\\\\\"']?\\\",\\n        r\\\"\\\\bBearer\\\\s+[A-Za-z0-9+/=_\\\\-.]+\\\",\\n    )\\n    for pattern in secret_patterns:\\n        text = re.sub(pattern, \\\"<redacted>\\\", text, flags=re.IGNORECASE)\\n    return _summarize_text(text, limit=limit)\",\"start_line\":2093,\"end_line\":2108,\"thinking\":\"sanitize_agent_output_line is security-sensitive (it prevents credential leakage into TUI display) but has no tests anywhere in the test suite. The function applies multiple regex patterns to strip ANSI escapes and redact secrets. Without test evidence, there is no assurance that: (1) each pattern actually matches the intended format, (2) ANSI stripping happens before pattern application preventing bypass via escape-split credentials, (3) the limit truncation does not cut off the redaction marker itself. This is a clear test-evidence gap for a function where a failure mode (credential leakage to TUI) has real security consequences.\",\"imprecise\":false,\"dismiss_reason\":null}",
+      "path": "src/review_gauntlet/run_tui.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-b15374b13220",
+      "state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-c1316fcdcd9c-RGS-b15374b13220",
+      "content": "The `cov.stale` branch in header_status_text (and the parallel branch at line 1147-1148 in header_status_tui_lines) is dead code: ProgressMetrics.stale is always 0 because calculate_progress_metrics initialises `stale = 0` and never increments it (comment reads 'stale is intentionally ignored'). No test documents that this omission is intentional, so a future maintainer who changes calculate_progress_metrics to start populating stale counts will unknowingly activate these display paths without any test signalling the behavioural change. Add a test that verifies stale entries are NOT shown in the header even when the coverage dict contains stale cells, or remove the dead branches.",
+      "finding_id": "RGF-1047",
+      "fingerprint": "527d4d1d9f1b51a11e52992e6ee1ab3232b4950d8c35788951abe2ecbc3a00e2",
+      "latest_occurrence": {
+        "cell_id": "RGC-c1ad423b70f325a0",
+        "end_line": 1034,
+        "finding_id": "RGF-1047",
+        "imprecise": 0,
+        "occurrence_id": 1047,
+        "path": "src/review_gauntlet/run_tui.py",
+        "run_id": 310,
+        "start_line": 1033
+      },
+      "metadata": "{\"fingerprint\":\"527d4d1d9f1b51a11e52992e6ee1ab3232b4950d8c35788951abe2ecbc3a00e2\",\"path\":\"src/review_gauntlet/run_tui.py\",\"rule_id\":\"test-evidence\",\"content\":\"The `cov.stale` branch in header_status_text (and the parallel branch at line 1147-1148 in header_status_tui_lines) is dead code: ProgressMetrics.stale is always 0 because calculate_progress_metrics initialises `stale = 0` and never increments it (comment reads 'stale is intentionally ignored'). No test documents that this omission is intentional, so a future maintainer who changes calculate_progress_metrics to start populating stale counts will unknowingly activate these display paths without any test signalling the behavioural change. Add a test that verifies stale entries are NOT shown in the header even when the coverage dict contains stale cells, or remove the dead branches.\",\"suggestion_code\":\"    # cov.stale is intentionally always 0 (stale cells count as completed);\\n    # this branch is preserved only for future use if stale display is enabled.\\n    if cov.stale:\\n        parts.append(f\\\"stale {cov.stale}\\\")\",\"existing_code\":\"    if cov.stale:\\n        parts.append(f\\\"stale {cov.stale}\\\")\",\"start_line\":1033,\"end_line\":1034,\"thinking\":\"calculate_progress_metrics initialises stale=0 and comments 'stale is intentionally ignored'. This means cov.stale is always 0, making the `if cov.stale:` guard dead code. The same dead branch appears at line 1147-1148. There is no test that asserts this omission is intentional (e.g. passing coverage={'stale': 5} and verifying 'stale' does not appear in the header). This is a test-evidence gap: without a negative test, refactoring calculate_progress_metrics to start counting stale entries would silently change TUI output.\",\"imprecise\":false,\"dismiss_reason\":null}",
+      "path": "src/review_gauntlet/run_tui.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-b15374b13220",
+      "state": "confirmed"
+    }
+  ],
+  "schema_version": 1
+}
