@@ -27,6 +27,7 @@ def test_review_help_mentions_parallel_not_verify_fixes(capsys: pytest.CaptureFi
     assert exc_info.value.code == 0
     output = capsys.readouterr().out
     assert "--parallel" in output
+    assert "--cell" in output
     assert "verify-fixes" not in output
 
 
