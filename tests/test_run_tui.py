@@ -2,6 +2,7 @@ from typing import Any, cast
 
 import pytest
 
+import review_gauntlet.run_tui as run_tui
 from review_gauntlet.coverage_projection import (
     CoverageCellFilter,
     CoverageCellInput,
@@ -15,18 +16,16 @@ from review_gauntlet.coverage_projection import (
 )
 from review_gauntlet.run_controller import AgentLifecycle, RunController, RunSnapshot
 from review_gauntlet.run_tui import (
-    _FIND_COUNT_COLOR,  # pyright: ignore[reportPrivateUsage]
-    _FINDING_STATE_COLORS,  # pyright: ignore[reportPrivateUsage]
-    _PRIORITY_COLORS,  # pyright: ignore[reportPrivateUsage]
     FINDING_STATES,
     actionable_finding_summary,
     calculate_progress_metrics,
     cells_text,
-    color_legend_tui_lines,
     compact_dashboard_text,
     create_run_app,
     dashboard_state,
     derive_finalize_gates,
+    file_hotlist_text,
+    files_tui_lines,
     finalized_summary_text,
     findings_panel_title,
     findings_tui_lines,
@@ -34,6 +33,8 @@ from review_gauntlet.run_tui import (
     header_agent_text,
     header_status_tui_lines,
     render_tui_lines,
+    rule_coverage_text,
+    rules_tui_lines,
     sanitize_agent_output_line,
     tui_render_sections,
 )
@@ -268,25 +269,91 @@ def test_cells_view_renders_resolved_over_total_findings() -> None:
     assert "resolved" not in render_tui_lines(tui_render_sections(view)["files"])
 
 
-def test_color_legend_matches_finding_progress_ratio() -> None:
-    legend = render_tui_lines(color_legend_tui_lines())
+def _coverage_ratio_view() -> Any:
+    projection = CoverageProjection(
+        queue=(),
+        rules=(
+            RuleCoverageSummary(
+                rule_id="security",
+                total=3,
+                reviewed=2,
+                pending=1,
+                stale=0,
+                finding_count=2,
+                actionable_findings=1,
+                resolved_findings=1,
+                priority_label="P0",
+            ),
+        ),
+        files=(
+            FileCoverageSummary(
+                file_path="src/app.py",
+                total=5,
+                reviewed=4,
+                pending=1,
+                stale=0,
+                finding_count=3,
+                actionable_findings=3,
+                resolved_findings=0,
+                highest_priority_label="P1",
+                highest_priority_score=90,
+            ),
+        ),
+        findings=(),
+    )
+    snapshot = RunSnapshot(
+        session_id="RGS-test",
+        coverage={"reviewed": 2, "pending": 1},
+        findings={"open": 3},
+        next_ready_prompt="review",
+        step=1,
+        agent_status="idle",
+        command_argv=(),
+        elapsed_seconds=1,
+        coverage_projection=projection,
+    )
+    return dashboard_state(snapshot, ())
 
-    assert "priority P0 P1 P2 P3" in legend
-    assert "findings open confirmed dismissed" in legend
-    assert "progress done / find" in legend
-    assert "pend / find" not in legend
-    assert "resolved" not in legend
+
+def test_rule_coverage_uses_compact_header_and_ratio_semantics() -> None:
+    rendered = render_tui_lines(rules_tui_lines(_coverage_ratio_view())).splitlines()
+
+    assert rendered[0].split() == ["prio", "target", "cells", "fix"]
+    assert rendered[1].split() == ["P0", "security", "2/3", "1/2"]
+    assert "reviewed" not in rendered[1]
+    assert "findings" not in rendered[1]
 
 
-def test_color_legend_reuses_body_color_sources() -> None:
-    legend_fields = {field.key: field for line in color_legend_tui_lines() for field in line.fields}
+def test_file_hotlist_uses_matching_compact_header_and_ratio_semantics() -> None:
+    rendered = render_tui_lines(files_tui_lines(_coverage_ratio_view())).splitlines()
 
-    for priority, color in _PRIORITY_COLORS.items():
-        assert legend_fields[f"legend.priority.{priority}"].color == color
-    for state, color in _FINDING_STATE_COLORS.items():
-        assert legend_fields[f"legend.finding_state.{state}"].color == color
-    assert legend_fields["legend.progress.done"].color == _FIND_COUNT_COLOR
-    assert legend_fields["legend.progress.find"].color == _FIND_COUNT_COLOR
+    assert rendered[0].split() == ["prio", "target", "cells", "fix"]
+    assert rendered[1].split() == ["P1", "src/app.py", "4/5", "0/3"]
+    assert "reviewed" not in rendered[1]
+    assert "findings" not in rendered[1]
+
+
+def test_plain_coverage_helpers_match_compact_tui_semantics() -> None:
+    view = _coverage_ratio_view()
+
+    assert rule_coverage_text(view).splitlines()[0].split() == ["prio", "target", "cells", "fix"]
+    assert file_hotlist_text(view).splitlines()[0].split() == ["prio", "target", "cells", "fix"]
+    assert "P0" in rule_coverage_text(view)
+    assert "2/3" in rule_coverage_text(view)
+    assert "1/2" in rule_coverage_text(view)
+    assert "P1" in file_hotlist_text(view)
+    assert "4/5" in file_hotlist_text(view)
+    assert "0/3" in file_hotlist_text(view)
+    assert "reviewed" not in rule_coverage_text(view)
+    assert "findings" not in file_hotlist_text(view)
+
+
+def test_active_tui_render_path_has_no_footer_color_legend() -> None:
+    sections = tui_render_sections(_coverage_ratio_view())
+
+    assert not hasattr(run_tui, "color_legend_tui_lines")
+    assert "legend" not in sections
+    assert "legend" not in compact_dashboard_text(_running_snapshot()).lower()
 
 
 def test_task_title_mapping_uses_resolve_findings() -> None:
