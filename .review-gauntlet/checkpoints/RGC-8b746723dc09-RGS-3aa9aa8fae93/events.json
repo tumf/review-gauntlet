@@ -1,0 +1,160 @@
+{
+  "checkpoint_id": "RGC-8b746723dc09-RGS-3aa9aa8fae93",
+  "events": [
+    {
+      "checkpoint_id": "RGC-8b746723dc09-RGS-3aa9aa8fae93",
+      "created_at": "2026-06-20 00:52:01",
+      "event_id": 1712,
+      "finding_id": "RGF-1065",
+      "from_state": "open",
+      "metadata": {},
+      "reason": "The alternating stdout/stderr interleaving pattern is synthetic and does not reflect actual temporal output ordering. When stream sizes differ, the pattern is misleading (e.g., 1 stderr line paired with 100 stdout lines creates an interleaving that never occurred). No test evidence verifies this behavior as intentional.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-8b746723dc09-RGS-3aa9aa8fae93",
+      "created_at": "2026-06-20 00:52:09",
+      "event_id": 1713,
+      "finding_id": "RGF-1066",
+      "from_state": "open",
+      "metadata": {},
+      "reason": "Verified by code inspection: LookupError (no active session) is caught at cli.py:680 with fail(str(exc), code=1), producing the same exit code 1 as the prompt-is-None branch (SystemExit(1) at line 1092). Callers cannot distinguish normal 'no ready task' from error 'no active session'.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-8b746723dc09-RGS-3aa9aa8fae93",
+      "created_at": "2026-06-20 00:52:14",
+      "event_id": 1714,
+      "finding_id": "RGF-1067",
+      "from_state": "open",
+      "metadata": {},
+      "reason": "Confirmed by code inspection: lines 643-645 check argv == ['--version'] only, meaning --version must be the sole argument. Standard argparse add_argument('--version', action='version') would handle the flag in any position and output to stdout with SystemExit(0). This manual approach also misses edge cases like 'review-gauntlet subcommand --version'.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-8b746723dc09-RGS-3aa9aa8fae93",
+      "created_at": "2026-06-20 00:52:17",
+      "event_id": 1715,
+      "finding_id": "RGF-1068",
+      "from_state": "open",
+      "metadata": {},
+      "reason": "Confirmed: regex \\d{4}-\\d{2}-\\d{2} accepts invalid calendar dates such as 2023-13-99 or 2024-02-30. Using datetime.date.fromisoformat() or strptime would reject such values. The validation gives false confidence since only format, not calendar validity, is checked.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-8b746723dc09-RGS-3aa9aa8fae93",
+      "created_at": "2026-06-20 00:54:27",
+      "event_id": 1716,
+      "finding_id": "RGF-1069",
+      "from_state": "open",
+      "metadata": {},
+      "reason": "Integration test (test_run_controller_retries_no_progress_with_diagnostic) exercises the happy-path call to _prompt_with_no_progress_diagnostic, but the defensive branches of all three helpers are untested: _diagnostic_string_sequence(non-list/non-str) returns empty tuple, _diagnostic_artifact_context(non-Mapping) returns 'none', and _diagnostic_ignored_resolutions items without finding_id are silently skipped. No unit tests cover these code paths.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-8b746723dc09-RGS-3aa9aa8fae93",
+      "created_at": "2026-06-20 00:54:32",
+      "event_id": 1717,
+      "finding_id": "RGF-1070",
+      "from_state": "open",
+      "metadata": {},
+      "reason": "isinstance(3.0, int) is False in Python, so _int_or_zero(3.0) returns 0 instead of 3. Lines 309-310 use this helper for run_count and cell_terminal_count from CLI JSON output. If the API ever returns a numeric float (e.g. from a JSON encoder that emits 3.0), the value is silently discarded. The function accepts 'object' but its behavior on floats is neither documented nor guarded.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-8b746723dc09-RGS-3aa9aa8fae93",
+      "created_at": "2026-06-20 00:57:25",
+      "event_id": 1718,
+      "finding_id": "RGF-1071",
+      "from_state": "open",
+      "metadata": {
+        "dismiss_reason": "format_task_title_from_action is the only caller of _task_display and exhaustively maps all next_required_action values to known string titles via _ACTION_TASK_TITLES.get() with a 'READY TASK' fallback. Every string passed to _task_display is guaranteed to be a key in _ACTION_TASK_DESCRIPTIONS."
+      },
+      "reason": "format_task_title_from_action is the only caller of _task_display and exhaustively maps all next_required_action values to known string titles via _ACTION_TASK_TITLES.get() with a 'READY TASK' fallback. Every string passed to _task_display is guaranteed to be a key in _ACTION_TASK_DESCRIPTIONS.",
+      "to_state": "dismissed"
+    },
+    {
+      "checkpoint_id": "RGC-8b746723dc09-RGS-3aa9aa8fae93",
+      "created_at": "2026-06-20 00:57:29",
+      "event_id": 1719,
+      "finding_id": "RGF-1072",
+      "from_state": "open",
+      "metadata": {
+        "dismiss_reason": "derive_finalize_gates always returns a fixed 4-element tuple (lines 930-935). _NEXT_ACTION_GATE_INDEX values are 1, 2, 3, 4 mapping to indices 0, 1, 2, 3 - all within bounds. gates[-1] is also always valid on a 4-element tuple. No out-of-bounds access is possible given the invariant maintained by the call contract."
+      },
+      "reason": "derive_finalize_gates always returns a fixed 4-element tuple (lines 930-935). _NEXT_ACTION_GATE_INDEX values are 1, 2, 3, 4 mapping to indices 0, 1, 2, 3 - all within bounds. gates[-1] is also always valid on a 4-element tuple. No out-of-bounds access is possible given the invariant maintained by the call contract.",
+      "to_state": "dismissed"
+    },
+    {
+      "checkpoint_id": "RGC-8b746723dc09-RGS-3aa9aa8fae93",
+      "created_at": "2026-06-20 00:57:33",
+      "event_id": 1720,
+      "finding_id": "RGF-1073",
+      "from_state": "open",
+      "metadata": {},
+      "reason": "The sole test at test_run_tui.py:182 calls calculate_progress_metrics({'reviewed': 3, 'pending': 2}) without cell_terminal_count and does not assert on percent. The percent computation path with cell_terminal_count > 0 is exercised by the finalized snapshot test but indirectly via dashboard_state; the direct unit-level branch coverage is absent.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-8b746723dc09-RGS-3aa9aa8fae93",
+      "created_at": "2026-06-20 00:57:36",
+      "event_id": 1721,
+      "finding_id": "RGF-1074",
+      "from_state": "open",
+      "metadata": {},
+      "reason": "update_tui_render_state has no tests in the test suite. The flash expiry logic, the initialized flag transition, the key-in-previous vs not-in-previous branching, and _is_activity_value_key gating are all untested.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-8b746723dc09-RGS-3aa9aa8fae93",
+      "created_at": "2026-06-20 00:57:41",
+      "event_id": 1722,
+      "finding_id": "RGF-1075",
+      "from_state": "open",
+      "metadata": {},
+      "reason": "No direct tests for format_elapsed_time exist. The hours branch (>= 3600 seconds) is never exercised in the test suite. Non-finite input handling (math.isfinite guard at line 618) is also untested. The finalized-snapshot test at line 729 only exercises the MM:SS path (75 seconds = '01:15').",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-8b746723dc09-RGS-3aa9aa8fae93",
+      "created_at": "2026-06-20 00:57:45",
+      "event_id": 1723,
+      "finding_id": "RGF-1076",
+      "from_state": "open",
+      "metadata": {},
+      "reason": "_count_value (lines 2228-2242) is called at 30+ call sites to guard against malformed API responses including bool/float/str/None variants, but has no tests. The bool branch returning 0, the non-integer float branch, and the string parse error path are all unexercised.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-8b746723dc09-RGS-3aa9aa8fae93",
+      "created_at": "2026-06-20 00:57:51",
+      "event_id": 1724,
+      "finding_id": "RGF-1077",
+      "from_state": "open",
+      "metadata": {},
+      "reason": "header_status_text (line 1023) builds 'Finalize {cov.percent}% {bar} {cov.terminal}/{cov.total}' where 'Finalize' is a hardcoded label prefix. The TUI counterpart header_status_tui_lines (line 1138) omits this prefix, showing just '{cov.percent}% {bar} {cov.terminal}/{cov.total}'. The text-mode prefix makes the coverage count read as a finalization percentage rather than a review coverage metric.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-8b746723dc09-RGS-3aa9aa8fae93",
+      "created_at": "2026-06-20 00:57:56",
+      "event_id": 1725,
+      "finding_id": "RGF-1078",
+      "from_state": "open",
+      "metadata": {},
+      "reason": "ProgressMetrics.incomplete (positional arg 5) and ProgressMetrics.pending (positional arg 6) are both set to the same pending variable at lines 594-595. The fields have different semantic contracts: incomplete should count all non-complete cells while pending should count only 'pending'-state cells. Adding a new incomplete state would silently fail to update pending, causing them to diverge without detection.",
+      "to_state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-8b746723dc09-RGS-3aa9aa8fae93",
+      "created_at": "2026-06-20 00:58:01",
+      "event_id": 1726,
+      "finding_id": "RGF-1079",
+      "from_state": "open",
+      "metadata": {},
+      "reason": "cov.stale is always 0 because calculate_progress_metrics sets stale=0 and never modifies it (line 578, comment 'stale is intentionally ignored'). The if cov.stale: branches at lines 1027-1029 (header_status_text) and lines 1142-1143 (header_status_tui_lines) are dead code. Both even have a comment confirming this invariant (line 1026, 1141), yet the branches remain.",
+      "to_state": "confirmed"
+    }
+  ],
+  "schema_version": 1
+}

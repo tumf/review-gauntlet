@@ -1,0 +1,321 @@
+{
+  "checkpoint_id": "RGC-8b746723dc09-RGS-3aa9aa8fae93",
+  "findings": [
+    {
+      "checkpoint_id": "RGC-8b746723dc09-RGS-3aa9aa8fae93",
+      "content": "test-evidence: `_agent_output_tail` interleaves stdout and stderr lines in a fixed alternating pattern (stdout[i], stderr[j], stdout[i+1], ...) regardless of the actual production order. The resulting `activity.jsonl` entries do not reflect when each line was produced. Agents and humans using this log for causal debugging are misled by the artificial ordering. There is no test that documents this non-chronological behaviour or asserts that the interleave contract is intentional, making this a silent regression risk.",
+      "finding_id": "RGF-1065",
+      "fingerprint": "4029367357fc6bac87501ac388e3b43e3c11813b596e3d4cde9beb1324924c10",
+      "latest_occurrence": {
+        "cell_id": "RGC-7d47131d23a5f0ce",
+        "end_line": 2706,
+        "finding_id": "RGF-1065",
+        "imprecise": 0,
+        "occurrence_id": 1065,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 319,
+        "start_line": 2692
+      },
+      "metadata": "{\"fingerprint\":\"4029367357fc6bac87501ac388e3b43e3c11813b596e3d4cde9beb1324924c10\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"test-evidence\",\"content\":\"test-evidence: `_agent_output_tail` interleaves stdout and stderr lines in a fixed alternating pattern (stdout[i], stderr[j], stdout[i+1], ...) regardless of the actual production order. The resulting `activity.jsonl` entries do not reflect when each line was produced. Agents and humans using this log for causal debugging are misled by the artificial ordering. There is no test that documents this non-chronological behaviour or asserts that the interleave contract is intentional, making this a silent regression risk.\",\"suggestion_code\":\"\",\"existing_code\":\"\",\"start_line\":2692,\"end_line\":2706,\"thinking\":null,\"imprecise\":false,\"dismiss_reason\":null}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-3aa9aa8fae93",
+      "state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-8b746723dc09-RGS-3aa9aa8fae93",
+      "content": "cli-contract: `ready` exits with code 1 for both 'no ready task' (normal empty result) and error states (no active session, which propagates as LookupError\u2192exit 1 via line 681). An agent polling `ready` cannot distinguish 'nothing to do yet' from 'session is missing' without parsing output text, breaking the agent-friendly contract.",
+      "finding_id": "RGF-1066",
+      "fingerprint": "0df23169134616fdd2b13cad6801e41f926747abfddc9744477abfa5f2c4dbab",
+      "latest_occurrence": {
+        "cell_id": "RGC-98d51e4d6441e1d7",
+        "end_line": 1092,
+        "finding_id": "RGF-1066",
+        "imprecise": 0,
+        "occurrence_id": 1066,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 319,
+        "start_line": 1088
+      },
+      "metadata": "{\"fingerprint\":\"0df23169134616fdd2b13cad6801e41f926747abfddc9744477abfa5f2c4dbab\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"cli-contract\",\"content\":\"cli-contract: `ready` exits with code 1 for both 'no ready task' (normal empty result) and error states (no active session, which propagates as LookupError\u2192exit 1 via line 681). An agent polling `ready` cannot distinguish 'nothing to do yet' from 'session is missing' without parsing output text, breaking the agent-friendly contract.\",\"suggestion_code\":\"\",\"existing_code\":\"\",\"start_line\":1088,\"end_line\":1092,\"thinking\":null,\"imprecise\":false,\"dismiss_reason\":null}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "cli-contract",
+      "session_id": "RGS-3aa9aa8fae93",
+      "state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-8b746723dc09-RGS-3aa9aa8fae93",
+      "content": "cli-contract: `--version` is handled by manually inspecting `argv` before `parse_args()` is called (lines 643-645). As a result, `review-gauntlet --version --unknown-flag` silently prints the version with exit 0 instead of erroring. Agents that probe for the version alongside other flags receive a misleading success signal. Use argparse's built-in `parser.add_argument('--version', action='version')` to enforce consistent argument validation.",
+      "finding_id": "RGF-1067",
+      "fingerprint": "917242ca58bbd2d7947126b01468c707a31dddd81085b08d0ffdaaffc6d25171",
+      "latest_occurrence": {
+        "cell_id": "RGC-98d51e4d6441e1d7",
+        "end_line": 645,
+        "finding_id": "RGF-1067",
+        "imprecise": 0,
+        "occurrence_id": 1067,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 319,
+        "start_line": 643
+      },
+      "metadata": "{\"fingerprint\":\"917242ca58bbd2d7947126b01468c707a31dddd81085b08d0ffdaaffc6d25171\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"cli-contract\",\"content\":\"cli-contract: `--version` is handled by manually inspecting `argv` before `parse_args()` is called (lines 643-645). As a result, `review-gauntlet --version --unknown-flag` silently prints the version with exit 0 instead of erroring. Agents that probe for the version alongside other flags receive a misleading success signal. Use argparse's built-in `parser.add_argument('--version', action='version')` to enforce consistent argument validation.\",\"suggestion_code\":\"\",\"existing_code\":\"\",\"start_line\":643,\"end_line\":645,\"thinking\":null,\"imprecise\":false,\"dismiss_reason\":null}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "cli-contract",
+      "session_id": "RGS-3aa9aa8fae93",
+      "state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-8b746723dc09-RGS-3aa9aa8fae93",
+      "content": "data-validation: `_validate_date_arg` validates only the regex pattern `\\d{4}-\\d{2}-\\d{2}` without checking calendar correctness. Values like '2024-13-99' or '2024-02-31' silently pass and are persisted as expiry timestamps in finding metadata (used by `mark --until` for accepted_risk and waived states). A malformed expiry date may cause a finding to never expire or expire immediately, silently corrupting the review ledger with no error surfaced to the user.",
+      "finding_id": "RGF-1068",
+      "fingerprint": "70f5772516673caf970f655a477156e7a104f4b8d33aceae06b9389f02d44ea1",
+      "latest_occurrence": {
+        "cell_id": "RGC-6cefdd41be393570",
+        "end_line": 486,
+        "finding_id": "RGF-1068",
+        "imprecise": 0,
+        "occurrence_id": 1068,
+        "path": "src/review_gauntlet/cli.py",
+        "run_id": 319,
+        "start_line": 483
+      },
+      "metadata": "{\"fingerprint\":\"70f5772516673caf970f655a477156e7a104f4b8d33aceae06b9389f02d44ea1\",\"path\":\"src/review_gauntlet/cli.py\",\"rule_id\":\"data-validation\",\"content\":\"data-validation: `_validate_date_arg` validates only the regex pattern `\\\\d{4}-\\\\d{2}-\\\\d{2}` without checking calendar correctness. Values like '2024-13-99' or '2024-02-31' silently pass and are persisted as expiry timestamps in finding metadata (used by `mark --until` for accepted_risk and waived states). A malformed expiry date may cause a finding to never expire or expire immediately, silently corrupting the review ledger with no error surfaced to the user.\",\"suggestion_code\":\"\",\"existing_code\":\"\",\"start_line\":483,\"end_line\":486,\"thinking\":null,\"imprecise\":false,\"dismiss_reason\":null}",
+      "path": "src/review_gauntlet/cli.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-3aa9aa8fae93",
+      "state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-8b746723dc09-RGS-3aa9aa8fae93",
+      "content": "_diagnostic_string_sequence (line 738), _diagnostic_artifact_context (line 747), and _diagnostic_ignored_resolutions (line 755) have no direct unit tests. These functions contain non-trivial type-dispatch logic (Mapping checks, tuple/list guards, cast, item iteration) that is only exercised implicitly through integration-level retry scenarios. A malformed `artifact_context` dict or `ignored_resolutions` list would produce silent 'none' output, making failures harder to diagnose. Direct unit tests for each helper\u2014especially edge cases like non-Mapping artifact_context and malformed resolution entries\u2014would improve confidence in the diagnostic output.",
+      "finding_id": "RGF-1069",
+      "fingerprint": "48afbc938a910078e53384d393beeae02bf3d285fa1e1371a4e84cf314b25a93",
+      "latest_occurrence": {
+        "cell_id": "RGC-818ca3c0010eb49e",
+        "end_line": 769,
+        "finding_id": "RGF-1069",
+        "imprecise": 0,
+        "occurrence_id": 1069,
+        "path": "src/review_gauntlet/run_controller.py",
+        "run_id": 320,
+        "start_line": 738
+      },
+      "metadata": "{\"fingerprint\":\"48afbc938a910078e53384d393beeae02bf3d285fa1e1371a4e84cf314b25a93\",\"path\":\"src/review_gauntlet/run_controller.py\",\"rule_id\":\"test-evidence\",\"content\":\"_diagnostic_string_sequence (line 738), _diagnostic_artifact_context (line 747), and _diagnostic_ignored_resolutions (line 755) have no direct unit tests. These functions contain non-trivial type-dispatch logic (Mapping checks, tuple/list guards, cast, item iteration) that is only exercised implicitly through integration-level retry scenarios. A malformed `artifact_context` dict or `ignored_resolutions` list would produce silent 'none' output, making failures harder to diagnose. Direct unit tests for each helper\u2014especially edge cases like non-Mapping artifact_context and malformed resolution entries\u2014would improve confidence in the diagnostic output.\",\"suggestion_code\":\"\",\"existing_code\":\"\",\"start_line\":738,\"end_line\":769,\"thinking\":null,\"imprecise\":false,\"dismiss_reason\":null}",
+      "path": "src/review_gauntlet/run_controller.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-3aa9aa8fae93",
+      "state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-8b746723dc09-RGS-3aa9aa8fae93",
+      "content": "_int_or_zero silently returns 0 for float inputs (e.g. 3.0 \u2192 0). Lines 309-310 use this helper for `run_count` and `cell_terminal_count` from the status snapshot. If any JSON-serialised status value is a float rather than an int, both fields silently display as 0 instead of the correct count. The guard `isinstance(value, int)` correctly excludes bool, but Python float is not a subtype of int so valid numeric values like 3.0 fall through to `return 0`. Consider adding `elif isinstance(value, float) and value.is_integer(): return max(0, int(value))`.",
+      "finding_id": "RGF-1070",
+      "fingerprint": "c505976315c8d008659b8eeca2d50a3325e76d8bf6025410ee2c00f12eed9622",
+      "latest_occurrence": {
+        "cell_id": "RGC-eaadb43273cd57a0",
+        "end_line": 905,
+        "finding_id": "RGF-1070",
+        "imprecise": 0,
+        "occurrence_id": 1070,
+        "path": "src/review_gauntlet/run_controller.py",
+        "run_id": 320,
+        "start_line": 900
+      },
+      "metadata": "{\"fingerprint\":\"c505976315c8d008659b8eeca2d50a3325e76d8bf6025410ee2c00f12eed9622\",\"path\":\"src/review_gauntlet/run_controller.py\",\"rule_id\":\"data-validation\",\"content\":\"_int_or_zero silently returns 0 for float inputs (e.g. 3.0 \u2192 0). Lines 309-310 use this helper for `run_count` and `cell_terminal_count` from the status snapshot. If any JSON-serialised status value is a float rather than an int, both fields silently display as 0 instead of the correct count. The guard `isinstance(value, int)` correctly excludes bool, but Python float is not a subtype of int so valid numeric values like 3.0 fall through to `return 0`. Consider adding `elif isinstance(value, float) and value.is_integer(): return max(0, int(value))`.\",\"suggestion_code\":\"\",\"existing_code\":\"\",\"start_line\":900,\"end_line\":905,\"thinking\":null,\"imprecise\":false,\"dismiss_reason\":null}",
+      "path": "src/review_gauntlet/run_controller.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-3aa9aa8fae93",
+      "state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-8b746723dc09-RGS-3aa9aa8fae93",
+      "content": "_task_display performs an unchecked dict lookup on _ACTION_TASK_DESCRIPTIONS[title], which raises KeyError if title is not a known key. The caller format_task_title_from_action currently only passes titles that exist in the dict, but if a new entry is added to _ACTION_TASK_TITLES without a matching entry in _ACTION_TASK_DESCRIPTIONS, a runtime KeyError will be silently absent during testing and crash the TUI at display time. Defensive use of .get() with a fallback is safer.",
+      "finding_id": "RGF-1071",
+      "fingerprint": "84f1f838da179a758be248ec18c140f61407f76de52bec8a71a715ba73209419",
+      "latest_occurrence": {
+        "cell_id": "RGC-8610c7a6f661b70a",
+        "end_line": 667,
+        "finding_id": "RGF-1071",
+        "imprecise": 0,
+        "occurrence_id": 1071,
+        "path": "src/review_gauntlet/run_tui.py",
+        "run_id": 321,
+        "start_line": 666
+      },
+      "metadata": "{\"fingerprint\":\"84f1f838da179a758be248ec18c140f61407f76de52bec8a71a715ba73209419\",\"path\":\"src/review_gauntlet/run_tui.py\",\"rule_id\":\"data-validation\",\"content\":\"_task_display performs an unchecked dict lookup on _ACTION_TASK_DESCRIPTIONS[title], which raises KeyError if title is not a known key. The caller format_task_title_from_action currently only passes titles that exist in the dict, but if a new entry is added to _ACTION_TASK_TITLES without a matching entry in _ACTION_TASK_DESCRIPTIONS, a runtime KeyError will be silently absent during testing and crash the TUI at display time. Defensive use of .get() with a fallback is safer.\",\"suggestion_code\":\"def _task_display(title: str) -> TaskDisplay:\\n    description = _ACTION_TASK_DESCRIPTIONS.get(title, \\\"\\\")\\n    return TaskDisplay(title, description)\",\"existing_code\":\"def _task_display(title: str) -> TaskDisplay:\\n    return TaskDisplay(title, _ACTION_TASK_DESCRIPTIONS[title])\",\"start_line\":666,\"end_line\":667,\"thinking\":\"_ACTION_TASK_DESCRIPTIONS is a closed dict with a fixed set of keys. _task_display is called with titles derived from _ACTION_TASK_TITLES.values() and a handful of hardcoded literals. All current call sites pass valid keys, so no crash today. But the function has no validation: it directly indexes the dict without .get(), creating a latent KeyError if the caller contract is ever violated. Under the data-validation rule, this counts as missing input validation at an internal API boundary.\",\"imprecise\":false,\"dismiss_reason\":null}",
+      "path": "src/review_gauntlet/run_tui.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-3aa9aa8fae93",
+      "state": "dismissed"
+    },
+    {
+      "checkpoint_id": "RGC-8b746723dc09-RGS-3aa9aa8fae93",
+      "content": "select_active_gate accesses gates[mapped_index - 1] and gates[-1] without bounds checking. _NEXT_ACTION_GATE_INDEX maps known action strings to indices 1-4, and derive_finalize_gates always returns exactly 4 gates, so this is safe today. However, if the function is ever called with a gates tuple that has fewer elements than mapped_index (e.g., a test with a stub or a future refactor that changes gate count), an IndexError will be raised. The function should guard against out-of-bounds access or document its precondition explicitly.",
+      "finding_id": "RGF-1072",
+      "fingerprint": "aeab6aba746b5825ee0df6b7a057a98d550b4ba6aa1a3149703a159a5df763f7",
+      "latest_occurrence": {
+        "cell_id": "RGC-8610c7a6f661b70a",
+        "end_line": 809,
+        "finding_id": "RGF-1072",
+        "imprecise": 0,
+        "occurrence_id": 1072,
+        "path": "src/review_gauntlet/run_tui.py",
+        "run_id": 321,
+        "start_line": 802
+      },
+      "metadata": "{\"fingerprint\":\"aeab6aba746b5825ee0df6b7a057a98d550b4ba6aa1a3149703a159a5df763f7\",\"path\":\"src/review_gauntlet/run_tui.py\",\"rule_id\":\"data-validation\",\"content\":\"select_active_gate accesses gates[mapped_index - 1] and gates[-1] without bounds checking. _NEXT_ACTION_GATE_INDEX maps known action strings to indices 1-4, and derive_finalize_gates always returns exactly 4 gates, so this is safe today. However, if the function is ever called with a gates tuple that has fewer elements than mapped_index (e.g., a test with a stub or a future refactor that changes gate count), an IndexError will be raised. The function should guard against out-of-bounds access or document its precondition explicitly.\",\"suggestion_code\":\"def select_active_gate(snapshot: RunSnapshot, gates: tuple[FinalizeGate, ...]) -> FinalizeGate:\\n    if not gates:\\n        raise ValueError(\\\"gates must be non-empty\\\")\\n    mapped_index = _NEXT_ACTION_GATE_INDEX.get(snapshot.next_required_action or \\\"\\\")\\n    if mapped_index is not None and 1 <= mapped_index <= len(gates):\\n        return gates[mapped_index - 1]\\n    return next(\\n        (gate for gate in gates if gate.state in {\\\"running\\\", \\\"blocked\\\", \\\"failed\\\", \\\"next\\\"}),\\n        gates[-1],\\n    )\",\"existing_code\":\"def select_active_gate(snapshot: RunSnapshot, gates: tuple[FinalizeGate, ...]) -> FinalizeGate:\\n    mapped_index = _NEXT_ACTION_GATE_INDEX.get(snapshot.next_required_action or \\\"\\\")\\n    if mapped_index is not None:\\n        return gates[mapped_index - 1]\\n    return next(\\n        (gate for gate in gates if gate.state in {\\\"running\\\", \\\"blocked\\\", \\\"failed\\\", \\\"next\\\"}),\\n        gates[-1],\\n    )\",\"start_line\":802,\"end_line\":809,\"thinking\":\"The function accepts gates as a parameter but makes implicit assumptions about its length. mapped_index comes from _NEXT_ACTION_GATE_INDEX which has max value 4, and the only caller passes a 4-element tuple from derive_finalize_gates. But the function itself has no validation. gates[-1] at line 808 would also raise IndexError if gates were empty. Adding a non-empty guard and an index bounds check closes the data-validation gap without changing behavior for valid inputs.\",\"imprecise\":false,\"dismiss_reason\":null}",
+      "path": "src/review_gauntlet/run_tui.py",
+      "rule_id": "data-validation",
+      "session_id": "RGS-3aa9aa8fae93",
+      "state": "dismissed"
+    },
+    {
+      "checkpoint_id": "RGC-8b746723dc09-RGS-3aa9aa8fae93",
+      "content": "calculate_progress_metrics: the `percent` field uses the separate `cell_terminal_count` parameter but the sole test (test_progress_metrics_counts_pending_and_reviewed_only) never passes a nonzero cell_terminal_count, so the percent calculation is completely untested. Given the recent commit 'Proposal: fix TUI coverage ratio labels', this is the most critical gap \u2014 any regression in the terminal-count\u2192percent path would go undetected.",
+      "finding_id": "RGF-1073",
+      "fingerprint": "e98245d85937b2b42a1b28684f4a978ac07f77db2e50ac873b84acbf15ce8d0e",
+      "latest_occurrence": {
+        "cell_id": "RGC-c1ad423b70f325a0",
+        "end_line": 598,
+        "finding_id": "RGF-1073",
+        "imprecise": 0,
+        "occurrence_id": 1073,
+        "path": "src/review_gauntlet/run_tui.py",
+        "run_id": 321,
+        "start_line": 572
+      },
+      "metadata": "{\"fingerprint\":\"e98245d85937b2b42a1b28684f4a978ac07f77db2e50ac873b84acbf15ce8d0e\",\"path\":\"src/review_gauntlet/run_tui.py\",\"rule_id\":\"test-evidence\",\"content\":\"calculate_progress_metrics: the `percent` field uses the separate `cell_terminal_count` parameter but the sole test (test_progress_metrics_counts_pending_and_reviewed_only) never passes a nonzero cell_terminal_count, so the percent calculation is completely untested. Given the recent commit 'Proposal: fix TUI coverage ratio labels', this is the most critical gap \u2014 any regression in the terminal-count\u2192percent path would go undetected.\",\"suggestion_code\":\"# Add to tests/test_run_tui.py:\\ndef test_progress_metrics_percent_uses_terminal_count() -> None:\\n    metrics = calculate_progress_metrics(\\n        {\\\"reviewed\\\": 3, \\\"pending\\\": 1}, cell_terminal_count=3\\n    )\\n    assert metrics.percent == 75  # 3/4 = 75%\\n    assert metrics.terminal == 3\\n\\ndef test_progress_metrics_percent_caps_at_100() -> None:\\n    metrics = calculate_progress_metrics(\\n        {\\\"reviewed\\\": 2}, cell_terminal_count=5  # terminal > total\\n    )\\n    assert metrics.percent == 100\\n\\ndef test_progress_metrics_percent_is_zero_when_total_is_zero() -> None:\\n    metrics = calculate_progress_metrics({}, cell_terminal_count=0)\\n    assert metrics.percent == 0\",\"existing_code\":\"def calculate_progress_metrics(\\n    coverage: dict[str, object], *, cell_terminal_count: int = 0\\n) -> ProgressMetrics:\\n    ...\\n    percent = min(int((cell_terminal_count / total) * 100), 100) if total else 0\\n    return ProgressMetrics(\\n        displayed_completed,\\n        total,\\n        percent,\\n        superseded,\\n        pending,\\n        pending,\\n        stale,\\n        terminal=cell_terminal_count,\\n    )\",\"start_line\":572,\"end_line\":598,\"thinking\":\"The percent field in ProgressMetrics is derived from cell_terminal_count, not from the coverage dict's state counts. The one existing test omits cell_terminal_count (defaults to 0), so percent is always 0 in tests. The label-fix commit makes this especially risky.\",\"imprecise\":false,\"dismiss_reason\":null}",
+      "path": "src/review_gauntlet/run_tui.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-3aa9aa8fae93",
+      "state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-8b746723dc09-RGS-3aa9aa8fae93",
+      "content": "update_tui_render_state: the flash/change-detection logic (which fields trigger flashes on change, which expire, and the special `_is_activity_value_key` new-entry flash) has zero test coverage. This is stateful, time-sensitive logic with multiple branches \u2014 expiry pruning, initialized vs. uninitialized state, and the activity-key shortcut \u2014 none of which are exercised by the test suite.",
+      "finding_id": "RGF-1074",
+      "fingerprint": "2501fbe89b758d565b5e16ac9688d05c84d3e9e07b423936deb79f5946e68e2e",
+      "latest_occurrence": {
+        "cell_id": "RGC-c1ad423b70f325a0",
+        "end_line": 1085,
+        "finding_id": "RGF-1074",
+        "imprecise": 0,
+        "occurrence_id": 1074,
+        "path": "src/review_gauntlet/run_tui.py",
+        "run_id": 321,
+        "start_line": 1065
+      },
+      "metadata": "{\"fingerprint\":\"2501fbe89b758d565b5e16ac9688d05c84d3e9e07b423936deb79f5946e68e2e\",\"path\":\"src/review_gauntlet/run_tui.py\",\"rule_id\":\"test-evidence\",\"content\":\"update_tui_render_state: the flash/change-detection logic (which fields trigger flashes on change, which expire, and the special `_is_activity_value_key` new-entry flash) has zero test coverage. This is stateful, time-sensitive logic with multiple branches \u2014 expiry pruning, initialized vs. uninitialized state, and the activity-key shortcut \u2014 none of which are exercised by the test suite.\",\"suggestion_code\":\"# Add to tests/test_run_tui.py:\\ndef test_update_tui_render_state_flashes_on_field_change() -> None:\\n    from review_gauntlet.run_tui import (\\n        TuiLine, TuiField, TuiRenderState, update_tui_render_state, empty_tui_render_state\\n    )\\n    line1 = (TuiLine((TuiField(key='k', display='a', compare='a'),)),)\\n    state1 = update_tui_render_state(empty_tui_render_state(), line1, now=0.0)\\n    assert not state1.flashes  # first render: no flashes\\n\\n    line2 = (TuiLine((TuiField(key='k', display='b', compare='b'),)),)\\n    state2 = update_tui_render_state(state1, line2, now=0.5)\\n    assert 'k' in state2.flashes  # value changed \u2192 flash\\n\\n    state3 = update_tui_render_state(state2, line2, now=2.0)  # flash expired\\n    assert 'k' not in state3.flashes\",\"existing_code\":\"def update_tui_render_state(\\n    state: TuiRenderState,\\n    sections: tuple[tuple[TuiLine, ...], ...],\\n    *,\\n    now: float | None = None,\\n    flash_duration_seconds: float = _FLASH_DURATION_SECONDS,\\n) -> TuiRenderState:\",\"start_line\":1065,\"end_line\":1085,\"thinking\":\"update_tui_render_state is purely functional and injectable (accepts `now` and `flash_duration_seconds`) making it easily testable, but there are no tests for it at all.\",\"imprecise\":false,\"dismiss_reason\":null}",
+      "path": "src/review_gauntlet/run_tui.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-3aa9aa8fae93",
+      "state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-8b746723dc09-RGS-3aa9aa8fae93",
+      "content": "format_elapsed_time: the hours branch (`if hours: return f\"{hours:d}:{minutes:02d}:{secs:02d}\"`) and the non-finite input guard (`0 if not math.isfinite(seconds)`) have no test coverage. The `format_duration` function at line 970 has the same gap. Both are used in the TUI header that users see on every refresh.",
+      "finding_id": "RGF-1075",
+      "fingerprint": "e789b9e4434c4ae51241c0da52534a906b5d7d16b39524224fc05f5957dc7bbe",
+      "latest_occurrence": {
+        "cell_id": "RGC-c1ad423b70f325a0",
+        "end_line": 624,
+        "finding_id": "RGF-1075",
+        "imprecise": 0,
+        "occurrence_id": 1075,
+        "path": "src/review_gauntlet/run_tui.py",
+        "run_id": 321,
+        "start_line": 618
+      },
+      "metadata": "{\"fingerprint\":\"e789b9e4434c4ae51241c0da52534a906b5d7d16b39524224fc05f5957dc7bbe\",\"path\":\"src/review_gauntlet/run_tui.py\",\"rule_id\":\"test-evidence\",\"content\":\"format_elapsed_time: the hours branch (`if hours: return f\\\"{hours:d}:{minutes:02d}:{secs:02d}\\\"`) and the non-finite input guard (`0 if not math.isfinite(seconds)`) have no test coverage. The `format_duration` function at line 970 has the same gap. Both are used in the TUI header that users see on every refresh.\",\"suggestion_code\":\"# Add to tests/test_run_tui.py:\\n@pytest.mark.parametrize((\\\"seconds\\\", \\\"expected\\\"), [\\n    (0, \\\"00:00\\\"),\\n    (75, \\\"01:15\\\"),\\n    (3661, \\\"1:01:01\\\"),\\n    (float(\\\"inf\\\"), \\\"00:00\\\"),\\n    (float(\\\"nan\\\"), \\\"00:00\\\"),\\n    (-5.0, \\\"00:00\\\"),\\n])\\ndef test_format_elapsed_time(seconds: float, expected: str) -> None:\\n    from review_gauntlet.run_tui import format_elapsed_time\\n    assert format_elapsed_time(seconds) == expected\",\"existing_code\":\"def format_elapsed_time(seconds: float) -> str:\\n    total_seconds = 0 if not math.isfinite(seconds) else max(0, int(seconds))\\n    hours, remainder = divmod(total_seconds, 3600)\\n    minutes, secs = divmod(remainder, 60)\\n    if hours:\\n        return f\\\"{hours:d}:{minutes:02d}:{secs:02d}\\\"\\n    return f\\\"{minutes:02d}:{secs:02d}\\\"\",\"start_line\":618,\"end_line\":624,\"thinking\":\"The finalized_summary test indirectly covers the 75s case (assert ...elapsed == '01:15') but that is through the full pipeline. Direct unit tests for the function itself are absent, especially for the hours branch and non-finite inputs.\",\"imprecise\":false,\"dismiss_reason\":null}",
+      "path": "src/review_gauntlet/run_tui.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-3aa9aa8fae93",
+      "state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-8b746723dc09-RGS-3aa9aa8fae93",
+      "content": "_count_value is called at every finding/coverage state lookup (30+ call sites) and guards against malformed API responses returning bool, float, or string counts, yet it has no tests. A regression \u2014 e.g. accepting `True` as 1 instead of 0 \u2014 would silently corrupt all coverage and finding totals in the TUI.",
+      "finding_id": "RGF-1076",
+      "fingerprint": "755f3bb9770fc7ef98172cace03b3cde13088c4e3841321160bb7c2890424d53",
+      "latest_occurrence": {
+        "cell_id": "RGC-c1ad423b70f325a0",
+        "end_line": 2268,
+        "finding_id": "RGF-1076",
+        "imprecise": 0,
+        "occurrence_id": 1076,
+        "path": "src/review_gauntlet/run_tui.py",
+        "run_id": 321,
+        "start_line": 2254
+      },
+      "metadata": "{\"fingerprint\":\"755f3bb9770fc7ef98172cace03b3cde13088c4e3841321160bb7c2890424d53\",\"path\":\"src/review_gauntlet/run_tui.py\",\"rule_id\":\"test-evidence\",\"content\":\"_count_value is called at every finding/coverage state lookup (30+ call sites) and guards against malformed API responses returning bool, float, or string counts, yet it has no tests. A regression \u2014 e.g. accepting `True` as 1 instead of 0 \u2014 would silently corrupt all coverage and finding totals in the TUI.\",\"suggestion_code\":\"# Add to tests/test_run_tui.py:\\n@pytest.mark.parametrize((\\\"value\\\", \\\"expected\\\"), [\\n    (5, 5),\\n    (-3, 0),\\n    (True, 0),   # bool must NOT be treated as int\\n    (False, 0),\\n    (2.0, 2),    # integer-valued float\\n    (2.5, 0),    # fractional float\\n    (\\\"7\\\", 7),\\n    (\\\"bad\\\", 0),\\n    (None, 0),\\n    ({}, 0),\\n])\\ndef test_count_value(value: object, expected: int) -> None:\\n    from review_gauntlet.run_tui import _count_value  # pyright: ignore[reportPrivateUsage]\\n    assert _count_value(value) == expected\",\"existing_code\":\"def _count_value(value: object) -> int:\\n    if isinstance(value, bool):\\n        return 0\\n    if isinstance(value, int):\\n        return max(0, value)\\n    if isinstance(value, float) and not value.is_integer():\\n        return 0\\n    if isinstance(value, float):\\n        return max(0, int(value))\\n    if isinstance(value, str):\\n        try:\\n            return max(0, int(value))\\n        except (ValueError, OverflowError):\\n            return 0\\n    return 0\",\"start_line\":2254,\"end_line\":2268,\"thinking\":\"_count_value is private but critically relied upon throughout. The bool-returns-0 branch is especially surprising (bool is a subclass of int in Python) and without a test this invariant can break silently.\",\"imprecise\":false,\"dismiss_reason\":null}",
+      "path": "src/review_gauntlet/run_tui.py",
+      "rule_id": "test-evidence",
+      "session_id": "RGS-3aa9aa8fae93",
+      "state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-8b746723dc09-RGS-3aa9aa8fae93",
+      "content": "The text-mode header status line prepends 'Finalize' to the coverage percentage, making it misleadingly read as a finalize-progress metric rather than a coverage metric. The TUI version (header_status_tui_lines, line 1139) correctly omits this prefix and just shows '{cov.percent}%'. This inconsistency between text and TUI modes causes confusion \u2014 users reading the compact/text output will see 'Finalize 45% [\u2588\u2588\u2588\u2588\u2591\u2591\u2591\u2591] 10/22' and think 45% relates to finalization progress, whereas it is actually the review coverage percentage.",
+      "finding_id": "RGF-1077",
+      "fingerprint": "d77bd0df2454585996fe58217e21b77dea2ea77cdd63f241d5d45a7bfcf2cd9e",
+      "latest_occurrence": {
+        "cell_id": "RGC-991f1eaae6ca8e34",
+        "end_line": 1024,
+        "finding_id": "RGF-1077",
+        "imprecise": 0,
+        "occurrence_id": 1077,
+        "path": "src/review_gauntlet/run_tui.py",
+        "run_id": 321,
+        "start_line": 1024
+      },
+      "metadata": "{\"fingerprint\":\"d77bd0df2454585996fe58217e21b77dea2ea77cdd63f241d5d45a7bfcf2cd9e\",\"path\":\"src/review_gauntlet/run_tui.py\",\"rule_id\":\"cli-contract\",\"content\":\"The text-mode header status line prepends 'Finalize' to the coverage percentage, making it misleadingly read as a finalize-progress metric rather than a coverage metric. The TUI version (header_status_tui_lines, line 1139) correctly omits this prefix and just shows '{cov.percent}%'. This inconsistency between text and TUI modes causes confusion \u2014 users reading the compact/text output will see 'Finalize 45% [\u2588\u2588\u2588\u2588\u2591\u2591\u2591\u2591] 10/22' and think 45% relates to finalization progress, whereas it is actually the review coverage percentage.\",\"suggestion_code\":\"    parts = [f\\\"Coverage {cov.percent}% {bar} {cov.terminal}/{cov.total}\\\"]\",\"existing_code\":\"    parts = [f\\\"Finalize {cov.percent}% {bar} {cov.terminal}/{cov.total}\\\"]\",\"start_line\":1024,\"end_line\":1024,\"thinking\":\"header_status_tui_lines at line 1139 renders the same metric as '{cov.percent}% {bar} {cov.terminal}/{cov.total}' without any 'Finalize' prefix. The only text that should be labelled 'Finalize' is the gate label (view.gate_label), which is already present in the same status line. Relabelling to 'Coverage' matches what the TUI shows.\",\"imprecise\":false,\"dismiss_reason\":null}",
+      "path": "src/review_gauntlet/run_tui.py",
+      "rule_id": "cli-contract",
+      "session_id": "RGS-3aa9aa8fae93",
+      "state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-8b746723dc09-RGS-3aa9aa8fae93",
+      "content": "ProgressMetrics.incomplete and ProgressMetrics.pending receive the same value (both set to `pending`), so the two fields are always identical. The field name `incomplete` implies it counts all non-complete cells (pending + stale), but stale cells are intentionally treated as completed (line 586) and excluded from the pending count. Callers that use `coverage.incomplete` (e.g. derive_finalize_gates line 895, review_detail line 897) would be surprised to learn it equals `coverage.pending` exactly. Either rename `incomplete` to make the identity obvious, or compute it as `total - completed` to reflect its name.",
+      "finding_id": "RGF-1078",
+      "fingerprint": "ea85c0ab8b2e636d92cc7f0ce3bfd35833c0c197ed23432cbc0fe9ac024675aa",
+      "latest_occurrence": {
+        "cell_id": "RGC-991f1eaae6ca8e34",
+        "end_line": 598,
+        "finding_id": "RGF-1078",
+        "imprecise": 0,
+        "occurrence_id": 1078,
+        "path": "src/review_gauntlet/run_tui.py",
+        "run_id": 321,
+        "start_line": 578
+      },
+      "metadata": "{\"fingerprint\":\"ea85c0ab8b2e636d92cc7f0ce3bfd35833c0c197ed23432cbc0fe9ac024675aa\",\"path\":\"src/review_gauntlet/run_tui.py\",\"rule_id\":\"cli-contract\",\"content\":\"ProgressMetrics.incomplete and ProgressMetrics.pending receive the same value (both set to `pending`), so the two fields are always identical. The field name `incomplete` implies it counts all non-complete cells (pending + stale), but stale cells are intentionally treated as completed (line 586) and excluded from the pending count. Callers that use `coverage.incomplete` (e.g. derive_finalize_gates line 895, review_detail line 897) would be surprised to learn it equals `coverage.pending` exactly. Either rename `incomplete` to make the identity obvious, or compute it as `total - completed` to reflect its name.\",\"suggestion_code\":\"    pending = _count_value(coverage.get(\\\"pending\\\", 0))\\n    stale = 0  # stale is intentionally ignored\\n    for state, raw_count in coverage.items():\\n        count = _count_value(raw_count)\\n        if state in EXCLUDED_COVERAGE_STATES:\\n            superseded += count\\n            continue\\n        total += count\\n        if state in COMPLETED_COVERAGE_STATES or state == \\\"stale\\\":\\n            completed += count\\n    displayed_completed = min(completed, total)\\n    percent = min(int((cell_terminal_count / total) * 100), 100) if total else 0\\n    return ProgressMetrics(\\n        displayed_completed,\\n        total,\\n        percent,\\n        superseded,\\n        pending,  # incomplete == pending: stale cells are counted as completed\\n        pending,\\n        stale,\\n        terminal=cell_terminal_count,\\n    )\",\"existing_code\":\"    pending = _count_value(coverage.get(\\\"pending\\\", 0))\\n    stale = 0  # stale is intentionally ignored\\n    for state, raw_count in coverage.items():\\n        count = _count_value(raw_count)\\n        if state in EXCLUDED_COVERAGE_STATES:\\n            superseded += count\\n            continue\\n        total += count\\n        if state in COMPLETED_COVERAGE_STATES or state == \\\"stale\\\":\\n            completed += count\\n    displayed_completed = min(completed, total)\\n    percent = min(int((cell_terminal_count / total) * 100), 100) if total else 0\\n    return ProgressMetrics(\\n        displayed_completed,\\n        total,\\n        percent,\\n        superseded,\\n        pending,\\n        pending,\\n        stale,\\n        terminal=cell_terminal_count,\\n    )\",\"start_line\":578,\"end_line\":598,\"thinking\":\"The ProgressMetrics dataclass defines: completed, total, percent, superseded, incomplete, pending, stale, terminal. When constructed, position 5 (incomplete) and position 6 (pending) both receive the local variable `pending`. This is correct for the current model (stale = completed), but the field name `incomplete` is misleading and invites future misuse. Adding a clarifying comment documents the identity so maintainers don't try to 'fix' it incorrectly.\",\"imprecise\":false,\"dismiss_reason\":null}",
+      "path": "src/review_gauntlet/run_tui.py",
+      "rule_id": "cli-contract",
+      "session_id": "RGS-3aa9aa8fae93",
+      "state": "confirmed"
+    },
+    {
+      "checkpoint_id": "RGC-8b746723dc09-RGS-3aa9aa8fae93",
+      "content": "The `if cov.stale:` branch in header_status_text (and its mirror in header_status_tui_lines at lines 1143-1145) is unreachable dead code. calculate_progress_metrics always returns ProgressMetrics with stale=0 (the local `stale` variable is initialized to 0 on line 579 and never incremented, per the comment 'stale is intentionally ignored'). The comment on line 1027 correctly documents this, but the guarded code below it will never execute, adding noise. The same dead branch exists in header_status_tui_lines.",
+      "finding_id": "RGF-1079",
+      "fingerprint": "43d34765b2b86bd881408b13ab9cbb5b759e16951705a64a3d676c984251f6df",
+      "latest_occurrence": {
+        "cell_id": "RGC-991f1eaae6ca8e34",
+        "end_line": 1029,
+        "finding_id": "RGF-1079",
+        "imprecise": 0,
+        "occurrence_id": 1079,
+        "path": "src/review_gauntlet/run_tui.py",
+        "run_id": 321,
+        "start_line": 1027
+      },
+      "metadata": "{\"fingerprint\":\"43d34765b2b86bd881408b13ab9cbb5b759e16951705a64a3d676c984251f6df\",\"path\":\"src/review_gauntlet/run_tui.py\",\"rule_id\":\"cli-contract\",\"content\":\"The `if cov.stale:` branch in header_status_text (and its mirror in header_status_tui_lines at lines 1143-1145) is unreachable dead code. calculate_progress_metrics always returns ProgressMetrics with stale=0 (the local `stale` variable is initialized to 0 on line 579 and never incremented, per the comment 'stale is intentionally ignored'). The comment on line 1027 correctly documents this, but the guarded code below it will never execute, adding noise. The same dead branch exists in header_status_tui_lines.\",\"suggestion_code\":\"        # stale cells count as completed; cov.stale is always 0 so no stale display needed\",\"existing_code\":\"        # cov.stale is always 0 (stale cells count as completed in calculate_progress_metrics)\\n        if cov.stale:\\n            parts.append(f\\\"stale {cov.stale}\\\")\",\"start_line\":1027,\"end_line\":1029,\"thinking\":\"EXCLUDED_COVERAGE_STATES is an empty frozenset, so the superseded branch never fires. The stale variable is set to 0 and left at 0 \u2014 calculate_progress_metrics never writes a non-zero stale to ProgressMetrics. The dead branch in both header_status_text and header_status_tui_lines should be removed; the comment already documents the invariant.\",\"imprecise\":false,\"dismiss_reason\":null}",
+      "path": "src/review_gauntlet/run_tui.py",
+      "rule_id": "cli-contract",
+      "session_id": "RGS-3aa9aa8fae93",
+      "state": "confirmed"
+    }
+  ],
+  "schema_version": 1
+}
