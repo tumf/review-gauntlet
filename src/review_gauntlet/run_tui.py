@@ -14,10 +14,8 @@ from review_gauntlet.__about__ import __version__
 from review_gauntlet.coverage_projection import (
     CoverageCellFilter,
     CoverageProjection,
-    FileCoverageSummary,
     FindingSummaryEntry,
     QueueEntry,
-    RuleCoverageSummary,
     filter_queue_entries,
 )
 from review_gauntlet.run_controller import AgentOutputEntry, RunController, RunEvent, RunSnapshot
@@ -194,7 +192,6 @@ def create_run_app(
                         id="activity_panel_container",
                     )
                 yield Static(footer_text(), id="controls")
-                yield Static("", id="legend")
 
         def on_mount(self) -> None:
             self.refresh_view()
@@ -304,7 +301,6 @@ def create_run_app(
                 findings_panel = self.query_one("#findings_panel", Static)
                 activity_timeline = self.query_one("#activity_timeline", Static)
                 activity_panel_container = self.query_one("#activity_panel_container", Vertical)
-                legend = self.query_one("#legend", Static)
             except (NoMatches, ScreenStackError):
                 return
             header_status_line.update(
@@ -348,7 +344,6 @@ def create_run_app(
                     render_tui_lines(findings_tui_lines(view, limit=f_limit), flashes, mode="rich")
                 )
             activity_timeline.update(render_tui_lines(sections["activity"], flashes, mode="rich"))
-            legend.update(render_tui_lines(color_legend_tui_lines(), flashes, mode="rich"))
 
     return RunApp(controller)
 
@@ -422,6 +417,10 @@ _STATE_COLORS: dict[str, str] = {
 _RULE_ID_COLOR = "#a78bfa"
 _FINDING_ID_COLOR = "#93c5fd"
 _FIND_COUNT_COLOR = "#c084fc"
+_COVERAGE_PRIORITY_WIDTH = 4
+_RULE_TARGET_WIDTH = 18
+_FILE_TARGET_WIDTH = 44
+_COVERAGE_CELLS_WIDTH = 5
 _NEXT_ACTION_GATE_INDEX = {
     "run_review": 1,
     "resolve_findings": 2,
@@ -1520,17 +1519,6 @@ def _literal(display: str, *, key: str) -> TuiField:
     return TuiField(key=key, display=display, compare=display)
 
 
-def _join_fields(
-    fields: tuple[TuiField, ...], separator: str, *, key_prefix: str
-) -> tuple[TuiField, ...]:
-    joined: list[TuiField] = []
-    for index, field in enumerate(fields):
-        if index:
-            joined.append(_literal(separator, key=f"{key_prefix}.{index}"))
-        joined.append(field)
-    return tuple(joined)
-
-
 def _label_value_line(
     key: str, label: str, value: str, *, compare: object | None = None
 ) -> TuiLine:
@@ -1775,17 +1763,43 @@ def finalized_summary_text(view: RunViewState) -> str:
     return render_tui_lines(finalized_summary_tui_lines(view))
 
 
+def _coverage_header_tui_line(key_prefix: str, target_width: int) -> TuiLine:
+    return TuiLine(
+        (
+            _field(
+                f"{key_prefix}.header.priority",
+                f"{'prio':<{_COVERAGE_PRIORITY_WIDTH}}",
+                compare="prio",
+            ),
+            _literal(" ", key=f"{key_prefix}.header.priority_space"),
+            _field(
+                f"{key_prefix}.header.target",
+                f"{'target':<{target_width}}",
+                compare="target",
+            ),
+            _literal(" ", key=f"{key_prefix}.header.target_space"),
+            _field(
+                f"{key_prefix}.header.cells",
+                f"{'cells':<{_COVERAGE_CELLS_WIDTH}}",
+                compare="cells",
+            ),
+            _literal(" ", key=f"{key_prefix}.header.cells_space"),
+            _field(f"{key_prefix}.header.fix", "fix", compare="fix"),
+        )
+    )
+
+
 def rule_coverage_text(view: RunViewState, *, limit: int = 5) -> str:
     if not view.coverage_projection.rules:
         return "no rule coverage details"
-    return "\n".join(_format_rule_summary(rule) for rule in view.coverage_projection.rules[:limit])
+    return render_tui_lines(rules_tui_lines(view, limit=limit))
 
 
 def rules_tui_lines(view: RunViewState, *, limit: int = 5) -> tuple[TuiLine, ...]:
     rules = view.coverage_projection.rules[:limit]
     if not rules:
         return ()
-    lines: list[TuiLine] = []
+    lines: list[TuiLine] = [_coverage_header_tui_line("rule", _RULE_TARGET_WIDTH)]
     for rule in rules:
         prefix = f"rule.{rule.rule_id}"
         lines.append(
@@ -1793,23 +1807,24 @@ def rules_tui_lines(view: RunViewState, *, limit: int = 5) -> tuple[TuiLine, ...
                 (
                     _colored_field(
                         f"{prefix}.priority",
-                        rule.priority_label,
+                        f"{rule.priority_label:<{_COVERAGE_PRIORITY_WIDTH}}",
                         _PRIORITY_COLORS.get(rule.priority_label, ""),
                         compare=rule.priority_label,
                     ),
                     _literal(" ", key=f"{prefix}.p_space"),
                     _colored_field(
                         f"{prefix}.id",
-                        f"{rule.rule_id:<18}",
+                        f"{rule.rule_id:<{_RULE_TARGET_WIDTH}}",
                         _RULE_ID_COLOR,
                         compare=rule.rule_id,
                     ),
+                    _literal(" ", key=f"{prefix}.target_space"),
                     _field(
                         f"{prefix}.reviewed",
-                        f"{rule.reviewed}/{rule.total}",
-                        compare=rule.reviewed,
+                        f"{rule.reviewed}/{rule.total:<{_COVERAGE_CELLS_WIDTH - 2}}",
+                        compare=(rule.reviewed, rule.total),
                     ),
-                    _literal(" · ", key=f"{prefix}.sep1"),
+                    _literal(" ", key=f"{prefix}.cells_space"),
                     _colored_field(
                         f"{prefix}.resolved_findings",
                         str(rule.resolved_findings),
@@ -1831,38 +1846,40 @@ def rules_tui_lines(view: RunViewState, *, limit: int = 5) -> tuple[TuiLine, ...
 def file_hotlist_text(view: RunViewState, *, limit: int = 5) -> str:
     if not view.coverage_projection.files:
         return "no file hot spots"
-    return "\n".join(_format_file_summary(file) for file in view.coverage_projection.files[:limit])
+    return render_tui_lines(files_tui_lines(view, limit=limit))
 
 
 def files_tui_lines(view: RunViewState, *, limit: int = 5) -> tuple[TuiLine, ...]:
     files = view.coverage_projection.files[:limit]
     if not files:
         return ()
-    lines: list[TuiLine] = []
+    lines: list[TuiLine] = [_coverage_header_tui_line("file", _FILE_TARGET_WIDTH)]
     for f_entry in files:
         prefix = f"file.{_activity_identity(TimelineEvent('', f_entry.file_path, ''))}"
         highest = f_entry.highest_priority_label
+        target = _summarize_text(f_entry.file_path, limit=_FILE_TARGET_WIDTH)
         lines.append(
             TuiLine(
                 (
                     _colored_field(
                         f"{prefix}.priority",
-                        highest,
+                        f"{highest:<{_COVERAGE_PRIORITY_WIDTH}}",
                         _PRIORITY_COLORS.get(highest, ""),
                         compare=highest,
                     ),
                     _literal(" ", key=f"{prefix}.p_space"),
                     _field(
                         f"{prefix}.path",
-                        _summarize_text(f_entry.file_path, limit=44),
+                        f"{target:<{_FILE_TARGET_WIDTH}}",
                         compare=f_entry.file_path,
                     ),
+                    _literal(" ", key=f"{prefix}.target_space"),
                     _field(
                         f"{prefix}.reviewed",
-                        f" {f_entry.reviewed}/{f_entry.total}",
-                        compare=f_entry.reviewed,
+                        f"{f_entry.reviewed}/{f_entry.total:<{_COVERAGE_CELLS_WIDTH - 2}}",
+                        compare=(f_entry.reviewed, f_entry.total),
                     ),
-                    _literal(" · ", key=f"{prefix}.sep1"),
+                    _literal(" ", key=f"{prefix}.cells_space"),
                     _colored_field(
                         f"{prefix}.resolved_findings",
                         str(f_entry.resolved_findings),
@@ -2018,21 +2035,6 @@ def _format_cell_entry(entry: QueueEntry) -> str:
     )
 
 
-def _format_rule_summary(rule: RuleCoverageSummary) -> str:
-    return (
-        f"{rule.priority_label} {rule.rule_id:<18} {rule.reviewed}/{rule.total} reviewed · "
-        f"findings {rule.resolved_findings}/{rule.finding_count}"
-    )
-
-
-def _format_file_summary(file: FileCoverageSummary) -> str:
-    return (
-        f"{file.highest_priority_label} {_summarize_text(file.file_path, limit=48):<48} "
-        f"{file.reviewed}/{file.total} reviewed · "
-        f"findings {file.resolved_findings}/{file.finding_count}"
-    )
-
-
 def _format_finding_summary(finding: FindingSummaryEntry) -> str:
     cell = finding.latest_cell_id or "cell unknown"
     return (
@@ -2135,34 +2137,6 @@ def activity_text(view: RunViewState) -> str:
 
 def footer_text() -> str:
     return "q stop | r refresh | 1-5 views | Ctrl-C interrupt"
-
-
-def color_legend_tui_lines() -> tuple[TuiLine, ...]:
-    priority_fields = tuple(
-        _colored_field(f"legend.priority.{label}", label, _PRIORITY_COLORS[label])
-        for label in ("P0", "P1", "P2", "P3")
-    )
-    finding_state_fields = tuple(
-        _colored_field(f"legend.finding_state.{state}", state, _FINDING_STATE_COLORS[state])
-        for state in ("open", "confirmed", "dismissed")
-    )
-    progress_fields = (
-        _colored_field("legend.progress.done", "done", _FIND_COUNT_COLOR),
-        _literal(" / ", key="legend.progress.separator"),
-        _colored_field("legend.progress.find", "find", _FIND_COUNT_COLOR),
-    )
-    return (
-        TuiLine(
-            (
-                _literal("legend  priority ", key="legend.label.priority"),
-                *_join_fields(priority_fields, " ", key_prefix="legend.priority.sep"),
-                _literal(" | findings ", key="legend.label.findings"),
-                *_join_fields(finding_state_fields, " ", key_prefix="legend.finding_state.sep"),
-                _literal(" | progress ", key="legend.label.progress"),
-                *progress_fields,
-            )
-        ),
-    )
 
 
 def _event_label(event: RunEvent) -> str:
