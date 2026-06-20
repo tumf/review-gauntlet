@@ -89,9 +89,9 @@ When `RunController.run()` detects that the active session file no longer exists
 
 The run TUI SHALL render the Findings panel title as `Findings {resolved}/{total}` outside active review execution, where `total` is the current number of findings and `resolved` is the number that are no longer actionable. While Phase 1 review execution is actively running, the Findings panel title SHALL animate through `Finding`, `Finding.`, `Finding..`, and `Finding...` using the TUI activity frame. While Phase 2 resolution execution is actively running, the TUI SHALL keep the `Findings {resolved}/{total}` title and SHALL display a running indicator on each finding row targeted by the active resolve process.
 
-The run TUI SHALL render a compact color legend that uses the same style sources as the body content for priority labels, finding-state labels, and finding-progress labels. The legend SHALL include samples for `P0`, `P1`, `P2`, `P3`, `open`, `confirmed`, `dismissed`, `done`, and `find`. Plain-text rendering of the legend SHALL remain readable and deterministic.
+The run TUI SHALL keep `Rule coverage` and `File hotlist` ratio displays compact while making their meaning visible through panel-local column headers rather than a footer/global color legend. Both panels SHALL use the same compact column vocabulary: `prio`, `target`, `cells`, and `fix`. The `cells` column SHALL mean reviewed cells / total cells. The `fix` column SHALL mean resolved findings / total findings. The run TUI SHALL NOT add a persistent footer/global color legend to explain these coverage ratios.
 
-<!-- Expected canonical result after archive: the canonical run-controller spec will require the run TUI to expose the primary body color semantics in the legend, covering priority, finding-state, and finding-progress labels without changing run-controller behavior. -->
+<!-- Expected canonical result after archive: the canonical run-controller spec will no longer require a compact color legend. It will require compact, panel-local column headers for Rule coverage and File hotlist ratio semantics. -->
 
 #### Scenario: Run executes Phase 1 then Phase 2
 
@@ -159,14 +159,28 @@ The run TUI SHALL render a compact color legend that uses the same style sources
 **When**: the agent step finishes and the TUI renders a refreshed snapshot
 **Then**: no finding row displays the active running indicator
 
-#### Scenario: Color legend matches body semantics
+#### Scenario: Rule coverage ratios use compact column headers
 
-**Given**: the run TUI uses colored body text for priorities, finding states, and finding progress
-**When**: the TUI renders the color legend
-**Then**: the legend includes `P0`, `P1`, `P2`, and `P3` with the same styles used by priority labels in queue, rules, and files body rows
-**And**: the legend includes `open`, `confirmed`, and `dismissed` with the same styles used by finding-state body rows
-**And**: the legend includes `done` and `find` with the same style used by finding-progress counts
-**And**: plain-text legend rendering remains readable without Rich styling
+**Given**: the run TUI has rule coverage entries with reviewed cell counts and finding resolution counts
+**When**: the TUI renders the Rule coverage panel
+**Then**: the panel includes compact column headers `prio`, `target`, `cells`, and `fix`
+**And**: each rule row renders priority, rule id, reviewed/total cells, and resolved/total findings under those columns
+**And**: the row does not need long repeated labels to explain each ratio
+
+#### Scenario: File hotlist ratios use the same compact column headers
+
+**Given**: the run TUI has file coverage entries with reviewed cell counts and finding resolution counts
+**When**: the TUI renders the File hotlist panel
+**Then**: the panel includes compact column headers `prio`, `target`, `cells`, and `fix`
+**And**: each file row renders priority, file path, reviewed/total cells, and resolved/total findings under those columns
+**And**: the column vocabulary matches the Rule coverage panel
+
+#### Scenario: Footer color legend is not required for coverage ratio meaning
+
+**Given**: the run TUI renders Rule coverage and File hotlist panels
+**When**: the user reads their ratio columns
+**Then**: the meaning of `cells` and `fix` is available from the panel-local headers
+**And**: the TUI does not add a persistent footer/global color legend for priority, finding-state, or finding-progress samples
 
 ### Requirement: Resolve command SHALL require an active session before startup
 
